@@ -139,13 +139,67 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmap) | | |
+| FOUND-01 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Pending |
+| FOUND-04 | Phase 1 | Pending |
+| FOUND-05 | Phase 1 | Pending |
+| FOUND-06 | Phase 1 | Pending |
+| FOUND-07 | Phase 1 | Pending |
+| FOUND-08 | Phase 1 | Pending |
+| FOUND-09 | Phase 1 | Pending |
+| INGEST-01 | Phase 2 | Pending |
+| INGEST-02 | Phase 2 | Pending |
+| INGEST-03 | Phase 2 | Pending |
+| INGEST-04 | Phase 2 | Pending |
+| INGEST-05 | Phase 2 | Pending |
+| INGEST-06 | Phase 2 | Pending |
+| INGEST-07 | Phase 2 | Pending |
+| INGEST-08 | Phase 2 | Pending |
+| INGEST-09 | Phase 2 | Pending |
+| PARSE-01 | Phase 3 | Pending |
+| PARSE-02 | Phase 3 | Pending |
+| PARSE-03 | Phase 3 | Pending |
+| PARSE-04 | Phase 3 | Pending |
+| PARSE-05 | Phase 3 | Pending |
+| CLEAN-01 | Phase 3 | Pending |
+| CLEAN-02 | Phase 3 | Pending |
+| CLEAN-03 | Phase 3 | Pending |
+| CHUNK-01 | Phase 3 | Pending |
+| CHUNK-02 | Phase 3 | Pending |
+| CHUNK-03 | Phase 3 | Pending |
+| CHUNK-04 | Phase 3 | Pending |
+| ENRICH-01 | Phase 4 | Pending |
+| ENRICH-02 | Phase 4 | Pending |
+| ENRICH-03 | Phase 4 | Pending |
+| ENRICH-04 | Phase 4 | Pending |
+| ENRICH-05 | Phase 4 | Pending |
+| ENRICH-06 | Phase 4 | Pending |
+| INDEX-01 | Phase 4 | Pending |
+| INDEX-02 | Phase 4 | Pending |
+| INDEX-03 | Phase 4 | Pending |
+| CURATE-01 | Phase 5 | Pending |
+| CURATE-02 | Phase 5 | Pending |
+| CURATE-03 | Phase 5 | Pending |
+| DATA-01 | Phase 5 | Pending |
+| DATA-02 | Phase 5 | Pending |
+| DATA-03 | Phase 5 | Pending |
+| EXPORT-01 | Phase 5 | Pending |
+| EXPORT-02 | Phase 5 | Pending |
+| EXPORT-03 | Phase 5 | Pending |
+| DOMAIN-01 | Phase 6 | Pending |
+| DOMAIN-02 | Phase 6 | Pending |
+| DOMAIN-03 | Phase 6 | Pending |
+| DOMAIN-04 | Phase 6 | Pending |
+| IFACE-01 | Phase 6 | Pending |
+| IFACE-02 | Phase 6 | Pending |
+| IFACE-03 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: 0
-- Unmapped: 47 ⚠️
+- v1 requirements: 55 total (count corrected from 47 during roadmap creation)
+- Mapped to phases: 55
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-02*
-*Last updated: 2026-07-02 after initial definition*
+*Last updated: 2026-07-02 after roadmap creation (traceability populated)*
