@@ -16,7 +16,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **FOUND-05**: PostgreSQL registry stores sources, documents, artifacts, chunks, jobs, datasets, and lineage events with stable IDs and content hashes
 - [ ] **FOUND-06**: Every artifact records source ID, parent artifact ID, content hash, timestamp, pipeline version, and storage URI
 - [ ] **FOUND-07**: Operator can query full lineage of any artifact back to its raw source via CLI/API
-- [ ] **FOUND-08**: Parsers, crawlers, embedders, and vector stores are pluggable behind protocol interfaces and swappable via configuration
+- [x] **FOUND-08**: Parsers, crawlers, embedders, and vector stores are pluggable behind protocol interfaces and swappable via configuration
 - [ ] **FOUND-09**: Registry schema is versioned with Alembic migrations from the first table
 
 ### Ingestion
@@ -146,7 +146,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOUND-05 | Phase 1 | Pending |
 | FOUND-06 | Phase 1 | Pending |
 | FOUND-07 | Phase 1 | Pending |
-| FOUND-08 | Phase 1 | Pending |
+| FOUND-08 | Phase 1 | Complete |
 | FOUND-09 | Phase 1 | Pending |
 | INGEST-01 | Phase 2 | Pending |
 | INGEST-02 | Phase 2 | Pending |

@@ -5,14 +5,14 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: foundation-end-to-end-spike
 status: executing
-last_updated: "2026-07-02T15:20:03.738Z"
+last_updated: "2026-07-02T16:20:20.000Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 01 (foundation-end-to-end-spike) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 01 execution started
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 59 | 3 tasks | 23 files |
+| Phase 01 P04 | 35m | - tasks | - files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - [Roadmap]: IFACE-01/02/03 (full CLI/API/Dagster surface) mapped to Phase 6 — interfaces grow incrementally each phase but are only verifiable as complete once all stages exist
 - [Roadmap]: SearXNG discovery (INGEST-07) kept in Phase 2 with ingestion rather than deferred to the domain pack phase
 - [Roadmap]: REQUIREMENTS.md coverage count corrected from 47 to 55 (actual v1 requirement count)
+- [Phase ?]: plain config-keyed resolver (no pluggy) for Phase 1 plugin seam — pluggy deferred to Phase 3 fallback chains (FOUND-08)
+- [Phase ?]: SentenceTransformerEmbedder all-MiniLM-L6-v2 384-dim as default local embedder (D-13 zero-creds spike)
+- [Phase ?]: LiteLLMEmbedder uses embedding_model task alias only — no hardcoded provider IDs anywhere in plugins/
 
 ### Pending Todos
 
@@ -88,5 +92,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-02T15:20:03.730Z
+Last session: 2026-07-02T16:19:41.981Z
 Resume file: .planning/phases/01-foundation-end-to-end-spike/01-01-PLAN.md
