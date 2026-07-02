@@ -29,6 +29,7 @@ dependencies = [
     "xxhash==3.8.0",
     "orjson==3.11.9",
     "dagster-postgres==0.29.11",
+    "uuid-utils>=0.16.2",
 ]
 
 [project.scripts]
