@@ -1,0 +1,1 @@
+"""Knowledge Lake CLI package."""
