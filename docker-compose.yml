@@ -1,0 +1,204 @@
+---
+# Knowledge Lake — Development Compose Stack (FOUND-01)
+#
+# Six services: postgres, minio, qdrant, litellm, dagster(web+daemon), api
+# All service config via environment variables — no hardcoded URLs (Pitfall 14).
+#
+# Usage:
+#   cp .env.example .env      # fill in KLAKE_STORAGE__ACCESS_KEY_ID + SECRET
+#   docker compose up -d
+#   docker compose ps          # wait for all services healthy
+#   curl localhost:8000/health # → {"status":"ok"}
+
+x-common-env: &common-env
+  # Registry database (application schema — Alembic-managed)
+  KLAKE_DATABASE_URL: "postgresql+psycopg://klake:${POSTGRES_PASSWORD:-klake}@postgres:5432/klake"
+  # Dagster uses a separate DB to keep its tables out of the registry schema
+  DAGSTER_PG_URL: "postgresql://klake:${POSTGRES_PASSWORD:-klake}@postgres:5432/dagster_storage"
+  KLAKE_QDRANT_URL: "http://qdrant:6333"
+  KLAKE_LITELLM_URL: "http://litellm:4000"
+  KLAKE_STORAGE__ENDPOINT_URL: "http://minio:9000"
+  KLAKE_STORAGE__BUCKET: "${KLAKE_STORAGE__BUCKET:-klake-data}"
+  KLAKE_STORAGE__REGION: "${KLAKE_STORAGE__REGION:-us-east-1}"
+  KLAKE_STORAGE__ACCESS_KEY_ID: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
+  KLAKE_STORAGE__SECRET_ACCESS_KEY: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+  KLAKE_EMBEDDER: "${KLAKE_EMBEDDER:-local}"
+  KLAKE_PARSER: "${KLAKE_PARSER:-docling}"
+  KLAKE_VECTORSTORE: "${KLAKE_VECTORSTORE:-qdrant}"
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: klake
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-klake}
+      POSTGRES_DB: klake
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U klake -d klake"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── MinIO (S3-compatible object store) ────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # MinIO bucket bootstrap (runs once, creates klake-data with versioning + object-lock)
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+      BUCKET_NAME: "${KLAKE_STORAGE__BUCKET:-klake-data}"
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb --with-lock --ignore-existing local/$$BUCKET_NAME &&
+        mc version enable local/$$BUCKET_NAME &&
+        echo 'MinIO bucket ready: '$$BUCKET_NAME
+      "
+    restart: "no"
+
+  # ── Qdrant vector database ─────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    volumes:
+      - qdrant-data:/qdrant/storage
+      - ./infra/qdrant/config.yaml:/qdrant/config/production.yaml:ro
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    healthcheck:
+      # Qdrant image uses dash as /bin/sh (no /dev/tcp); use bash explicitly for TCP health check
+      test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /healthz HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q '200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── LiteLLM proxy (all model calls go through here, D-12/D-13) ────────────
+  # Boots healthy without AWS creds (A5): model calls fail at invocation time,
+  # not at startup. Spike uses local embeddings (D-13) so Bedrock is never called.
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    environment:
+      # AWS Bedrock API key (optional: proxy boots healthy without it; D-13).
+      # Set AWS_BEDROCK_API_KEY in .env to activate Bedrock model calls (D-12).
+      AWS_BEDROCK_API_KEY: "${AWS_BEDROCK_API_KEY:-}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:-}"
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    healthcheck:
+      # LiteLLM image has no curl; use Python (available in the venv) to check liveness
+      test: ["CMD", "/app/.venv/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"]
+      interval: 15s
+      timeout: 15s
+      retries: 8
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Dagster webserver ──────────────────────────────────────────────────────
+  # Uses the same image as api (built from Dockerfile) for consistency.
+  # The dagster webserver + daemon share the dagster-home volume for run storage.
+  dagster-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      DAGSTER_HOME: /dagster-home
+    volumes:
+      - dagster-home:/dagster-home
+      - ./infra/dagster/dagster.yaml:/dagster-home/dagster.yaml:ro
+    command: ["/app/.venv/bin/dagster-webserver", "-h", "0.0.0.0", "-p", "3000"]
+    ports:
+      - "${DAGSTER_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/server_info || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+
+  # ── Dagster daemon ─────────────────────────────────────────────────────────
+  dagster-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      DAGSTER_HOME: /dagster-home
+    volumes:
+      - dagster-home:/dagster-home
+      - ./infra/dagster/dagster.yaml:/dagster-home/dagster.yaml:ro
+    command: ["/app/.venv/bin/dagster-daemon", "run"]
+    restart: unless-stopped
+
+  # ── Knowledge Lake API (FastAPI + uvicorn) ─────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    environment:
+      <<: *common-env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:
+  qdrant-data:
+  dagster-home:

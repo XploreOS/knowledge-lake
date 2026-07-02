@@ -1,0 +1,19 @@
+# Qdrant configuration for Knowledge Lake development
+# Reference: https://qdrant.tech/documentation/guides/configuration/
+
+service:
+  # gRPC and REST on default ports
+  grpc_port: 6334
+  http_port: 6333
+
+storage:
+  # Performance settings for development
+  performance:
+    max_search_threads: 4
+  optimizers:
+    # Lower thresholds for fast indexing in dev (small collection)
+    indexing_threshold_kb: 1024
+    flush_interval_sec: 5
+
+# Logging
+log_level: INFO

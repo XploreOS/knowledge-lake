@@ -28,6 +28,7 @@ dependencies = [
     "httpx==0.28.1",
     "xxhash==3.8.0",
     "orjson==3.11.9",
+    "dagster-postgres==0.29.11",
 ]
 
 [project.scripts]
@@ -65,3 +66,6 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
 ]
+
+[tool.dagster]
+module_name = "knowledge_lake.dagster_defs.definitions"

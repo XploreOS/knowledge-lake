@@ -1,0 +1,37 @@
+# Dagster instance configuration
+# Reference: https://docs.dagster.io/deployment/dagster-instance
+#
+# Dagster uses a separate database (dagster_storage) in the same PostgreSQL
+# container — never the registry database (research Open Question 5, FOUND-09).
+
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_url:
+      env: DAGSTER_PG_URL
+
+run_launcher:
+  module: dagster.core.launcher
+  class: DefaultRunLauncher
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: DefaultRunCoordinator
+
+telemetry:
+  enabled: false
