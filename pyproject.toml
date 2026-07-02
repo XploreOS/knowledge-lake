@@ -34,6 +34,16 @@ dependencies = [
 [project.scripts]
 klake = "knowledge_lake.cli.app:app"
 
+[project.entry-points."knowledge_lake.parsers"]
+docling = "knowledge_lake.plugins.builtin.docling_parser:DoclingParser"
+
+[project.entry-points."knowledge_lake.embedders"]
+local = "knowledge_lake.plugins.builtin.st_embedder:SentenceTransformerEmbedder"
+litellm = "knowledge_lake.plugins.builtin.st_embedder:LiteLLMEmbedder"
+
+[project.entry-points."knowledge_lake.vectorstores"]
+qdrant = "knowledge_lake.plugins.builtin.qdrant_store:QdrantVectorStore"
+
 [build-system]
 requires = ["uv_build>=0.11.26,<0.12.0"]
 build-backend = "uv_build"
