@@ -9,8 +9,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation
 
-- [ ] **FOUND-01**: Operator can bring up the full stack (PostgreSQL, Qdrant, MinIO, LiteLLM, Dagster, API) with a single `docker compose up`
-- [ ] **FOUND-02**: All configuration loads from environment variables / .env via typed pydantic-settings with validated defaults
+- [x] **FOUND-01**: Operator can bring up the full stack (PostgreSQL, Qdrant, MinIO, LiteLLM, Dagster, API) with a single `docker compose up`
+- [x] **FOUND-02**: All configuration loads from environment variables / .env via typed pydantic-settings with validated defaults
 - [ ] **FOUND-03**: Storage layer writes/reads objects to any S3-compatible backend (MinIO dev, AWS S3 prod) through one abstraction
 - [ ] **FOUND-04**: Raw zone objects are content-addressed (SHA256) and never modified or deleted after write
 - [ ] **FOUND-05**: PostgreSQL registry stores sources, documents, artifacts, chunks, jobs, datasets, and lineage events with stable IDs and content hashes
@@ -139,8 +139,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
-| FOUND-02 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Complete |
+| FOUND-02 | Phase 1 | Complete |
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |
 | FOUND-05 | Phase 1 | Pending |
@@ -196,6 +196,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IFACE-03 | Phase 6 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 55 total (count corrected from 47 during roadmap creation)
 - Mapped to phases: 55
 - Unmapped: 0 ✓
