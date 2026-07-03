@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **FOUND-01**: Operator can bring up the full stack (PostgreSQL, Qdrant, MinIO, LiteLLM, Dagster, API) with a single `docker compose up`
 - [x] **FOUND-02**: All configuration loads from environment variables / .env via typed pydantic-settings with validated defaults
-- [ ] **FOUND-03**: Storage layer writes/reads objects to any S3-compatible backend (MinIO dev, AWS S3 prod) through one abstraction
-- [ ] **FOUND-04**: Raw zone objects are content-addressed (SHA256) and never modified or deleted after write
+- [x] **FOUND-03**: Storage layer writes/reads objects to any S3-compatible backend (MinIO dev, AWS S3 prod) through one abstraction
+- [x] **FOUND-04**: Raw zone objects are content-addressed (SHA256) and never modified or deleted after write
 - [x] **FOUND-05**: PostgreSQL registry stores sources, documents, artifacts, chunks, jobs, datasets, and lineage events with stable IDs and content hashes
 - [x] **FOUND-06**: Every artifact records source ID, parent artifact ID, content hash, timestamp, pipeline version, and storage URI
 - [ ] **FOUND-07**: Operator can query full lineage of any artifact back to its raw source via CLI/API
@@ -141,8 +141,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | FOUND-01 | Phase 1 | Complete |
 | FOUND-02 | Phase 1 | Complete |
-| FOUND-03 | Phase 1 | Pending |
-| FOUND-04 | Phase 1 | Pending |
+| FOUND-03 | Phase 1 | Complete |
+| FOUND-04 | Phase 1 | Complete |
 | FOUND-05 | Phase 1 | Complete |
 | FOUND-06 | Phase 1 | Complete |
 | FOUND-07 | Phase 1 | Pending |

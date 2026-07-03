@@ -5,14 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: foundation-end-to-end-spike
 status: executing
-last_updated: "2026-07-03T01:42:37.624Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-07-03T02:03:03.249Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -28,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 01 (foundation-end-to-end-spike) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 01 execution started
 
@@ -57,6 +58,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P01 | 59 | 3 tasks | 23 files |
 | Phase 01 P04 | 35m | - tasks | - files |
 | Phase 01 P02 | 45 | 3 tasks | 17 files |
+| Phase 01 P03 | 12m | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -72,6 +74,9 @@ Recent decisions affecting current work:
 - [Phase ?]: plain config-keyed resolver (no pluggy) for Phase 1 plugin seam — pluggy deferred to Phase 3 fallback chains (FOUND-08)
 - [Phase ?]: SentenceTransformerEmbedder all-MiniLM-L6-v2 384-dim as default local embedder (D-13 zero-creds spike)
 - [Phase ?]: LiteLLMEmbedder uses embedding_model task alias only — no hardcoded provider IDs anywhere in plugins/
+- [Phase ?]: Single boto3 client per StorageBackend; endpoint_url toggle selects MinIO vs AWS S3 (FOUND-03)
+- [Phase ?]: No S3 If-None-Match:'*' conditional-write; immutability enforced by app+bucket-policy layer (FOUND-04, MinIO gap)
+- [Phase ?]: Four-layer WORM: registry no-op + content-addressed key + head_object guard + versioning/object-lock/delete-deny policy (FOUND-04)
 
 ### Pending Todos
 
@@ -93,5 +98,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-03T01:42:37.617Z
-Resume file: .planning/phases/01-foundation-end-to-end-spike/01-01-PLAN.md
+**Stopped at:** Completed 01-03-PLAN.md
+
+Last session: 2026-07-03T02:03:03.241Z
+Resume file: None
