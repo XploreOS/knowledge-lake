@@ -25,7 +25,15 @@ import structlog
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from knowledge_lake.api.schemas import LineageGraph, LineageNode, SearchHit, SearchParams
+from knowledge_lake.api.schemas import (
+    LineageGraph,
+    LineageNode,
+    SearchHit,
+    SearchParams,
+    SourceCreate,
+    SourceOut,
+    UploadOut,
+)
 from knowledge_lake.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -131,6 +139,91 @@ async def search_endpoint(
 
     logger.info("api.search.complete", results=len(result))
     return result
+
+
+@app.post(
+    "/sources",
+    response_model=SourceOut,
+    tags=["ingestion"],
+    summary="Register a source URL",
+    status_code=201,
+)
+async def create_source_endpoint(body: SourceCreate) -> SourceOut:
+    """Register a source URL with URL-first dedup (INGEST-01).
+
+    If the normalized URL already exists, returns the existing source (HTTP 201
+    regardless — D-07 silent success, same shape).
+
+    Security (T-02-04 / ASVS V5):
+        - URL is validated by pydantic (min_length=8).
+        - Name/domain lengths are bounded.
+    """
+    from knowledge_lake.pipeline.ingest import register_source
+
+    logger.info("api.sources.create", url=body.url, name=body.name)
+
+    effective_name = body.name or body.url.split("/")[2] if "/" in body.url else body.url
+    try:
+        result = register_source(
+            url=body.url,
+            name=effective_name,
+            domain=body.domain,
+            license_type=body.license_type,
+        )
+    except ValueError as exc:
+        logger.warning("api.sources.validation_error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.sources.complete", source_id=result["source_id"], is_new=result["is_new"])
+    return SourceOut(**result)
+
+
+@app.post(
+    "/uploads",
+    response_model=UploadOut,
+    tags=["ingestion"],
+    summary="Upload a local file into the raw zone",
+    status_code=201,
+)
+async def upload_endpoint(
+    file_path: str = Query(
+        ...,
+        description="Absolute path to the file on the server filesystem.",
+    ),
+    source_name: str = Query(
+        default="uploaded-file",
+        description="Human-readable source name.",
+    ),
+    license_type: str = Query(
+        default="unknown",
+        description="SPDX license identifier.",
+    ),
+) -> UploadOut:
+    """Upload a local file and ingest as a raw_document artifact (INGEST-03).
+
+    For hermetic/integration testing: accepts a file path (not multipart).
+    Hash-second dedup: identical content returns existing artifact IDs (D-07).
+
+    Security (T-02-04):
+        - file_path is validated by the pipeline (must exist on disk).
+    """
+    from knowledge_lake.pipeline.ingest import ingest_file
+
+    logger.info("api.uploads.create", file_path=file_path, source_name=source_name)
+
+    try:
+        result = ingest_file(
+            path=file_path,
+            source_name=source_name,
+            license_type=license_type,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.uploads.complete", artifact_id=result["artifact_id"])
+    return UploadOut(**result)
 
 
 @app.get(

@@ -47,6 +47,83 @@ def cmd_status() -> None:
     typer.echo("ok")
 
 
+@app.command(name="add-source")
+def cmd_add_source(
+    url: str = typer.Argument(..., help="https:// URL of the source to register."),
+    name: Optional[str] = typer.Option(
+        None, "--name", "-n", help="Human-readable source name (defaults to URL hostname)."
+    ),
+    domain: Optional[str] = typer.Option(
+        None, "--domain", "-d", help="Domain classification (e.g. 'healthcare', 'legal')."
+    ),
+    license_type: str = typer.Option(
+        "unknown", "--license", "-l", help="SPDX license identifier."
+    ),
+) -> None:
+    """Register a source URL with optional domain classification.
+
+    URL-first dedup: re-registering the same URL is a silent no-op returning
+    the existing source_id.
+    """
+    from knowledge_lake.pipeline.ingest import register_source
+
+    effective_name = name or url.split("/")[2] if "/" in url else url
+    try:
+        result = register_source(
+            url=url,
+            name=effective_name,
+            domain=domain,
+            license_type=license_type,
+        )
+        if result["is_new"]:
+            typer.echo(f"Registered new source:")
+        else:
+            typer.echo(f"Source already exists (dedup hit):")
+        typer.echo(f"  source_id:      {result['source_id']}")
+        typer.echo(f"  name:           {result['name']}")
+        typer.echo(f"  url:            {result['url']}")
+        typer.echo(f"  normalized_url: {result['normalized_url']}")
+        if result.get("domain"):
+            typer.echo(f"  domain:         {result['domain']}")
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="upload")
+def cmd_upload(
+    file_path: str = typer.Argument(..., help="Path to the local file to upload."),
+    source_name: Optional[str] = typer.Option(
+        None, "--source", "-s", help="Human-readable source name."
+    ),
+    license_type: str = typer.Option(
+        "unknown", "--license", "-l", help="SPDX license identifier."
+    ),
+) -> None:
+    """Upload a local file into the raw zone with provenance metadata.
+
+    Hash-second dedup: re-uploading identical content is a silent no-op
+    returning the existing artifact_id.
+    """
+    from knowledge_lake.pipeline.ingest import ingest_file
+
+    effective_name = source_name or Path(file_path).stem
+    try:
+        result = ingest_file(
+            path=file_path,
+            source_name=effective_name,
+            license_type=license_type,
+        )
+        typer.echo(f"Uploaded:")
+        typer.echo(f"  source_id:    {result['source_id']}")
+        typer.echo(f"  artifact_id:  {result['artifact_id']}")
+        typer.echo(f"  storage_uri:  {result['storage_uri']}")
+        typer.echo(f"  content_hash: {result['content_hash']}")
+    except (ValueError, FileNotFoundError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="ingest-url")
 def cmd_ingest_url(
     url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),

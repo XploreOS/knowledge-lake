@@ -114,3 +114,62 @@ class LineageGraph(BaseModel):
 
     artifact_id: str = Field(description="The queried artifact ID.")
     nodes: list[LineageNode] = Field(description="Ordered ancestry nodes (leaf → root).")
+
+
+# ── Source registration schemas (02-01) ──────────────────────────────────────
+
+
+class SourceCreate(BaseModel):
+    """Request body for POST /sources — register a new source.
+
+    Pydantic validates these at the API boundary (ASVS V5, T-02-04).
+    """
+
+    url: str = Field(
+        ...,
+        description="https:// URL of the source to register.",
+        min_length=8,
+    )
+    name: Optional[str] = Field(
+        default=None,
+        description="Human-readable source name (defaults to URL hostname).",
+    )
+    domain: Optional[str] = Field(
+        default=None,
+        description="Domain classification (e.g. 'healthcare', 'legal').",
+        max_length=64,
+    )
+    license_type: str = Field(
+        default="unknown",
+        description="SPDX license identifier or 'unknown'.",
+        max_length=64,
+    )
+
+
+class SourceOut(BaseModel):
+    """Response body for POST /sources — registered source details."""
+
+    source_id: str = Field(description="Source registry ID (src_...).")
+    name: str = Field(description="Human-readable source name.")
+    url: str = Field(description="Original URL as provided.")
+    normalized_url: Optional[str] = Field(
+        default=None,
+        description="D-06 normalized URL used for dedup.",
+    )
+    domain: Optional[str] = Field(
+        default=None,
+        description="Domain classification.",
+    )
+    is_new: bool = Field(description="True if newly created, False if dedup hit.")
+
+
+class UploadOut(BaseModel):
+    """Response body for POST /uploads — uploaded artifact details."""
+
+    source_id: str = Field(description="Source registry ID (src_...).")
+    artifact_id: str = Field(description="Raw artifact ID (doc_...).")
+    storage_uri: Optional[str] = Field(
+        default=None,
+        description="S3 URI of the stored content.",
+    )
+    content_hash: str = Field(description="SHA-256 hash of the uploaded content.")
