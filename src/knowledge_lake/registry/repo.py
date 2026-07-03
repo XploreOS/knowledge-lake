@@ -37,6 +37,7 @@ def create_source(
     name: str,
     source_type: str,
     url: Optional[str] = None,
+    normalized_url: Optional[str] = None,
     license_type: Optional[str] = None,
     license_url: Optional[str] = None,
     robots_checked: bool = False,
@@ -56,6 +57,8 @@ def create_source(
         Kind of source (e.g. 'web', 'upload', 'api').
     url:
         Canonical URL of the source, if applicable.
+    normalized_url:
+        D-06 normalized URL for URL-first dedup lookup.
     license_type:
         SPDX identifier or 'public_domain'.
     license_url:
@@ -75,6 +78,7 @@ def create_source(
         name=name,
         source_type=source_type,
         url=url,
+        normalized_url=normalized_url,
         license_type=license_type,
         license_url=license_url,
         robots_checked=robots_checked,
@@ -264,3 +268,43 @@ def list_children(session: Session, artifact_id: str) -> list[Artifact]:
         .order_by(Artifact.created_at)
     )
     return list(session.execute(stmt).scalars())
+
+
+# ── Dedup lookups (D-05, D-07, INGEST-08) ───────────────────────────────────
+
+
+def get_source_by_normalized_url(
+    session: Session,
+    normalized_url: str,
+) -> Optional[Source]:
+    """Return the source matching a normalized URL, or None.
+
+    This is the URL-first dedup lookup (D-05): called by register_source()
+    before creating a new source row.  Uses the ix_sources_normalized_url
+    index.  No raw SQL — ORM select (T-02-02).
+    """
+    stmt = (
+        select(Source)
+        .where(Source.normalized_url == normalized_url)
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def get_raw_artifact_for_source(
+    session: Session,
+    source_id: str,
+) -> Optional[Artifact]:
+    """Return the raw_document artifact owned by the given source, or None.
+
+    Used by ingest_url when URL-first dedup hits: the existing source_id is known,
+    so we fetch its raw artifact to return the same IDs (D-07 silent success).
+    No raw SQL — ORM select (T-02-02).
+    """
+    stmt = (
+        select(Artifact)
+        .where(Artifact.source_id == source_id)
+        .where(Artifact.artifact_type == "raw_document")
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()

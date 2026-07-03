@@ -217,6 +217,74 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
         )
 
 
+def register_source(
+    url: str,
+    name: str,
+    *,
+    domain: Optional[str] = None,
+    license_type: str = "unknown",
+    settings: Optional[Settings] = None,
+) -> dict:
+    """Register a source URL with URL-first dedup (INGEST-01).
+
+    Normalizes the URL, looks up get_source_by_normalized_url; if found,
+    returns the existing source (no new row). Otherwise creates a new source
+    with normalized_url set and domain stored in Source.config.
+
+    Args:
+        url:          The source URL to register.
+        name:         Human-readable name for the source.
+        domain:       Optional domain classification (stored in config).
+        license_type: SPDX license identifier.
+        settings:     Settings override.
+
+    Returns:
+        dict with source_id, name, url, normalized_url, domain, is_new.
+    """
+    norm_url = normalize_url(url)
+    log.info("register_source.start", url=url, normalized_url=norm_url, name=name)
+
+    with get_session() as session:
+        existing = registry_repo.get_source_by_normalized_url(session, norm_url)
+        if existing:
+            log.info(
+                "register_source.dedup_hit",
+                source_id=existing.id,
+                normalized_url=norm_url,
+            )
+            return {
+                "source_id": existing.id,
+                "name": existing.name,
+                "url": existing.url,
+                "normalized_url": existing.normalized_url,
+                "domain": (existing.config or {}).get("domain"),
+                "is_new": False,
+            }
+
+        config = {"domain": domain} if domain else None
+        source = registry_repo.create_source(
+            session,
+            name=name,
+            source_type="web",
+            url=url,
+            normalized_url=norm_url,
+            license_type=license_type,
+            config=config,
+        )
+        session.flush()
+        result = {
+            "source_id": source.id,
+            "name": source.name,
+            "url": source.url,
+            "normalized_url": source.normalized_url,
+            "domain": domain,
+            "is_new": True,
+        }
+
+    log.info("register_source.complete", **result)
+    return result
+
+
 def ingest_url(
     url: str,
     source_name: str,
@@ -227,6 +295,10 @@ def ingest_url(
     settings: Optional[Settings] = None,
 ) -> dict:
     """Download a URL and ingest as a raw_document artifact.
+
+    Implements URL-first dedup (D-05): normalizes the URL and checks
+    sources.normalized_url. If the URL was already ingested, returns the
+    existing source_id + artifact_id without re-fetching (D-07 silent success).
 
     Security:
         - Validates scheme is https (raises ValueError otherwise).
@@ -257,6 +329,27 @@ def ingest_url(
     storage = StorageBackend(s.storage)
 
     log.info("ingest_url.start", url=url, source_name=source_name)
+
+    # URL-first dedup (D-05): check if we already have this normalized URL
+    norm_url = normalize_url(url)
+    with get_session() as session:
+        existing_source = registry_repo.get_source_by_normalized_url(session, norm_url)
+        if existing_source:
+            existing_artifact = registry_repo.get_raw_artifact_for_source(
+                session, existing_source.id
+            )
+            if existing_artifact:
+                result = {
+                    "source_id": existing_source.id,
+                    "artifact_id": existing_artifact.id,
+                    "storage_uri": existing_artifact.storage_uri,
+                    "content_hash": existing_artifact.content_hash,
+                    "mime_type": existing_artifact.mime_type or "application/octet-stream",
+                }
+                log.info("ingest_url.dedup_hit", **result)
+                return result
+
+    # No dedup hit — proceed with fetch
     data, server_content_type = _fetch_with_retry(url)
     # Use caller-supplied MIME type if provided, otherwise trust the server (WR-08)
     effective_mime = mime_type or server_content_type
@@ -269,6 +362,7 @@ def ingest_url(
             name=source_name,
             source_type="web",
             url=url,
+            normalized_url=norm_url,
             license_type=license_type,
             robots_checked=robots_checked,
         )
@@ -298,6 +392,10 @@ def ingest_file(
 ) -> dict:
     """Load a local file and ingest as a raw_document artifact.
 
+    Implements hash-second dedup (D-07): computes SHA256 of the file and checks
+    get_artifact_by_hash. If an identical raw artifact already exists, returns
+    the existing IDs without creating a new source row.
+
     Used for hermetic fixture testing (D-05) and for the demo fallback when
     egress is blocked.
 
@@ -312,6 +410,8 @@ def ingest_file(
     Returns:
         dict with source_id, artifact_id, storage_uri, content_hash.
     """
+    import hashlib as _hashlib
+
     fpath = Path(path)
     if not fpath.exists():
         raise FileNotFoundError(f"ingest_file: path does not exist: {fpath}")
@@ -328,12 +428,29 @@ def ingest_file(
     data = fpath.read_bytes()
     log.info("ingest_file.loaded", path=str(fpath), size=len(data))
 
+    # Hash-second dedup (D-07): check if identical content already exists
+    content_hash = _hashlib.sha256(data).hexdigest()
+    with get_session() as session:
+        existing_artifact = registry_repo.get_artifact_by_hash(
+            session, content_hash, "raw_document"
+        )
+        if existing_artifact:
+            result = {
+                "source_id": existing_artifact.source_id,
+                "artifact_id": existing_artifact.id,
+                "storage_uri": existing_artifact.storage_uri,
+                "content_hash": existing_artifact.content_hash,
+            }
+            log.info("ingest_file.dedup_hit", **result)
+            return result
+
     with get_session() as session:
         source = registry_repo.create_source(
             session,
             name=source_name,
             source_type="upload",
             url=source_url or str(fpath),
+            normalized_url=normalize_url(source_url) if source_url else None,
             license_type=license_type,
             robots_checked=False,  # local uploads don't need robots.txt check
         )

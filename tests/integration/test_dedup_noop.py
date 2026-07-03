@@ -53,27 +53,19 @@ class TestUrlFirstDedup:
 
         # Mock dependencies
         fake_body = b"test document content for dedup"
-        fake_hash = hashlib.sha256(fake_body).hexdigest()
 
         def fake_getaddrinfo(host, port, *args, **kwargs):
             return [(2, 1, 6, "", ("93.184.216.34", 443))]
 
-        import httpx
-
-        class MockTransport(httpx.BaseTransport):
-            def handle_request(self, request: httpx.Request) -> httpx.Response:
-                return httpx.Response(
-                    status_code=200,
-                    headers={"content-type": "application/pdf"},
-                    content=fake_body,
-                )
-
         mock_settings = MagicMock()
         mock_settings.storage = MagicMock()
 
+        def mock_fetch(url):
+            return fake_body, "application/pdf"
+
         with (
             patch("socket.getaddrinfo", side_effect=fake_getaddrinfo),
-            patch("httpx.Client", return_value=httpx.Client(transport=MockTransport())),
+            patch("knowledge_lake.pipeline.ingest._fetch_with_retry", side_effect=mock_fetch),
             patch("knowledge_lake.pipeline.ingest.get_session", mock_session),
             patch("knowledge_lake.pipeline.ingest.StorageBackend") as MockStorage,
         ):

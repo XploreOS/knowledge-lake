@@ -72,6 +72,11 @@ class Source(Base):
     url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     """Canonical URL of the source (if applicable)."""
 
+    normalized_url: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, index=True
+    )
+    """D-06 normalized URL for URL-first dedup (lowercase scheme+host, strip fragment/trailing slash)."""
+
     license_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     """SPDX license identifier or 'public_domain', 'proprietary', etc."""
 
