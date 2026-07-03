@@ -20,6 +20,7 @@ D-02 compliance:
 
 from __future__ import annotations
 
+import re
 import structlog
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -28,6 +29,10 @@ from knowledge_lake.api.schemas import LineageGraph, LineageNode, SearchHit, Sea
 from knowledge_lake.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
+
+# Collection names must be alphanumeric with underscores/hyphens, max 64 chars (WR-04).
+# Rejects arbitrary strings that could enumerate Qdrant collections or cause confusion.
+_COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 app = FastAPI(
     title="Knowledge Lake API",
@@ -98,6 +103,11 @@ async def search_endpoint(
         Returns an empty list when the query is empty/whitespace.
     """
     from knowledge_lake.pipeline.search import search
+
+    # Validate collection name format before passing to Qdrant (WR-04, T-01-14).
+    # Prevents collection enumeration attacks and rejects malformed names early.
+    if not _COLLECTION_NAME_RE.fullmatch(collection):
+        raise HTTPException(status_code=422, detail="Invalid collection name format.")
 
     # Delegate entirely to the existing plain function (D-02)
     logger.info("api.search", q=q[:80], top_k=top_k, collection=collection)
