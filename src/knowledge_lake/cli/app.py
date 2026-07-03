@@ -2,11 +2,19 @@
 
 Entry point: klake = "knowledge_lake.cli.app:app"
 
-This module is the thin start of the full klake command list.
-Additional commands (ingest-url, search, lineage, demo) are added in later plans.
+Commands:
+  version     — print package version
+  ingest-url  — download a URL and ingest as a raw_document artifact
+  search      — embed a query and return cited search results
+  lineage     — print ancestry tree (or JSON) for a given artifact ID
+  demo        — run the full spike end-to-end (ingest → search → lineage)
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -37,6 +45,224 @@ def cmd_version(
 def cmd_status() -> None:
     """(Internal) reserved — will be wired in later plans."""
     typer.echo("ok")
+
+
+@app.command(name="ingest-url")
+def cmd_ingest_url(
+    url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),
+    source_name: Optional[str] = typer.Option(
+        None, "--source", "-s", help="Human-readable source name."
+    ),
+    mime_type: str = typer.Option(
+        "application/pdf", "--mime", "-m", help="MIME type of the document."
+    ),
+    collection: str = typer.Option(
+        "klake_chunks", "--collection", "-c", help="Qdrant collection to index into."
+    ),
+) -> None:
+    """Download a URL, ingest, parse, chunk, embed, and index into Qdrant.
+
+    Prints source_id, artifact IDs, and chunk count on success.
+    """
+    from knowledge_lake.pipeline.run import run_document
+
+    effective_name = source_name or url.split("/")[-1] or "Web Source"
+    try:
+        result = run_document(
+            url=url,
+            source_name=effective_name,
+            collection=collection,
+            mime_type=mime_type,
+        )
+        typer.echo(f"Ingested: {result['chunk_count']} chunks indexed")
+        typer.echo(f"  source_id:          {result['source_id']}")
+        typer.echo(f"  raw_artifact_id:    {result['raw_artifact_id']}")
+        typer.echo(f"  parsed_artifact_id: {result['parsed_artifact_id']}")
+        typer.echo(f"  collection:         {result['collection']}")
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="search")
+def cmd_search(
+    query: str = typer.Argument(..., help="Natural-language search query."),
+    collection: str = typer.Option(
+        "klake_chunks", "--collection", "-c", help="Qdrant collection to search."
+    ),
+    top_k: int = typer.Option(5, "--top-k", "-k", help="Maximum number of results."),
+) -> None:
+    """Embed a query and return the top-K matching chunks with citation.
+
+    Each result shows score, section, page, and a text snippet.
+    """
+    from knowledge_lake.pipeline.search import search
+
+    hits = search(query, collection=collection, top_k=top_k)
+
+    if not hits:
+        typer.echo(f"No results for query: {query!r}")
+        return
+
+    typer.echo(f"Results for: {query!r}")
+    typer.echo(f"Collection: {collection}")
+    typer.echo()
+    for i, hit in enumerate(hits, 1):
+        payload = hit.payload
+        typer.echo(f"  [{i}] score={hit.score:.4f}")
+        typer.echo(f"      document:     {payload.get('document', '?')}")
+        typer.echo(f"      section:      {payload.get('section_path', '?')}")
+        typer.echo(f"      page:         {payload.get('page', '?')}")
+        typer.echo(f"      chunk_id:     {payload.get('chunk_id', hit.id)}")
+        text_snippet = (payload.get("text") or "")[:120].replace("\n", " ")
+        if text_snippet:
+            typer.echo(f"      text:         {text_snippet!r}")
+        typer.echo()
+
+
+@app.command(name="lineage")
+def cmd_lineage(
+    artifact_id: str = typer.Argument(
+        ...,
+        help="Artifact ID or unambiguous prefix to trace (e.g. 'chk_019f...' or 'chk_019f').",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Output machine-readable JSON instead of the tree."
+    ),
+) -> None:
+    """Print the full lineage ancestry of an artifact.
+
+    Walks parent_artifact_id via recursive CTE from the given artifact back to
+    its source.  Default output is a human-readable tree; use --json for the
+    machine graph.
+
+    Each node shows: id, type, content_hash, timestamp, pipeline_version, storage_uri
+    (the six FOUND-06 lineage fields).
+    """
+    from knowledge_lake.lineage import nodes_to_json, render_tree, resolve_ancestry
+
+    try:
+        nodes = resolve_ancestry(artifact_id)
+    except (LookupError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    if as_json:
+        typer.echo(nodes_to_json(nodes))
+    else:
+        typer.echo(f"Lineage for: {artifact_id}")
+        typer.echo(f"Chain depth: {len(nodes)} nodes")
+        typer.echo()
+        typer.echo(render_tree(nodes))
+
+
+@app.command(name="demo")
+def cmd_demo(
+    collection: str = typer.Option(
+        "klake_spike", "--collection", "-c", help="Qdrant collection for the demo."
+    ),
+    query: str = typer.Option(
+        "what are administrative safeguards",
+        "--query",
+        "-q",
+        help="Demo search query.",
+    ),
+    top_k: int = typer.Option(3, "--top-k", "-k", help="Number of results."),
+    use_live: bool = typer.Option(
+        False,
+        "--live",
+        help="Download the live HHS PDF instead of using the cached fixture.",
+    ),
+) -> None:
+    """Run the full end-to-end demo: ingest → search → lineage.
+
+    Uses the cached HIPAA Security Rule fixture by default (D-05, hermetic).
+    Pass --live to download the live HHS PDF instead.
+
+    The fixed query 'what are administrative safeguards' returns cited results
+    from the Administrative Safeguards section.  Lineage of the top hit is
+    resolved and printed.
+
+    This is the smoke test that proves the walking skeleton end-to-end (D-03).
+    """
+    from knowledge_lake.pipeline.run import run_document
+    from knowledge_lake.pipeline.search import search as do_search
+    from knowledge_lake.lineage import nodes_to_json, render_tree, resolve_ancestry
+
+    typer.echo("=" * 60)
+    typer.echo("Knowledge Lake — End-to-End Demo")
+    typer.echo("=" * 60)
+    typer.echo()
+
+    # ── Step 1: Ingest ────────────────────────────────────────────────────────
+    if use_live:
+        live_url = (
+            "https://www.hhs.gov/sites/default/files/ocr/privacy/hipaa/"
+            "understanding/srsummary.pdf"
+        )
+        typer.echo(f"Ingesting live PDF: {live_url}")
+        try:
+            result = run_document(url=live_url, source_name="HHS HIPAA Security Rule", collection=collection)
+        except Exception as exc:
+            typer.echo(f"Live URL failed ({exc}). Falling back to cached fixture.", err=True)
+            use_live = False
+
+    if not use_live:
+        fixture_path = Path(__file__).parent.parent.parent.parent / "tests" / "fixtures" / "hhs_security_rule.pdf"
+        # Try the path relative to the package first, then relative to cwd
+        if not fixture_path.exists():
+            fixture_path = Path("tests/fixtures/hhs_security_rule.pdf")
+        if not fixture_path.exists():
+            typer.echo("Error: Cached fixture not found. Run from the project root.", err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"Ingesting cached fixture: {fixture_path}")
+        result = run_document(
+            fixture_path=fixture_path,
+            source_name="HHS HIPAA Security Rule (Fixture)",
+            collection=collection,
+        )
+
+    typer.echo(f"  ✓ Ingested: {result['chunk_count']} chunks indexed")
+    typer.echo(f"  source_id:   {result['source_id']}")
+    typer.echo(f"  collection:  {result['collection']}")
+    typer.echo()
+
+    # ── Step 2: Search ────────────────────────────────────────────────────────
+    typer.echo(f"Query: {query!r}")
+    typer.echo("-" * 40)
+    hits = do_search(query, collection=collection, top_k=top_k)
+
+    if not hits:
+        typer.echo("No results — is the collection populated?")
+        raise typer.Exit(code=1)
+
+    for i, hit in enumerate(hits, 1):
+        payload = hit.payload
+        typer.echo(f"[{i}] score={hit.score:.4f}")
+        typer.echo(f"    document:  {payload.get('document', '?')}")
+        typer.echo(f"    section:   {payload.get('section_path', '?')}")
+        typer.echo(f"    page:      {payload.get('page', '?')}")
+        text_snippet = (payload.get("text") or "")[:100].replace("\n", " ")
+        if text_snippet:
+            typer.echo(f"    text:      {text_snippet!r}")
+
+    typer.echo()
+
+    # ── Step 3: Lineage ───────────────────────────────────────────────────────
+    top_chunk_id = hits[0].payload.get("chunk_id") or hits[0].id
+    typer.echo(f"Lineage for top hit: {top_chunk_id}")
+    typer.echo("-" * 40)
+
+    try:
+        nodes = resolve_ancestry(top_chunk_id)
+        typer.echo(render_tree(nodes))
+        typer.echo()
+        typer.echo(f"Chain depth: {len(nodes)} nodes (chunk → ... → source)")
+    except Exception as exc:
+        typer.echo(f"Warning: lineage resolution failed: {exc}", err=True)
+
+    typer.echo()
+    typer.echo("Demo complete. Walking skeleton is alive.")
 
 
 if __name__ == "__main__":
