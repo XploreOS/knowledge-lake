@@ -1,0 +1,374 @@
+"""Dagster software-defined assets wrapping the Knowledge Lake pipeline (D-01).
+
+These assets call the SAME plain pipeline functions as the CLI/API — they do not
+re-implement logic (D-02). The Dagster layer adds:
+  - Asset-level materialize triggers (from the Dagster UI or schedule)
+  - Dependency ordering via ``deps`` (Pitfall 7: do NOT use IO managers for bytes)
+  - Resource injection for connection config
+
+Pipeline stages wrapped as assets:
+  ingest_raw_document   — ingest_file/ingest_url → raw_document artifact
+  parsed_document       — parse()                → parsed_document artifact
+  chunk_document        — chunk()                → chunk artifact IDs
+  embed_chunks          — embed()                → vectors + dim
+  index_chunks          — index()                → indexed chunk IDs in Qdrant
+
+Asset ordering (deps chain):
+  ingest_raw_document → parsed_document → chunk_document → embed_chunks → index_chunks
+
+NO IO managers for object bytes — each asset stores its output in the registry/S3/Qdrant
+and passes only the minimal metadata (artifact IDs, vectors) to the next stage via the
+Dagster metadata/output dict. This follows the explicit-storage pattern (Pitfall 7).
+
+The CLI/API surface is NOT affected by adding these assets (D-02):
+  - knowledge_lake.cli.app  — unchanged
+  - knowledge_lake.api.app  — unchanged
+  - knowledge_lake.pipeline — unchanged
+  All three call the pipeline functions directly; Dagster is an additional execution path.
+"""
+
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+import structlog
+from dagster import Config, asset
+
+from knowledge_lake.dagster_defs.resources import (
+    LiteLLMResource,
+    MinIOResource,
+    PostgresResource,
+    QdrantResource,
+)
+
+log = structlog.get_logger(__name__)
+
+# Default collection — same as the CLI default
+DEFAULT_COLLECTION = "klake_chunks"
+
+
+# ── Asset configs ─────────────────────────────────────────────────────────────
+
+
+class IngestConfig(Config):
+    """Run-time configuration for the ingest_raw_document asset.
+
+    Either ``fixture_path`` (for hermetic testing) or ``url`` (for live download)
+    must be provided. When both are absent the asset raises ValueError.
+    """
+
+    fixture_path: Optional[str] = None
+    """Local file path for hermetic fixture testing (D-05)."""
+
+    url: Optional[str] = None
+    """https:// URL to ingest (SSRF-checked inside pipeline.ingest.ingest_url)."""
+
+    source_name: Optional[str] = None
+    """Human-readable name for the source registry entry."""
+
+    collection: str = DEFAULT_COLLECTION
+    """Qdrant collection to index into (flows through to index_chunks)."""
+
+    mime_type: str = "application/pdf"
+    """MIME type of the document."""
+
+
+# ── Assets ────────────────────────────────────────────────────────────────────
+
+
+@asset(
+    description=(
+        "Ingest a raw document (URL or local file) into S3 and register a "
+        "raw_document artifact in the registry. "
+        "Calls pipeline.ingest.ingest_file / ingest_url — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def ingest_raw_document(
+    config: IngestConfig,
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Ingest stage: download/load raw bytes → raw_document artifact.
+
+    Returns a dict with keys: source_id, raw_artifact_id, storage_uri,
+    content_hash, collection (passed to downstream assets via deps).
+
+    The asset calls pipeline.ingest functions and passes artifact IDs forward.
+    Bytes are stored in S3 by StorageBackend — NOT via IO manager (Pitfall 7).
+
+    Args:
+        config:   Run-time config (fixture_path OR url, plus source_name, collection).
+        postgres: PostgreSQL resource (provides database_url for get_session).
+        minio:    MinIO/S3 resource (provides endpoint_url + credentials).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.ingest import ingest_file, ingest_url
+
+    # Build a Settings instance from the Dagster resource config values.
+    # This lets the pipeline functions use their normal settings-based code path.
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info(
+        "dagster.ingest_raw_document.start",
+        fixture_path=config.fixture_path,
+        url=config.url,
+        source_name=config.source_name,
+        collection=config.collection,
+    )
+
+    if config.fixture_path:
+        result = ingest_file(
+            Path(config.fixture_path),
+            config.source_name or Path(config.fixture_path).stem,
+            mime_type=config.mime_type,
+            settings=settings,
+        )
+    elif config.url:
+        result = ingest_url(
+            config.url,
+            config.source_name or config.url,
+            mime_type=config.mime_type,
+            settings=settings,
+        )
+    else:
+        raise ValueError(
+            "ingest_raw_document: exactly one of fixture_path or url must be set in config"
+        )
+
+    # Pass along the collection name for downstream assets
+    result["collection"] = config.collection
+    # Normalize key: ingest_file/ingest_url return "artifact_id"; alias as "raw_artifact_id"
+    # for downstream assets to use a more descriptive key.
+    result["raw_artifact_id"] = result["artifact_id"]
+
+    log.info(
+        "dagster.ingest_raw_document.complete",
+        raw_artifact_id=result["raw_artifact_id"],
+        source_id=result["source_id"],
+    )
+    return result
+
+
+@asset(
+    deps=[ingest_raw_document],
+    description=(
+        "Parse raw document bytes into a ParsedDoc using the configured parser plugin. "
+        "Calls pipeline.parse.parse — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def parsed_document(
+    ingest_raw_document: dict[str, Any],
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Parse stage: raw_document artifact → parsed_document artifact + ParsedDoc.
+
+    Receives the ingest output dict and returns a dict with:
+      artifact_id (parsed), parsed_doc (ParsedDoc object), collection, source_id.
+
+    Bytes are retrieved from S3 by the parse function — NOT via IO manager (Pitfall 7).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.parse import parse
+
+    raw_artifact_id = ingest_raw_document["raw_artifact_id"]
+    source_id = ingest_raw_document["source_id"]
+    collection = ingest_raw_document.get("collection", DEFAULT_COLLECTION)
+    mime_type = ingest_raw_document.get("mime_type", "application/pdf")
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.parsed_document.start", raw_artifact_id=raw_artifact_id)
+
+    parse_result, parsed_doc = parse(
+        raw_artifact_id,
+        source_id,
+        mime_type=mime_type,
+        settings=settings,
+    )
+
+    result = {
+        "artifact_id": parse_result["artifact_id"],
+        "parsed_doc": parsed_doc,  # in-memory ParsedDoc passed to chunk stage
+        "source_id": source_id,
+        "collection": collection,
+    }
+
+    log.info(
+        "dagster.parsed_document.complete",
+        parsed_artifact_id=result["artifact_id"],
+        sections=len(parsed_doc.sections),
+    )
+    return result
+
+
+@asset(
+    deps=[parsed_document],
+    description=(
+        "Split ParsedDoc into section-aware chunk artifacts. "
+        "Calls pipeline.chunk.chunk — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def chunk_document(
+    parsed_document: dict[str, Any],
+    postgres: PostgresResource,
+) -> dict[str, Any]:
+    """Chunk stage: parsed_document → list of chunk dicts.
+
+    Receives the parsed_document output and returns a dict with:
+      chunks (list of chunk dicts), parsed_artifact_id, source_id, collection.
+    """
+    from knowledge_lake.config.settings import Settings
+    from knowledge_lake.pipeline.chunk import chunk
+
+    parsed_artifact_id = parsed_document["artifact_id"]
+    source_id = parsed_document["source_id"]
+    doc = parsed_document["parsed_doc"]
+    collection = parsed_document.get("collection", DEFAULT_COLLECTION)
+
+    settings = Settings(
+        database_url=postgres.database_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.chunk_document.start", parsed_artifact_id=parsed_artifact_id)
+
+    chunks = chunk(parsed_artifact_id, source_id, doc, settings=settings)
+
+    result = {
+        "chunks": chunks,
+        "parsed_artifact_id": parsed_artifact_id,
+        "source_id": source_id,
+        "collection": collection,
+    }
+
+    log.info("dagster.chunk_document.complete", chunk_count=len(chunks))
+    return result
+
+
+@asset(
+    deps=[chunk_document],
+    description=(
+        "Embed chunk texts into dense vectors using the configured embedder plugin. "
+        "Calls pipeline.embed.embed — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
+    """Embed stage: chunk texts → dense vectors.
+
+    Stateless transformation — reads chunks dict from chunk_document output,
+    returns a dict with vectors, dim, chunks, parsed_artifact_id, collection.
+
+    Note: This asset takes no Dagster resources — the embedder plugin is
+    resolved from the environment settings (the default local sentence-transformers
+    embedder requires no API credentials, D-13).
+    """
+    from knowledge_lake.pipeline.embed import embed
+
+    chunks = chunk_document["chunks"]
+    parsed_artifact_id = chunk_document["parsed_artifact_id"]
+    source_id = chunk_document["source_id"]
+    collection = chunk_document.get("collection", DEFAULT_COLLECTION)
+
+    log.info("dagster.embed_chunks.start", chunk_count=len(chunks))
+
+    vectors, dim = embed(chunks)
+
+    result = {
+        "vectors": vectors,
+        "dim": dim,
+        "chunks": chunks,
+        "parsed_artifact_id": parsed_artifact_id,
+        "source_id": source_id,
+        "collection": collection,
+    }
+
+    log.info("dagster.embed_chunks.complete", vectors=len(vectors), dim=dim)
+    return result
+
+
+@asset(
+    deps=[embed_chunks],
+    description=(
+        "Upsert chunk vectors with citation payload into Qdrant. "
+        "Calls pipeline.index.index — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def index_chunks(
+    embed_chunks: dict[str, Any],
+    qdrant: QdrantResource,
+) -> dict[str, Any]:
+    """Index stage: vectors → Qdrant upsert.
+
+    Receives embed output and upserts into Qdrant. Returns dict with
+    chunk_artifact_ids (list), collection, chunk_count.
+    """
+    from knowledge_lake.config.settings import Settings
+    from knowledge_lake.pipeline.index import index
+
+    vectors = embed_chunks["vectors"]
+    dim = embed_chunks["dim"]
+    chunks = embed_chunks["chunks"]
+    parsed_artifact_id = embed_chunks["parsed_artifact_id"]
+    collection = embed_chunks.get("collection", DEFAULT_COLLECTION)
+
+    settings = Settings(
+        qdrant_url=qdrant.qdrant_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info(
+        "dagster.index_chunks.start",
+        chunk_count=len(chunks),
+        collection=collection,
+        dim=dim,
+    )
+
+    indexed_ids = index(
+        chunks,
+        vectors,
+        dim,
+        parsed_artifact_id,
+        collection=collection,
+        settings=settings,
+    )
+
+    result = {
+        "chunk_artifact_ids": indexed_ids,
+        "collection": collection,
+        "chunk_count": len(indexed_ids),
+    }
+
+    log.info(
+        "dagster.index_chunks.complete",
+        indexed=len(indexed_ids),
+        collection=collection,
+    )
+    return result

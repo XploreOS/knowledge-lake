@@ -1,26 +1,84 @@
 """
-Knowledge Lake Dagster definitions — minimal real Definitions() for FOUND-01.
+Knowledge Lake Dagster definitions — software-defined assets wrapping the pipeline (D-01).
 
-This file provides a valid Dagster code location so the compose dagster service
-can load and display a healthy asset graph. Pipeline assets (ingest, parse, chunk,
-embed, index) are added in plan 01-05 after the plain-function pipeline is proven
-(D-01/D-02 — prove flow first, orchestrate second).
+This file provides the Dagster code location (loaded by the dagster-webserver and
+dagster-daemon compose services). It registers:
 
-The dagster service entry point in docker-compose.yml points to this module.
+  Assets (pipeline stages):
+    ingest_raw_document → parsed_document → chunk_document → embed_chunks → index_chunks
+
+  Resources (connection config, read via EnvVar — Pitfall 14):
+    postgres  — PostgreSQL registry database URL
+    minio     — S3-compatible object storage credentials + endpoint
+    qdrant    — Qdrant vector-store URL
+    litellm   — LiteLLM proxy URL (model gateway)
+
+Architecture decision D-01/D-02:
+    Assets call the same plain pipeline functions as the CLI/API — no logic
+    is duplicated. The CLI/API surface (klake CLI commands, FastAPI endpoints)
+    is unchanged; Dagster is an additional execution path, not a replacement.
+
+Pitfall 7 (Dagster IO managers for object bytes):
+    Assets use ``deps`` for ordering and call StorageBackend/registry explicitly.
+    No IO managers are used for object bytes — only Dagster's default in-memory
+    IO manager passes the minimal metadata dicts between stages.
+
+Pitfall 14 (Dagster resource config drift):
+    All connection URLs and credentials come from EnvVar — no hardcoded defaults
+    in this file. The docker-compose.yml sets these env vars for the dagster
+    container; local dev uses the KLAKE_* vars from .env.
 """
 
 from __future__ import annotations
 
 import structlog
-from dagster import Definitions
+from dagster import Definitions, EnvVar
+
+from knowledge_lake.dagster_defs.assets import (
+    chunk_document,
+    embed_chunks,
+    index_chunks,
+    ingest_raw_document,
+    parsed_document,
+)
+from knowledge_lake.dagster_defs.resources import (
+    LiteLLMResource,
+    MinIOResource,
+    PostgresResource,
+    QdrantResource,
+)
 
 logger = structlog.get_logger(__name__)
 
-# ── Minimal real Definitions ──────────────────────────────────────────────────
-# Phase 1: no assets yet — the compose service runs healthy with an empty asset graph.
-# Assets wrapping the pipeline functions are added before the phase closes (D-01).
+# ── Definitions ───────────────────────────────────────────────────────────────
+# All pipeline stage assets + resources using EnvVar config (Pitfall 14).
+# EnvVar reads from the environment at run time — not at import time — so the
+# dagster-webserver container can load Definitions without all vars set in
+# the web process, while the daemon/executor process has them when jobs run.
 
 defs = Definitions(
-    assets=[],
-    resources={},
+    assets=[
+        ingest_raw_document,
+        parsed_document,
+        chunk_document,
+        embed_chunks,
+        index_chunks,
+    ],
+    resources={
+        "postgres": PostgresResource(
+            database_url=EnvVar("KLAKE_DATABASE_URL"),
+        ),
+        "minio": MinIOResource(
+            endpoint_url=EnvVar("KLAKE_STORAGE__ENDPOINT_URL"),
+            bucket=EnvVar("KLAKE_STORAGE__BUCKET"),
+            access_key_id=EnvVar("KLAKE_STORAGE__ACCESS_KEY_ID"),
+            secret_access_key=EnvVar("KLAKE_STORAGE__SECRET_ACCESS_KEY"),
+        ),
+        "qdrant": QdrantResource(
+            qdrant_url=EnvVar("KLAKE_QDRANT_URL"),
+        ),
+        "litellm": LiteLLMResource(
+            litellm_url=EnvVar("KLAKE_LITELLM_URL"),
+        ),
+    },
 )
