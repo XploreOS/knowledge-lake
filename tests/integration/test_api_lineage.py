@@ -71,12 +71,18 @@ class TestSearchEndpoint:
 
     def test_search_returns_200(self, api_client) -> None:
         client, _ = api_client
-        resp = client.get("/search", params={"q": "administrative safeguards", "top_k": 3})
+        resp = client.get(
+            "/search",
+            params={"q": "administrative safeguards", "top_k": 3, "collection": COLLECTION_NAME},
+        )
         assert resp.status_code == 200
 
     def test_search_returns_hits(self, api_client) -> None:
         client, _ = api_client
-        resp = client.get("/search", params={"q": "administrative safeguards", "top_k": 3})
+        resp = client.get(
+            "/search",
+            params={"q": "administrative safeguards", "top_k": 3, "collection": COLLECTION_NAME},
+        )
         hits = resp.json()
         assert isinstance(hits, list), f"Expected list, got {type(hits)}"
         assert len(hits) >= 1, "Expected at least one search hit"
@@ -84,7 +90,10 @@ class TestSearchEndpoint:
     def test_search_hit_has_score(self, api_client) -> None:
         """Each hit must carry a float score in [0, 1]."""
         client, _ = api_client
-        resp = client.get("/search", params={"q": "administrative safeguards", "top_k": 3})
+        resp = client.get(
+            "/search",
+            params={"q": "administrative safeguards", "top_k": 3, "collection": COLLECTION_NAME},
+        )
         hits = resp.json()
         for hit in hits:
             assert "score" in hit, f"Hit missing 'score': {hit.keys()}"
@@ -95,7 +104,10 @@ class TestSearchEndpoint:
     def test_search_hit_has_citation_fields(self, api_client) -> None:
         """Each hit must carry citation fields: document, section_path, page."""
         client, _ = api_client
-        resp = client.get("/search", params={"q": "administrative safeguards", "top_k": 3})
+        resp = client.get(
+            "/search",
+            params={"q": "administrative safeguards", "top_k": 3, "collection": COLLECTION_NAME},
+        )
         hits = resp.json()
         for hit in hits:
             assert "document" in hit, f"Hit missing 'document': {hit.keys()}"
@@ -106,14 +118,20 @@ class TestSearchEndpoint:
     def test_search_top_k_limits_results(self, api_client) -> None:
         """top_k parameter must be respected."""
         client, _ = api_client
-        resp = client.get("/search", params={"q": "technical safeguards", "top_k": 2})
+        resp = client.get(
+            "/search",
+            params={"q": "technical safeguards", "top_k": 2, "collection": COLLECTION_NAME},
+        )
         hits = resp.json()
         assert len(hits) <= 2, f"Expected ≤2 hits for top_k=2, got {len(hits)}"
 
     def test_search_default_top_k(self, api_client) -> None:
         """Without top_k, endpoint uses its default (should not crash)."""
         client, _ = api_client
-        resp = client.get("/search", params={"q": "security rule"})
+        resp = client.get(
+            "/search",
+            params={"q": "security rule", "collection": COLLECTION_NAME},
+        )
         assert resp.status_code == 200
 
     def test_search_empty_query_returns_empty(self, api_client) -> None:
