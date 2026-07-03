@@ -20,6 +20,7 @@ For tests or Dagster assets that need a custom engine, monkey-patch ``get_engine
 
 from __future__ import annotations
 
+import threading
 from contextlib import contextmanager
 from typing import Generator
 
@@ -44,6 +45,7 @@ def _build_engine() -> Engine:
 # None means "not yet built". Tests can monkey-patch get_engine() or reset _engine
 # to None to force a fresh build after changing KLAKE_DATABASE_URL.
 _engine: Engine | None = None
+_engine_lock = threading.Lock()
 
 
 def get_engine() -> Engine:
@@ -52,10 +54,17 @@ def get_engine() -> Engine:
     Lazy initialisation means importing this module does NOT trigger a
     Settings load or .env file read, so test collection is safe and tests
     that set KLAKE_DATABASE_URL before first use receive the correct engine.
+
+    Uses double-checked locking (WR-01) to prevent two threads from both
+    calling _build_engine() simultaneously under concurrent access (e.g.
+    multiple uvicorn worker threads or parallel Dagster assets). Only one
+    engine and one connection pool are ever created per process.
     """
     global _engine
     if _engine is None:
-        _engine = _build_engine()
+        with _engine_lock:
+            if _engine is None:  # double-checked locking
+                _engine = _build_engine()
     return _engine
 
 
