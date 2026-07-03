@@ -40,9 +40,13 @@ class QdrantVectorStore:
 
     def __init__(self, qdrant_url: str = "http://localhost:6333") -> None:
         from qdrant_client import QdrantClient
+        from qdrant_client.models import Distance, PointStruct, VectorParams
 
-        log.debug("qdrant_store.connect", url=qdrant_url)
+        self._Distance = Distance
+        self._PointStruct = PointStruct
+        self._VectorParams = VectorParams
         self._client = QdrantClient(url=qdrant_url)
+        log.debug("qdrant_store.connect", url=qdrant_url)
 
     def ensure_collection(
         self, name: str, dim: int, distance: str = "Cosine"
@@ -57,12 +61,11 @@ class QdrantVectorStore:
             dim:      Vector dimension (must match the embedder's .dim).
             distance: Distance metric ('Cosine', 'Euclid', or 'Dot').
         """
-        from qdrant_client.models import Distance, VectorParams
-
         if self._client.collection_exists(name):
             log.debug("qdrant_store.collection_exists", collection=name)
             return
 
+        Distance = self._Distance
         distance_map = {
             "Cosine": Distance.COSINE,
             "Euclid": Distance.EUCLID,
@@ -73,7 +76,7 @@ class QdrantVectorStore:
         log.info("qdrant_store.create_collection", collection=name, dim=dim, distance=distance)
         self._client.create_collection(
             collection_name=name,
-            vectors_config=VectorParams(size=dim, distance=dist),
+            vectors_config=self._VectorParams(size=dim, distance=dist),
         )
 
     def upsert(self, collection: str, points: list[VectorPoint]) -> None:
@@ -87,10 +90,8 @@ class QdrantVectorStore:
             collection: Target collection name.
             points:     List of VectorPoint objects to upsert.
         """
-        from qdrant_client.models import PointStruct
-
         qdrant_points = [
-            PointStruct(
+            self._PointStruct(
                 id=p.id,
                 vector=p.vector,
                 payload=p.payload,
