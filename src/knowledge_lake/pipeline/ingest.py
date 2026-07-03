@@ -6,9 +6,9 @@ Functions:
 
 Security (T-01-11, threat model):
     - ingest_url: validates scheme is https only (SSRF seam per Pitfall C)
+    - ingest_url: blocks RFC-1918 private IPs and cloud IMDS (169.254.169.254)
     - ingest_url: caps download size at MAX_DOWNLOAD_BYTES (default 50 MB)
     - ingest_url: timeout enforced via httpx
-    - Private-IP blocking is deferred to Phase 2 (INGEST-02)
 
 Storage:
     - Bytes are written via StorageBackend.put_raw (content-addressed, WORM).
@@ -19,8 +19,9 @@ Returns the raw_document Artifact ORM object.
 
 from __future__ import annotations
 
-import logging
+import ipaddress
 import mimetypes
+import socket
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -42,11 +43,27 @@ MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 # HTTP timeout for URL fetches
 FETCH_TIMEOUT_SECONDS = 30.0
 
+# Private/reserved IP ranges blocked for SSRF prevention (T-01-11)
+_PRIVATE_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),   # link-local / cloud IMDS (AWS/GCP/Azure)
+    ipaddress.ip_network("127.0.0.0/8"),       # loopback
+    ipaddress.ip_network("::1/128"),           # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
+]
+
 
 def _validate_url_scheme(url: str) -> None:
-    """Raise ValueError if the URL scheme is not https (SSRF guard, T-01-11).
+    """Raise ValueError if the URL scheme is not https or resolves to a private IP (SSRF guard, T-01-11).
 
-    Phase 1 restricts ingest to https only. Private-IP blocking added in Phase 2.
+    Blocks:
+      - Non-https schemes
+      - RFC-1918 private IP ranges (10.x, 172.16-31.x, 192.168.x)
+      - Link-local/cloud IMDS (169.254.x — AWS/GCP/Azure metadata service)
+      - Loopback (127.x, ::1)
+      - IPv6 ULA (fc00::/7)
     """
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -55,6 +72,20 @@ def _validate_url_scheme(url: str) -> None:
             "Only https:// URLs are allowed (SSRF prevention, T-01-11). "
             "Use ingest_file() for local paths."
         )
+    # Resolve hostname and block private/reserved ranges
+    hostname = parsed.hostname or ""
+    try:
+        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
+    except Exception as exc:
+        raise ValueError(
+            f"Cannot resolve hostname {hostname!r}: {exc}"
+        ) from exc
+    for net in _PRIVATE_NETS:
+        if addr in net:
+            raise ValueError(
+                f"URL {url!r} resolves to private/link-local address {addr} — "
+                "SSRF prevention blocks requests to private networks (T-01-11)."
+            )
 
 
 @retry(
@@ -85,26 +116,32 @@ def ingest_url(
     source_name: str,
     *,
     mime_type: str = "application/pdf",
+    license_type: str = "unknown",
+    robots_checked: bool = False,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Download a URL and ingest as a raw_document artifact.
 
     Security:
         - Validates scheme is https (raises ValueError otherwise).
+        - Blocks RFC-1918 private IPs and cloud IMDS addresses.
         - Caps download at 50 MB.
         - Tenacity retry (3 attempts, exponential back-off).
 
     Args:
-        url:         https:// URL to fetch.
-        source_name: Human-readable name for the source registry entry.
-        mime_type:   MIME type of the document (default: application/pdf).
-        settings:    Settings override (uses get_settings() if None).
+        url:            https:// URL to fetch.
+        source_name:    Human-readable name for the source registry entry.
+        mime_type:      MIME type of the document (default: application/pdf).
+        license_type:   License type of the source (default: "unknown" — caller must supply).
+        robots_checked: Set to True only after actually checking robots.txt (Phase 2).
+                        Default False = robots.txt not yet checked.
+        settings:       Settings override (uses get_settings() if None).
 
     Returns:
         dict with source_id, artifact_id, storage_uri, content_hash.
 
     Raises:
-        ValueError: If URL scheme is not https.
+        ValueError: If URL scheme is not https or resolves to a private IP.
         httpx.HTTPStatusError: If the server returns a non-2xx response.
         ValueError: If the download exceeds MAX_DOWNLOAD_BYTES.
     """
@@ -123,8 +160,8 @@ def ingest_url(
             name=source_name,
             source_type="web",
             url=url,
-            license_type="public_domain",
-            robots_checked=True,
+            license_type=license_type,
+            robots_checked=robots_checked,
         )
         session.flush()
         artifact = storage.put_raw(source.id, data, ext, session)
@@ -146,6 +183,7 @@ def ingest_file(
     *,
     mime_type: str = "application/pdf",
     source_url: Optional[str] = None,
+    license_type: str = "unknown",
     settings: Optional[Settings] = None,
 ) -> dict:
     """Load a local file and ingest as a raw_document artifact.
@@ -154,11 +192,12 @@ def ingest_file(
     egress is blocked.
 
     Args:
-        path:        Path to the local file (str or Path).
-        source_name: Human-readable name for the source registry entry.
-        mime_type:   MIME type override (inferred from suffix if not given).
-        source_url:  Optional canonical URL to record in the source registry.
-        settings:    Settings override.
+        path:         Path to the local file (str or Path).
+        source_name:  Human-readable name for the source registry entry.
+        mime_type:    MIME type override (inferred from suffix if not given).
+        source_url:   Optional canonical URL to record in the source registry.
+        license_type: License type of the source (default: "unknown" — caller must supply).
+        settings:     Settings override.
 
     Returns:
         dict with source_id, artifact_id, storage_uri, content_hash.
@@ -185,8 +224,8 @@ def ingest_file(
             name=source_name,
             source_type="upload",
             url=source_url or str(fpath),
-            license_type="public_domain",
-            robots_checked=True,
+            license_type=license_type,
+            robots_checked=False,  # local uploads don't need robots.txt check
         )
         session.flush()
         artifact = storage.put_raw(source.id, data, ext, session)
