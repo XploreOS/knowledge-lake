@@ -2,8 +2,9 @@
 SQLAlchemy engine and session factory for the Knowledge Lake registry.
 
 All registry database access goes through this module.  The engine is built
-once from ``Settings.database_url`` so there is a single connection pool for
-the process lifetime.
+lazily on first use (via ``get_engine()``) rather than at module import time.
+This prevents env-var reads during test collection and allows tests that
+set KLAKE_DATABASE_URL before the first session to use the correct URL.
 
 Usage::
 
@@ -13,8 +14,8 @@ Usage::
         source = repo.create_source(session, name="…", source_type="web")
         session.commit()
 
-For background tasks (Dagster assets), use ``engine`` directly with
-``Session(engine)`` for explicit lifecycle control.
+For tests or Dagster assets that need a custom engine, monkey-patch ``get_engine``
+(or replace the module-level ``_engine`` attribute) before any session is opened.
 """
 
 from __future__ import annotations
@@ -30,11 +31,7 @@ from knowledge_lake.config.settings import get_settings
 
 
 def _build_engine() -> Engine:
-    """Build a SQLAlchemy engine from the current Settings.database_url.
-
-    Called once at module import time.  Tests can monkey-patch ``get_settings``
-    or replace the module-level ``engine`` to point at a test database.
-    """
+    """Build a SQLAlchemy engine from the current Settings.database_url."""
     settings = get_settings()
     return create_engine(
         settings.database_url,
@@ -43,9 +40,23 @@ def _build_engine() -> Engine:
     )
 
 
-# Module-level engine — shared across the process lifetime.
-# Tests that need a different database should replace this attribute.
-engine: Engine = _build_engine()
+# Module-level engine holder — lazily initialised on first get_engine() call (CR-05).
+# None means "not yet built". Tests can monkey-patch get_engine() or reset _engine
+# to None to force a fresh build after changing KLAKE_DATABASE_URL.
+_engine: Engine | None = None
+
+
+def get_engine() -> Engine:
+    """Return the shared SQLAlchemy engine, building it lazily on first call.
+
+    Lazy initialisation means importing this module does NOT trigger a
+    Settings load or .env file read, so test collection is safe and tests
+    that set KLAKE_DATABASE_URL before first use receive the correct engine.
+    """
+    global _engine
+    if _engine is None:
+        _engine = _build_engine()
+    return _engine
 
 
 @contextmanager
@@ -59,7 +70,7 @@ def get_session() -> Generator[Session, None, None]:
         with get_session() as session:
             repo.create_source(session, name="…", source_type="web")
     """
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         try:
             yield session
             session.commit()
