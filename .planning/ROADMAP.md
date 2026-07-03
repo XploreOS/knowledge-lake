@@ -13,7 +13,7 @@ Build a tool-agnostic knowledge lake framework by first proving a single documen
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & End-to-End Spike** - Registries, immutable storage, plugin interfaces, and one document flowing through the full pipe on a one-command dev stack
+- [x] **Phase 1: Foundation & End-to-End Spike** - Registries, immutable storage, plugin interfaces, and one document flowing through the full pipe on a one-command dev stack (completed 2026-07-03)
 - [ ] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling
 - [ ] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking
 - [ ] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations
@@ -36,14 +36,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Raw zone objects are content-addressed by SHA256 and re-writing or deleting existing raw content is refused — re-ingesting identical content is a registry-level no-op
   5. The spike's parser, embedder, and vector store are invoked through plugin protocol interfaces and swappable via configuration without touching core code, with the registry schema managed by Alembic migrations from the first table
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 - [x] 01-01-PLAN.md — Scaffold, typed config, six-service compose stack, Wave 0 test infra (FOUND-01, FOUND-02)
 - [x] 01-02-PLAN.md — Registry, Alembic migration #1, prefixed UUIDv7 IDs, pipeline_version (FOUND-05, FOUND-06, FOUND-09)
 - [x] 01-03-PLAN.md — S3 storage abstraction + content-addressed immutable raw zone (FOUND-03, FOUND-04)
 - [x] 01-04-PLAN.md — Plugin Protocols + config resolver + Docling/local-ST/Qdrant built-ins (FOUND-08)
 - [x] 01-05-PLAN.md — Plain-function pipeline + recursive-CTE lineage + klake CLI + demo spike (FOUND-07)
-- [ ] 01-06-PLAN.md — FastAPI search/lineage endpoints + Dagster asset wrap (FOUND-07, FOUND-01)
+- [x] 01-06-PLAN.md — FastAPI search/lineage endpoints + Dagster asset wrap (FOUND-07, FOUND-01)
 
 ### Phase 2: Ingestion
 
@@ -131,7 +131,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & End-to-End Spike | 5/6 | In Progress|  |
+| 1. Foundation & End-to-End Spike | 6/6 | Complete   | 2026-07-03 |
 | 2. Ingestion | 0/TBD | Not started | - |
 | 3. Parse, Clean & Chunk | 0/TBD | Not started | - |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
