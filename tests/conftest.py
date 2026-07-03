@@ -66,15 +66,20 @@ def _clear_settings_cache() -> Generator[None, None, None]:
 # ── Settings fixture ─────────────────────────────────────────────────────────
 
 @pytest.fixture
-def settings():
-    """Return a Settings instance with known test overrides.
+def settings() -> Generator[None, None, None]:
+    """Yield a Settings instance with known test overrides.
 
-    Uses env-override approach so pydantic-settings picks them up; cleans up after.
-    The get_settings() LRU cache is cleared by _clear_settings_cache (autouse),
-    so any code under test that calls get_settings() will also receive the
-    test-configured values. (WR-03, IN-04)
+    Uses a yield fixture so the patch.dict context manager remains active for
+    the FULL test body (WR-05). Without yield the with-block exits before the
+    test body runs, so any module that calls get_settings() directly (e.g.
+    storage/bootstrap.py, pipeline/run.py) would see the unpatched environment.
+
+    The get_settings() LRU cache is cleared before yielding and again on
+    teardown so the test-scoped Settings does not leak into subsequent tests.
+    (WR-03, IN-04)
     """
     from knowledge_lake.config.settings import Settings, get_settings
+    import knowledge_lake.registry.db as _db
 
     test_env = {
         "KLAKE_DATABASE_URL": "postgresql+psycopg://klake:klake@localhost:5432/klake_test",
@@ -90,6 +95,10 @@ def settings():
     }
     with patch.dict(os.environ, test_env, clear=False):
         get_settings.cache_clear()
-        # Force fresh Settings from the patched env (no cached instance)
+        _db._engine = None
+        # Build Settings while patch.dict is still active
         s = Settings(_env_file=None)  # type: ignore[call-arg]
-    return s
+        yield s
+    # Teardown: clear cache so the patched Settings does not persist
+    get_settings.cache_clear()
+    _db._engine = None
