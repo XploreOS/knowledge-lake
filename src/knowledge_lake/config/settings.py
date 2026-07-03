@@ -20,21 +20,18 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class StorageSettings(BaseSettings):
+class StorageSettings(BaseModel):
     """S3-compatible object storage configuration.
 
-    Maps from KLAKE_STORAGE__* environment variables via env_nested_delimiter.
-    Set endpoint_url to a MinIO address for dev; leave None for AWS S3 prod.
+    This is a plain BaseModel (not BaseSettings) so it can be used as a nested
+    model inside Settings without double-prefix resolution. Settings reads
+    KLAKE_STORAGE__* env vars via env_nested_delimiter and passes the values in
+    at construction time. (WR-02)
     """
-
-    model_config = SettingsConfigDict(
-        env_prefix="KLAKE_STORAGE__",
-        extra="ignore",
-    )
 
     endpoint_url: str | None = None
     """S3-compatible endpoint. None = use AWS S3; set to MinIO URL for dev."""

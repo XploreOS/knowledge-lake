@@ -38,6 +38,31 @@ def _isolate_env() -> Generator[None, None, None]:
         os.environ.update(before)
 
 
+# ── Settings cache isolation ─────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _clear_settings_cache() -> Generator[None, None, None]:
+    """Autouse fixture: clear the get_settings() LRU cache before and after each test.
+
+    get_settings() is cached with @lru_cache(maxsize=1). Without clearing the cache,
+    a cached Settings instance from a previous test (or from import-time initialisation)
+    will be returned even after _isolate_env has changed the KLAKE_* environment
+    variables. This fixture ensures each test starts with a fresh Settings load
+    from the current environment. (WR-03, IN-04)
+
+    Also resets the lazy SQLAlchemy engine (_engine = None) so the engine is
+    rebuilt from the fresh settings on first get_session() call. (CR-05)
+    """
+    from knowledge_lake.config.settings import get_settings
+    get_settings.cache_clear()
+    # Reset the lazy engine so it is rebuilt from the post-isolation environment
+    import knowledge_lake.registry.db as _db
+    _db._engine = None
+    yield
+    get_settings.cache_clear()
+    _db._engine = None
+
+
 # ── Settings fixture ─────────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -45,8 +70,11 @@ def settings():
     """Return a Settings instance with known test overrides.
 
     Uses env-override approach so pydantic-settings picks them up; cleans up after.
+    The get_settings() LRU cache is cleared by _clear_settings_cache (autouse),
+    so any code under test that calls get_settings() will also receive the
+    test-configured values. (WR-03, IN-04)
     """
-    from knowledge_lake.config.settings import Settings
+    from knowledge_lake.config.settings import Settings, get_settings
 
     test_env = {
         "KLAKE_DATABASE_URL": "postgresql+psycopg://klake:klake@localhost:5432/klake_test",
@@ -61,6 +89,7 @@ def settings():
         "KLAKE_VECTORSTORE": "qdrant",
     }
     with patch.dict(os.environ, test_env, clear=False):
+        get_settings.cache_clear()
         # Force fresh Settings from the patched env (no cached instance)
         s = Settings(_env_file=None)  # type: ignore[call-arg]
     return s
