@@ -12,8 +12,6 @@ Registered as entry point:
 """
 from __future__ import annotations
 
-import io
-import logging
 import tempfile
 from pathlib import Path
 
@@ -73,19 +71,15 @@ class DoclingParser:
 
         log.info("docling_parser.parse_start", mime_type=mime_type, size=len(raw))
 
-        # Docling requires a file path — write to temp file
+        # Docling requires a file path — write to a temp directory so cleanup
+        # is guaranteed even on SIGKILL (TemporaryDirectory uses shutil.rmtree
+        # at context-manager exit rather than relying on a finalizer). (CR-08)
         suffix = _mime_to_suffix(mime_type)
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(raw)
-            tmp_path = Path(tmp.name)
-
-        try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir) / f"doc{suffix}"
+            tmp_path.write_bytes(raw)
             return self._convert_file(tmp_path)
-        finally:
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass  # best-effort cleanup
+        # Directory and all contents are removed at context exit, even on exception
 
     def _convert_file(self, path: Path) -> ParsedDoc:
         """Run Docling on *path* and assemble a ParsedDoc.
