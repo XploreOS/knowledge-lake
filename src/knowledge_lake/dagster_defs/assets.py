@@ -162,7 +162,6 @@ def ingest_raw_document(
 
 
 @asset(
-    deps=[ingest_raw_document],
     description=(
         "Parse raw document bytes into a ParsedDoc using the configured parser plugin. "
         "Calls pipeline.parse.parse — no logic duplicated."
@@ -227,7 +226,6 @@ def parsed_document(
 
 
 @asset(
-    deps=[parsed_document],
     description=(
         "Split ParsedDoc into section-aware chunk artifacts. "
         "Calls pipeline.chunk.chunk — no logic duplicated."
@@ -272,7 +270,6 @@ def chunk_document(
 
 
 @asset(
-    deps=[chunk_document],
     description=(
         "Embed chunk texts into dense vectors using the configured embedder plugin. "
         "Calls pipeline.embed.embed — no logic duplicated."
@@ -314,7 +311,6 @@ def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
 
 
 @asset(
-    deps=[embed_chunks],
     description=(
         "Upsert chunk vectors with citation payload into Qdrant. "
         "Calls pipeline.index.index — no logic duplicated."
