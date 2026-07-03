@@ -87,10 +87,12 @@ FROM ancestry
 ORDER BY depth ASC
 """)
 
-# Prefix expansion query — find artifacts where id starts with a prefix
+# Prefix expansion query — find artifacts where id starts with a prefix.
+# ESCAPE clause is required to safely handle user-supplied prefixes that may
+# contain SQL LIKE wildcards (% or _). (CR-06)
 _PREFIX_LOOKUP_SQL = text("""
 SELECT id FROM artifacts
-WHERE id LIKE :prefix_pattern
+WHERE id LIKE :prefix_pattern ESCAPE :escape_char
 LIMIT 10
 """)
 
@@ -200,7 +202,8 @@ def render_tree(nodes: list[dict[str, Any]]) -> str:
         citation = f" ({', '.join(citation_parts)})" if citation_parts else ""
 
         lines.append(f"{type_label} {id_label}{citation}")
-        lines.append(f"  hash:     {content_hash[:16]}...")
+        hash_display = content_hash[:16] + "..." if len(content_hash) > 16 else content_hash
+        lines.append(f"  hash:     {hash_display}  (sha256, truncated — use --json for full hash)")
         lines.append(f"  version:  {pipeline_version}")
         lines.append(f"  created:  {created_at}")
         lines.append(f"  uri:      {storage_uri}")
@@ -222,6 +225,15 @@ def nodes_to_json(nodes: list[dict[str, Any]]) -> str:
 # ── Private helpers ────────────────────────────────────────────────────────────
 
 
+def _escape_like(value: str) -> str:
+    """Escape SQL LIKE wildcard characters in a user-supplied string (CR-06).
+
+    Escapes backslash, percent (%), and underscore (_) so they are treated
+    as literal characters in a LIKE pattern rather than wildcards.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _expand_prefix(artifact_id: str) -> str:
     """Expand an unambiguous ID prefix to a full artifact ID (D-15).
 
@@ -230,17 +242,27 @@ def _expand_prefix(artifact_id: str) -> str:
 
     If the artifact_id is >= 40 chars (full ID length), treat it as a full ID
     and return it as-is.  Shorter values are treated as prefixes and expanded.
+
+    Raises ValueError if the prefix is shorter than 4 characters (CR-06: prevent
+    full-table scans on empty or single-char inputs).
     """
     # Full ID: type_prefix (2-3 chars) + '_' + 36-char UUID = ~40 chars
     FULL_ID_MIN_LENGTH = 40
     if len(artifact_id) >= FULL_ID_MIN_LENGTH:
         return artifact_id
 
-    # Prefix lookup
+    # Enforce minimum prefix length to prevent unbounded scans (CR-06)
+    if len(artifact_id) < 4:
+        raise ValueError(
+            f"Artifact ID prefix {artifact_id!r} is too short (minimum 4 characters). "
+            "Provide at least the type prefix and first UUID character (e.g. 'chk_0')."
+        )
+
+    # Prefix lookup — escape LIKE wildcards in the user-supplied prefix (CR-06)
     with get_session() as session:
         rows = session.execute(
             _PREFIX_LOOKUP_SQL,
-            {"prefix_pattern": f"{artifact_id}%"},
+            {"prefix_pattern": f"{_escape_like(artifact_id)}%", "escape_char": "\\"},
         ).fetchall()
 
     matched = [r.id for r in rows]
