@@ -1,0 +1,137 @@
+"""Parse stage: raw_document bytes → parsed_document artifact + ParsedDoc.
+
+The parser plugin is resolved from settings (KLAKE_PARSER env var, default 'docling').
+Parsed markdown/JSON is stored in the silver zone under silver/{source_id}/{hash}.{ext}.
+A parsed_document artifact node is created with parent_artifact_id = raw_artifact.id.
+
+Returns the parsed_document Artifact ORM object and the ParsedDoc struct.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+from typing import Optional
+
+import structlog
+
+from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.plugins.protocols import ParsedDoc
+from knowledge_lake.plugins.resolver import get_parser
+from knowledge_lake.registry.db import get_session
+from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.storage.s3 import StorageBackend
+
+log = structlog.get_logger(__name__)
+
+# Silver zone bucket name (could be a separate bucket in prod; uses same for Phase 1)
+_SILVER_PREFIX = "silver"
+
+
+def parse(
+    raw_artifact_id: str,
+    source_id: str,
+    *,
+    mime_type: str = "application/pdf",
+    settings: Optional[Settings] = None,
+) -> tuple[dict, ParsedDoc]:
+    """Parse raw document bytes into a ParsedDoc and create a parsed_document artifact.
+
+    Args:
+        raw_artifact_id: ID of the raw_document artifact to parse.
+        source_id:       Source ID (parent of the raw artifact).
+        mime_type:       MIME type of the raw document (default: application/pdf).
+        settings:        Settings override.
+
+    Returns:
+        Tuple of:
+          - dict with artifact_id, storage_uri, content_hash
+          - ParsedDoc (text + sections with citation metadata)
+
+    Raises:
+        LookupError: If the parser plugin is not found.
+        ValueError:  If the raw artifact does not exist or bytes cannot be retrieved.
+    """
+    s = settings or get_settings()
+    storage = StorageBackend(s.storage)
+    parser = get_parser(s)
+
+    log.info("parse.start", raw_artifact_id=raw_artifact_id, mime_type=mime_type)
+
+    # Load raw bytes from storage
+    with get_session() as session:
+        raw_artifact = registry_repo.get_artifact(session, raw_artifact_id)
+        if raw_artifact is None:
+            raise ValueError(f"parse: raw_artifact {raw_artifact_id!r} not found in registry")
+        storage_uri = raw_artifact.storage_uri
+        if not storage_uri:
+            raise ValueError(
+                f"parse: raw_artifact {raw_artifact_id!r} has no storage_uri"
+            )
+
+    # Retrieve raw bytes from storage (s3://bucket/key → key)
+    key = _uri_to_key(storage_uri)
+    raw_bytes = storage.get_object(key)
+    log.info("parse.loaded_raw", size=len(raw_bytes))
+
+    # Run the parser plugin
+    parsed_doc: ParsedDoc = parser.parse(raw_bytes, mime_type)
+    log.info(
+        "parse.parsed",
+        sections=len(parsed_doc.sections),
+        text_len=len(parsed_doc.text),
+    )
+
+    # Content-hash the parsed text for dedup and silver-zone key
+    parsed_bytes = parsed_doc.text.encode("utf-8")
+    content_hash = hashlib.sha256(parsed_bytes).hexdigest()
+    silver_key = f"{_SILVER_PREFIX}/{source_id}/{content_hash}.md"
+
+    # Registry no-op: if this parsed content already exists, return existing artifact
+    with get_session() as session:
+        existing = registry_repo.get_artifact_by_hash(session, content_hash, "parsed_document")
+        if existing is not None:
+            log.info(
+                "parse.no_op",
+                content_hash=content_hash,
+                existing_artifact_id=existing.id,
+            )
+            return {
+                "artifact_id": existing.id,
+                "storage_uri": existing.storage_uri,
+                "content_hash": existing.content_hash,
+            }, parsed_doc
+
+    # Store parsed markdown in silver zone
+    storage.put_object(silver_key, parsed_bytes)
+    silver_uri = storage.object_uri(silver_key)
+    log.info("parse.stored_silver", silver_uri=silver_uri)
+
+    # Create parsed_document artifact
+    with get_session() as session:
+        artifact = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source_id,
+            parent_artifact_id=raw_artifact_id,
+            content_hash=content_hash,
+            storage_uri=silver_uri,
+            mime_type="text/markdown",
+        )
+        session.flush()
+        result = {
+            "artifact_id": artifact.id,
+            "storage_uri": artifact.storage_uri,
+            "content_hash": artifact.content_hash,
+        }
+
+    log.info("parse.complete", artifact_id=result["artifact_id"])
+    return result, parsed_doc
+
+
+def _uri_to_key(uri: str) -> str:
+    """Extract the S3 key from an s3://bucket/key URI."""
+    # s3://bucket/key → key
+    parts = uri.split("/", 3)
+    if len(parts) >= 4:
+        return parts[3]
+    raise ValueError(f"Cannot extract key from URI: {uri!r}")

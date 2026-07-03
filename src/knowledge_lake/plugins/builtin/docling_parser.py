@@ -88,10 +88,21 @@ class DoclingParser:
                 pass  # best-effort cleanup
 
     def _convert_file(self, path: Path) -> ParsedDoc:
-        """Run Docling on *path* and assemble a ParsedDoc."""
-        from docling.document_converter import DocumentConverter
+        """Run Docling on *path* and assemble a ParsedDoc.
 
-        converter = DocumentConverter()
+        do_ocr=False: avoids the RapidOCR PosixPath omegaconf issue on Linux
+        (rapidocr sets model_root_dir=PosixPath which omegaconf rejects as
+        UnsupportedValueType). Phase 1 uses embedded-text PDFs so OCR is
+        not required. OCR can be enabled per-instance via subclassing when
+        scanned-page support is needed in a later phase.
+        """
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+        pipeline_options = PdfPipelineOptions(do_ocr=False, do_table_structure=False)
+        converter = DocumentConverter(
+            format_options={"pdf": PdfFormatOption(pipeline_options=pipeline_options)}
+        )
         result = converter.convert(str(path))
         doc = result.document
 

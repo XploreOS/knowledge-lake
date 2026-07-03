@@ -16,20 +16,26 @@ from unittest.mock import patch
 
 @pytest.fixture(autouse=True)
 def _isolate_env() -> Generator[None, None, None]:
-    """Autouse fixture: clear KLAKE_* env vars before each test and restore after.
+    """Autouse fixture: save and restore KLAKE_* env vars around each test.
 
     Prevents test pollution from developer's actual .env or shell env.
+    After the test, removes any NEW KLAKE_* keys added during the test
+    and restores the original keys.
     """
-    klake_keys = {k: v for k, v in os.environ.items() if k.startswith("KLAKE_")}
-    for k in klake_keys:
+    # Snapshot all KLAKE_* vars present before the test
+    before = {k: v for k, v in os.environ.items() if k.startswith("KLAKE_")}
+    # Remove them so each test starts from a clean state
+    for k in before:
         del os.environ[k]
     try:
         yield
     finally:
-        # Restore original env
-        for k in klake_keys:
-            del os.environ[k]
-        os.environ.update(klake_keys)
+        # Remove any KLAKE_* vars that were added during the test
+        for k in list(os.environ.keys()):
+            if k.startswith("KLAKE_"):
+                del os.environ[k]
+        # Restore the original vars
+        os.environ.update(before)
 
 
 # ── Settings fixture ─────────────────────────────────────────────────────────
