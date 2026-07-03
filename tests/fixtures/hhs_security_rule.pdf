@@ -1,0 +1,97 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 2343 >>
+stream
+BT
+/F1 14 Tf
+50 760 Td
+(Summary of the HIPAA Security Rule) Tj
+/F1 11 Tf
+0 -28 Td
+(HHS Office for Civil Rights - Public Domain) Tj
+/F1 12 Tf
+0 -36 Td
+(Administrative Safeguards) Tj
+/F1 10 Tf
+0 -18 Td
+(Administrative safeguards are administrative actions, policies, and procedures to manage) Tj
+0 -14 Td
+(the selection, development, implementation, and maintenance of security measures to) Tj
+0 -14 Td
+(protect electronic protected health information ePHI and to manage the conduct of the) Tj
+0 -14 Td
+(covered entities workforce in relation to the protection of that information.) Tj
+0 -22 Td
+(Security Management Process - A covered entity must implement policies and procedures) Tj
+0 -14 Td
+(to prevent, detect, contain, and correct security violations.) Tj
+0 -22 Td
+(Risk Analysis - A covered entity must conduct an accurate and thorough assessment of) Tj
+0 -14 Td
+(the potential risks and vulnerabilities to the confidentiality, integrity, and availability) Tj
+0 -14 Td
+(of electronic protected health information held by the covered entity.) Tj
+/F1 12 Tf
+0 -36 Td
+(Technical Safeguards) Tj
+/F1 10 Tf
+0 -18 Td
+(Technical safeguards are the technology and the policy and procedures for its use that) Tj
+0 -14 Td
+(protect electronic protected health information and control access to it.) Tj
+0 -22 Td
+(Access Control - Implement technical policies and procedures for electronic information) Tj
+0 -14 Td
+(systems that maintain ePHI to allow access only to those persons or software programs) Tj
+0 -14 Td
+(that have been granted access rights.) Tj
+0 -22 Td
+(Audit Controls - Implement hardware, software, and procedural mechanisms that record) Tj
+0 -14 Td
+(and examine activity in information systems that contain or use ePHI.) Tj
+/F1 12 Tf
+0 -36 Td
+(Physical Safeguards) Tj
+/F1 10 Tf
+0 -18 Td
+(Physical safeguards are physical measures, policies, and procedures to protect a covered) Tj
+0 -14 Td
+(entitys electronic information systems and related buildings and equipment from natural) Tj
+0 -14 Td
+(and environmental hazards, and unauthorized intrusion.) Tj
+0 -22 Td
+(Facility Access Controls - Implement policies and procedures to limit physical access) Tj
+0 -14 Td
+(to its electronic information systems and the facility or facilities in which they are) Tj
+0 -14 Td
+(housed, while ensuring that properly authorized access is allowed.) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Contents 5 0 R /Resources << /Font << /F1 4 0 R >> >> >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000002586 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2715
+%%EOF
