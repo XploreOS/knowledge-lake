@@ -472,27 +472,31 @@ def resolve_delay(source_config: dict | None, robots_crawl_delay: float | None,
 | A6 | Bronze markdown should be content-addressed and WORM like raw (new `bronze_document` artifact_type) | D-01 patterns | If bronze is meant to be mutable/re-derivable, the immutability layer is over-strict; but immutability + lineage is the CLAUDE.md default. |
 | A7 | Per-crawl = one Source (site); pages are artifacts under it | Anti-Patterns | If product wants each page as its own Source, source-table dedup semantics change; confirm with planner. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Extend `jobs` vs. add `crawl_jobs` table (D-03 ambiguity)?**
    - What we know: D-03 mandates a separate `crawl_states` (per-URL) table; the code_context says "link to the existing Job table (Phase 1 placeholder) or replace it — research should determine the cleanest approach."
    - What's unclear: whether the crawl-job *header* lives in the existing `jobs` table (extended) or a new table.
    - Recommendation: **Extend `jobs`** with `source_id`, `job_type='crawl'`, `crawler`, `config`, `stats`, `updated_at`; add `crawl_states` as the per-URL child. Minimal new surface, reuses `job_` prefix. (A5)
+   - RESOLVED: Plan 02-02 extends the existing `jobs` table per this recommendation.
 
 2. **Crawl scope / link-following depth defaults?**
    - What we know: Crawl4AI supports BFS/DFS/Best-First deep crawling; Scrapy has depth limits. Success criteria say "crawl a source" (a site), not "one page."
    - What's unclear: default max depth / max pages / same-domain-only for the MVP.
    - Recommendation: default to same-registrable-domain, a conservative `max_pages` (e.g., 50) and `max_depth` (e.g., 2), both overridable via `Source.config`. Confirm with planner/discuss.
+   - RESOLVED: Plan 02-02 CrawlSettings uses max_pages=50, max_depth=2, same_domain_only=True as defaults.
 
 3. **Dagster wrapping for long crawls — op-that-polls vs sensor?**
    - What we know: Phase 1 kept Dagster thin (D-01/D-02: assets wrap the same plain functions). Crawls can run minutes-to-hours.
    - What's unclear: whether Phase 2 must expose crawl as a Dagster asset now (IFACE-03 is Phase 6) or defer.
-   - Recommendation: implement crawl as plain functions + `crawl_states` durability first (resume works from any driver); add a thin `crawl_source` Dagster asset that drives to completion for observability, but do not block phase completion on a sophisticated sensor. `[ASSUMED]`
+   - Recommendation: implement crawl as plain functions + `crawl_states` durability first (resume works from any driver); add a thin `crawl_source` Dagster asset that drives to completion for observability, but do not block phase completion on a sophisticated sensor.
+   - RESOLVED: Plan 02-03 implements crawl as plain functions with crawl_states durability; Dagster asset wrapping explicitly deferred to Phase 6 / IFACE-03 (surfaced in plan, not silently dropped).
 
 4. **Domain assignment for INGEST-01 (`with domain assignment`)?**
    - What we know: requirement says "register a source URL **with domain assignment**"; domain packs are Phase 6.
    - What's unclear: whether "domain" here means a healthcare/domain-pack tag or the URL host.
    - Recommendation: store an optional `domain` value in `Source.config` (or a nullable `domain` column) now; full domain-pack wiring is Phase 6. Confirm interpretation.
+   - RESOLVED: Plan 02-01 stores domain in Source.config as an optional field; full domain-pack wiring deferred to Phase 6.
 
 ## Environment Availability
 
