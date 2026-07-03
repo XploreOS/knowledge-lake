@@ -12,7 +12,17 @@ Every domain resource ingested must be traceable from raw source through every t
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Source registry, document registry, artifact registry with full lineage — Phase 1
+- ✓ Raw/bronze zone with immutable raw storage (SHA256-keyed, WORM policy) — Phase 1
+- ✓ Document parsing via Docling as plugin — Phase 1
+- ✓ Configurable embeddings (local sentence-transformers) — Phase 1
+- ✓ Vector search via Qdrant as a plugin — Phase 1
+- ✓ FastAPI service with health + search + lineage endpoints — Phase 1
+- ✓ Typer CLI (`klake`) for core operations — Phase 1
+- ✓ Dagster pipeline orchestration (assets + resources wired) — Phase 1
+- ✓ S3-compatible object storage (MinIO dev) — Phase 1
+- ✓ PostgreSQL metadata registry — Phase 1
+- ✓ All LLM calls routed through LiteLLM with task-based model aliases — Phase 1
 
 ### Active
 
@@ -80,15 +90,17 @@ Every domain resource ingested must be traceable from raw source through every t
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Dagster over Prefect for orchestration | Better asset-based model for data pipelines, built-in lineage concepts | — Pending |
-| Docling as primary parser | Best balance of format support, quality, and open-source maturity | — Pending |
-| S3-compatible storage (not local filesystem) | Production-portable, supports MinIO dev and AWS S3 prod | — Pending |
-| Plugin architecture for all external tools | Avoid lock-in, enable swapping parsers/crawlers/vector stores | — Pending |
-| LiteLLM as sole model gateway | Unified interface for Bedrock, OpenAI, Anthropic, local models | — Pending |
-| PostgreSQL for metadata registry (not OpenMetadata yet) | Simpler for MVP, migrate to catalog tool later | — Pending |
-| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | — Pending |
-| No UI for MVP | CLI + API is sufficient for single user, avoids frontend complexity | — Pending |
-| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | — Pending |
+| Dagster over Prefect for orchestration | Better asset-based model for data pipelines, built-in lineage concepts | Validated Phase 1 — 5 SDAs materialize cleanly |
+| Docling as primary parser | Best balance of format support, quality, and open-source maturity | Validated Phase 1 — parses HIPAA Security Rule PDF with section extraction |
+| S3-compatible storage (not local filesystem) | Production-portable, supports MinIO dev and AWS S3 prod | Validated Phase 1 — content-addressed put_raw + WORM policy working |
+| Plugin architecture for all external tools | Avoid lock-in, enable swapping parsers/crawlers/vector stores | Validated Phase 1 — entry-point resolver + 3 built-ins registered |
+| LiteLLM as sole model gateway | Unified interface for Bedrock, OpenAI, Anthropic, local models | Validated Phase 1 — LiteLLMEmbedder uses embedding_model alias only |
+| PostgreSQL for metadata registry (not OpenMetadata yet) | Simpler for MVP, migrate to catalog tool later | Validated Phase 1 — Alembic migration #1 + self-referencing artifacts node table |
+| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | — Pending (Phase 5) |
+| No UI for MVP | CLI + API is sufficient for single user, avoids frontend complexity | Validated Phase 1 — klake CLI + FastAPI /search /lineage working |
+| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | — Pending (Phase 6) |
+| Typer downgraded to <0.25.0 | docling-core has a conflicting dependency on typer | Phase 1 deviation — RESEARCH had 0.26.8 pinned; uv resolved to <0.25.0 |
+| uuid-utils approved (not uuid6) | PyPI legitimacy verified by human gate — github.com/aminalaee/uuid-utils v0.16.2 | Phase 1 — isolated to ids.py for easy stdlib swap in Python 3.14 |
 
 ## Evolution
 
@@ -108,4 +120,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-02 after initialization*
+*Last updated: 2026-07-03 after Phase 1 — Foundation & End-to-End Spike*
