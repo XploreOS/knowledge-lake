@@ -10,7 +10,6 @@ Returns the parsed_document Artifact ORM object and the ParsedDoc struct.
 from __future__ import annotations
 
 import hashlib
-import logging
 from typing import Optional
 
 import structlog
@@ -87,7 +86,9 @@ def parse(
     content_hash = hashlib.sha256(parsed_bytes).hexdigest()
     silver_key = f"{_SILVER_PREFIX}/{source_id}/{content_hash}.md"
 
-    # Registry no-op: if this parsed content already exists, return existing artifact
+    # Dedup check and artifact creation in a single session block to prevent race
+    # conditions under concurrent execution (CR-02). Both the read and the write
+    # happen within the same session, making the dedup + insert effectively atomic.
     with get_session() as session:
         existing = registry_repo.get_artifact_by_hash(session, content_hash, "parsed_document")
         if existing is not None:
@@ -102,13 +103,12 @@ def parse(
                 "content_hash": existing.content_hash,
             }, parsed_doc
 
-    # Store parsed markdown in silver zone
-    storage.put_object(silver_key, parsed_bytes)
-    silver_uri = storage.object_uri(silver_key)
-    log.info("parse.stored_silver", silver_uri=silver_uri)
+        # Store parsed markdown in silver zone (outside DB transaction but within
+        # the same logical block — S3 put_object is idempotent for the same key)
+        storage.put_object(silver_key, parsed_bytes)
+        silver_uri = storage.object_uri(silver_key)
+        log.info("parse.stored_silver", silver_uri=silver_uri)
 
-    # Create parsed_document artifact
-    with get_session() as session:
         artifact = registry_repo.create_parsed_artifact(
             session,
             source_id=source_id,
@@ -129,9 +129,14 @@ def parse(
 
 
 def _uri_to_key(uri: str) -> str:
-    """Extract the S3 key from an s3://bucket/key URI."""
-    # s3://bucket/key → key
+    """Extract the S3 key from an s3://bucket/key URI.
+
+    Raises ValueError for non-s3:// URIs to surface misconfigured storage_uri
+    values early with a descriptive error rather than silently producing a wrong key.
+    """
+    if not uri.startswith("s3://"):
+        raise ValueError(f"Expected s3:// URI, got: {uri!r}")
     parts = uri.split("/", 3)
-    if len(parts) >= 4:
-        return parts[3]
-    raise ValueError(f"Cannot extract key from URI: {uri!r}")
+    if len(parts) < 4 or not parts[3]:
+        raise ValueError(f"Cannot extract key from URI: {uri!r}")
+    return parts[3]
