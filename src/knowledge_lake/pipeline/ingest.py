@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 
 import httpx
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.registry.db import get_session
@@ -64,6 +64,11 @@ def _validate_url_scheme(url: str) -> None:
       - Link-local/cloud IMDS (169.254.x — AWS/GCP/Azure metadata service)
       - Loopback (127.x, ::1)
       - IPv6 ULA (fc00::/7)
+      - IPv4-mapped IPv6 addresses (::ffff:10.x.x.x etc.)
+
+    Uses getaddrinfo() rather than gethostbyname() to check ALL resolved addresses
+    (both IPv4 and IPv6) — gethostbyname() only returns a single IPv4 address and
+    does not detect IPv6-only hostnames or OS-dependent IPv6 behaviour (T-01-11).
     """
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -72,25 +77,37 @@ def _validate_url_scheme(url: str) -> None:
             "Only https:// URLs are allowed (SSRF prevention, T-01-11). "
             "Use ingest_file() for local paths."
         )
-    # Resolve hostname and block private/reserved ranges
+    # Resolve ALL addresses (IPv4 + IPv6) and block every private/reserved range.
+    # getaddrinfo is used instead of gethostbyname to avoid single-address limitation
+    # and OS-dependent behaviour on IPv6-only hostnames (CR-01, T-01-11).
     hostname = parsed.hostname or ""
     try:
-        addr = ipaddress.ip_address(socket.gethostbyname(hostname))
-    except Exception as exc:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror as exc:
         raise ValueError(
             f"Cannot resolve hostname {hostname!r}: {exc}"
         ) from exc
-    for net in _PRIVATE_NETS:
-        if addr in net:
-            raise ValueError(
-                f"URL {url!r} resolves to private/link-local address {addr} — "
-                "SSRF prevention blocks requests to private networks (T-01-11)."
-            )
+    if not infos:
+        raise ValueError(f"No addresses resolved for hostname {hostname!r}")
+    for (_family, _type, _proto, _canonname, sockaddr) in infos:
+        raw_addr = sockaddr[0]
+        addr = ipaddress.ip_address(raw_addr)
+        # Unwrap IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.1 → 10.0.0.1) so the
+        # IPv4 private-range check below catches it (CR-01).
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+        for net in _PRIVATE_NETS:
+            if addr in net:
+                raise ValueError(
+                    f"URL {url!r} resolves to private/link-local address {addr} — "
+                    "SSRF prevention blocks requests to private networks (T-01-11)."
+                )
 
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type((httpx.HTTPError, httpx.TimeoutException)),
     reraise=True,
 )
 def _fetch_with_retry(url: str) -> tuple[bytes, str]:
