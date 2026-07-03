@@ -89,13 +89,27 @@ def get_embedder(settings: "Settings") -> Any:
     Default: 'local' → SentenceTransformerEmbedder (zero AWS creds, D-13).
     Switch:  'litellm' → LiteLLMEmbedder (gateway via embedding_model alias).
 
+    For the 'litellm' embedder, the proxy URL is injected from settings.litellm_url
+    rather than read from env directly (CR-03: no os.environ.get in plugin builtins).
+
     Args:
         settings: Application Settings instance.
 
     Returns:
         An instantiated EmbedderPlugin (satisfies EmbedderPlugin Protocol).
     """
-    return resolve(GROUP_EMBEDDERS, settings.embedder)
+    name = settings.embedder
+    for ep in entry_points(group=GROUP_EMBEDDERS):
+        if ep.name == name:
+            factory = ep.load()
+            if name == "litellm":
+                return factory(litellm_url=settings.litellm_url)
+            return factory()
+    raise LookupError(
+        f"No plugin {name!r} registered in entry-point group {GROUP_EMBEDDERS!r}. "
+        f"Check that the package declaring this plugin is installed and that "
+        f"the name is spelled correctly in your settings."
+    )
 
 
 def get_vectorstore(settings: "Settings") -> Any:
@@ -104,10 +118,24 @@ def get_vectorstore(settings: "Settings") -> Any:
     Reads the 'vectorstore' swap key from the provided Settings instance and
     resolves it via the 'knowledge_lake.vectorstores' entry-point group.
 
+    The Qdrant URL is injected from settings.qdrant_url rather than read from
+    env directly (CR-03: no os.environ.get in plugin builtins).
+
     Args:
         settings: Application Settings instance.
 
     Returns:
         An instantiated VectorStorePlugin (satisfies VectorStorePlugin Protocol).
     """
-    return resolve(GROUP_VECTORSTORES, settings.vectorstore)
+    name = settings.vectorstore
+    for ep in entry_points(group=GROUP_VECTORSTORES):
+        if ep.name == name:
+            factory = ep.load()
+            if name == "qdrant":
+                return factory(qdrant_url=settings.qdrant_url)
+            return factory()
+    raise LookupError(
+        f"No plugin {name!r} registered in entry-point group {GROUP_VECTORSTORES!r}. "
+        f"Check that the package declaring this plugin is installed and that "
+        f"the name is spelled correctly in your settings."
+    )

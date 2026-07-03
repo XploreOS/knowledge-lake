@@ -22,8 +22,6 @@ Registered as entry points:
 """
 from __future__ import annotations
 
-import os
-
 import structlog
 
 from knowledge_lake.plugins.protocols import EmbedderPlugin
@@ -106,8 +104,8 @@ class LiteLLMEmbedder:
     Swap from 'local' to 'litellm':
         KLAKE_EMBEDDER=litellm  (no code change required — FOUND-08)
 
-    The LiteLLM proxy URL is read from the LITELLM_PROXY_URL environment variable
-    or defaults to http://localhost:4000, consistent with the compose stack.
+    The LiteLLM proxy URL is injected via the constructor (from Settings.litellm_url),
+    consistent with the CLAUDE.md constraint that only the settings module reads env vars.
 
     Protocol attributes:
         name = 'litellm'
@@ -117,11 +115,9 @@ class LiteLLMEmbedder:
     name: str = "litellm"
     dim: int = _LITELLM_DIM
 
-    def __init__(self) -> None:
-        # Proxy base URL — read from env at instantiation time (not hardcoded)
-        self._proxy_url: str = os.environ.get(
-            "KLAKE_LITELLM_URL", "http://localhost:4000"
-        )
+    def __init__(self, litellm_url: str = "http://localhost:4000") -> None:
+        # Proxy base URL — injected by the resolver from Settings.litellm_url (CR-03)
+        self._proxy_url: str = litellm_url
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed texts via the LiteLLM gateway using the 'embedding_model' alias.
@@ -161,5 +157,14 @@ class LiteLLMEmbedder:
             ) from exc
 
         vectors: list[list[float]] = [item.embedding for item in response.data]
+        # Validate that the model output dimension matches the configured dim (CR-09).
+        # A mismatch here indicates the LiteLLM alias points at a model with a
+        # different dimension than expected — fail early rather than at Qdrant upsert.
+        if vectors and len(vectors[0]) != self.dim:
+            actual = len(vectors[0])
+            raise RuntimeError(
+                f"LiteLLMEmbedder: model returned {actual}-dim vectors but "
+                f"dim={self.dim} is configured. Update _LITELLM_DIM or the model alias."
+            )
         log.debug("litellm_embedder.embed_complete", count=len(vectors))
         return vectors

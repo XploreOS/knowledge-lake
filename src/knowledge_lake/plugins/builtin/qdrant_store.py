@@ -17,8 +17,6 @@ Registered as entry point:
 """
 from __future__ import annotations
 
-import os
-
 import structlog
 
 from knowledge_lake.plugins.protocols import Hit, VectorPoint, VectorStorePlugin
@@ -29,20 +27,20 @@ log = structlog.get_logger(__name__)
 class QdrantVectorStore:
     """VectorStorePlugin implementation backed by qdrant-client 1.18.
 
-    Connects to the Qdrant server at the URL specified by KLAKE_QDRANT_URL
-    (defaults to http://localhost:6333 for the local compose stack).
+    Connects to the Qdrant server at the URL injected via the constructor
+    (from Settings.qdrant_url via the resolver — CR-03 fix). This ensures
+    the URL is Pydantic-validated and test-overridable via the settings fixture.
 
     Usage:
-        store = QdrantVectorStore()
+        store = QdrantVectorStore(qdrant_url="http://localhost:6333")
         store.ensure_collection("klake_chunks", dim=384)
         store.upsert("klake_chunks", [VectorPoint(...)])
         hits = store.search("klake_chunks", query_vector, top_k=5)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, qdrant_url: str = "http://localhost:6333") -> None:
         from qdrant_client import QdrantClient
 
-        qdrant_url: str = os.environ.get("KLAKE_QDRANT_URL", "http://localhost:6333")
         log.debug("qdrant_store.connect", url=qdrant_url)
         self._client = QdrantClient(url=qdrant_url)
 
@@ -123,8 +121,6 @@ class QdrantVectorStore:
         Returns:
             List of Hit objects ordered by score descending.
         """
-        from qdrant_client.models import PointStruct
-
         log.info("qdrant_store.search", collection=collection, top_k=top_k)
 
         result = self._client.query_points(
