@@ -153,7 +153,8 @@ class TestExists:
 
     def test_exists_returns_false_for_absent_key(self, backend: StorageBackend) -> None:
         """exists() must return False for a key that has never been stored."""
-        absent_key = "test/exists/totally_absent_key_xyz12345.bin"
+        import uuid
+        absent_key = f"test/exists/totally_absent_key_{uuid.uuid4().hex}.bin"
         assert backend.exists(absent_key) is False
 
     def test_exists_returns_true_after_put(self, backend: StorageBackend) -> None:
@@ -165,7 +166,9 @@ class TestExists:
     def test_exists_via_head_object(self, backend: StorageBackend) -> None:
         """StorageBackend.exists() must use head_object (not list_objects)."""
         # This is verified by inspecting the implementation; here we test behavior
-        key = "test/exists/head_check.bin"
+        import uuid
+        unique = uuid.uuid4().hex
+        key = f"test/exists/head_check_{unique}.bin"
         assert backend.exists(key) is False
         backend.put_object(key, b"checking")
         assert backend.exists(key) is True
@@ -193,7 +196,12 @@ class TestAWSModeClient:
     """When endpoint_url is None, client is constructed for AWS S3 (not MinIO)."""
 
     def test_aws_mode_client_has_no_endpoint_url(self) -> None:
-        """StorageBackend with endpoint_url=None must produce an AWS-mode client."""
+        """StorageBackend with endpoint_url=None must produce an AWS-mode client.
+
+        In AWS mode, boto3 constructs a regional S3 endpoint URL such as
+        ``https://s3.us-west-2.amazonaws.com``.  The important assertion is
+        that the endpoint is an AWS S3 endpoint (not a MinIO local address).
+        """
         aws_settings = StorageSettings(
             endpoint_url=None,  # AWS mode
             bucket="some-bucket",
@@ -203,13 +211,15 @@ class TestAWSModeClient:
         )
         b = StorageBackend(aws_settings)
         meta = b._client.meta
-        # In AWS mode, the endpoint URL is the standard AWS S3 endpoint, not a custom one
         endpoint = meta.endpoint_url
-        # boto3 uses a regional AWS endpoint, NOT a custom URL
-        # endpoint_url in meta should be None or the default AWS endpoint
-        # (botocore meta.endpoint_url is None when no custom endpoint was set)
-        assert endpoint is None, (
-            f"AWS-mode client must have no custom endpoint_url, got {endpoint!r}"
+        # boto3 constructs a regional AWS S3 endpoint (amazonaws.com) — NOT a MinIO host
+        assert endpoint is not None, "AWS-mode client must have a resolved endpoint URL"
+        assert "amazonaws.com" in endpoint, (
+            f"AWS-mode client endpoint must be an amazonaws.com URL, got {endpoint!r}"
+        )
+        # Specifically must NOT be a MinIO/localhost endpoint
+        assert "localhost" not in endpoint and "127.0.0.1" not in endpoint, (
+            f"AWS-mode client must not point at localhost, got {endpoint!r}"
         )
 
     def test_aws_mode_uses_correct_region(self) -> None:
