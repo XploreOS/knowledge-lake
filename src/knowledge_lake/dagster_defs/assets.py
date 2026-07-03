@@ -72,6 +72,10 @@ class IngestConfig(Config):
     mime_type: str = "application/pdf"
     """MIME type of the document."""
 
+    robots_checked: bool = False
+    """Set True only after verifying the target URL's robots.txt (Phase 2).
+    When True the source registry entry reflects that robots.txt has been checked."""
+
 
 # ── Assets ────────────────────────────────────────────────────────────────────
 
@@ -140,6 +144,7 @@ def ingest_raw_document(
             config.url,
             config.source_name or config.url,
             mime_type=config.mime_type,
+            robots_checked=config.robots_checked,
             settings=settings,
         )
     else:
