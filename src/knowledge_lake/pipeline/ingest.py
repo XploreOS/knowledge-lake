@@ -93,10 +93,18 @@ def _validate_url_scheme(url: str) -> None:
     wait=wait_exponential(multiplier=1, min=1, max=10),
     reraise=True,
 )
-def _fetch_with_retry(url: str) -> bytes:
-    """Fetch URL bytes with retry, timeout, and size cap enforcement."""
+def _fetch_with_retry(url: str) -> tuple[bytes, str]:
+    """Fetch URL bytes with retry, timeout, and size cap enforcement.
+
+    Returns:
+        Tuple of (body_bytes, content_type). The content_type is the MIME type
+        extracted from the server's Content-Type response header (stripped of
+        parameters like charset). Falls back to 'application/octet-stream' if
+        the header is absent. (WR-08)
+    """
     with httpx.stream("GET", url, timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=True) as resp:
         resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
         chunks: list[bytes] = []
         total = 0
         for chunk in resp.iter_bytes():
@@ -108,14 +116,14 @@ def _fetch_with_retry(url: str) -> bytes:
                     "Increase MAX_DOWNLOAD_BYTES or reject oversized documents."
                 )
             chunks.append(chunk)
-        return b"".join(chunks)
+        return b"".join(chunks), content_type
 
 
 def ingest_url(
     url: str,
     source_name: str,
     *,
-    mime_type: str = "application/pdf",
+    mime_type: Optional[str] = None,
     license_type: str = "unknown",
     robots_checked: bool = False,
     settings: Optional[Settings] = None,
@@ -131,14 +139,15 @@ def ingest_url(
     Args:
         url:            https:// URL to fetch.
         source_name:    Human-readable name for the source registry entry.
-        mime_type:      MIME type of the document (default: application/pdf).
+        mime_type:      MIME type override. If None (default), the MIME type is
+                        taken from the server's Content-Type response header. (WR-08)
         license_type:   License type of the source (default: "unknown" — caller must supply).
         robots_checked: Set to True only after actually checking robots.txt (Phase 2).
                         Default False = robots.txt not yet checked.
         settings:       Settings override (uses get_settings() if None).
 
     Returns:
-        dict with source_id, artifact_id, storage_uri, content_hash.
+        dict with source_id, artifact_id, storage_uri, content_hash, mime_type.
 
     Raises:
         ValueError: If URL scheme is not https or resolves to a private IP.
@@ -148,11 +157,13 @@ def ingest_url(
     _validate_url_scheme(url)
     s = settings or get_settings()
     storage = StorageBackend(s.storage)
-    ext = _mime_to_ext(mime_type)
 
     log.info("ingest_url.start", url=url, source_name=source_name)
-    data = _fetch_with_retry(url)
-    log.info("ingest_url.downloaded", url=url, size=len(data))
+    data, server_content_type = _fetch_with_retry(url)
+    # Use caller-supplied MIME type if provided, otherwise trust the server (WR-08)
+    effective_mime = mime_type or server_content_type
+    ext = _mime_to_ext(effective_mime)
+    log.info("ingest_url.downloaded", url=url, size=len(data), mime_type=effective_mime)
 
     with get_session() as session:
         source = registry_repo.create_source(
@@ -171,6 +182,7 @@ def ingest_url(
             "artifact_id": artifact.id,
             "storage_uri": artifact.storage_uri,
             "content_hash": artifact.content_hash,
+            "mime_type": effective_mime,
         }
 
     log.info("ingest_url.complete", **result)
