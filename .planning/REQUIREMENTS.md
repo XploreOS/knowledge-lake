@@ -15,7 +15,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **FOUND-04**: Raw zone objects are content-addressed (SHA256) and never modified or deleted after write
 - [x] **FOUND-05**: PostgreSQL registry stores sources, documents, artifacts, chunks, jobs, datasets, and lineage events with stable IDs and content hashes
 - [x] **FOUND-06**: Every artifact records source ID, parent artifact ID, content hash, timestamp, pipeline version, and storage URI
-- [ ] **FOUND-07**: Operator can query full lineage of any artifact back to its raw source via CLI/API
+- [x] **FOUND-07**: Operator can query full lineage of any artifact back to its raw source via CLI/API
 - [x] **FOUND-08**: Parsers, crawlers, embedders, and vector stores are pluggable behind protocol interfaces and swappable via configuration
 - [x] **FOUND-09**: Registry schema is versioned with Alembic migrations from the first table
 
@@ -145,7 +145,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOUND-04 | Phase 1 | Complete |
 | FOUND-05 | Phase 1 | Complete |
 | FOUND-06 | Phase 1 | Complete |
-| FOUND-07 | Phase 1 | Pending |
+| FOUND-07 | Phase 1 | Complete |
 | FOUND-08 | Phase 1 | Complete |
 | FOUND-09 | Phase 1 | Complete |
 | INGEST-01 | Phase 2 | Pending |

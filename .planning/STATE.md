@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: foundation-end-to-end-spike
 status: executing
 stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-07-03T02:03:03.249Z"
+last_updated: "2026-07-03T04:21:19.882Z"
 last_activity: 2026-07-02
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 01 (foundation-end-to-end-spike) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-07-02 — Phase 01 execution started
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 35m | - tasks | - files |
 | Phase 01 P02 | 45 | 3 tasks | 17 files |
 | Phase 01 P03 | 12m | 2 tasks | 5 files |
+| Phase 01 P05 | 109m | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Single boto3 client per StorageBackend; endpoint_url toggle selects MinIO vs AWS S3 (FOUND-03)
 - [Phase ?]: No S3 If-None-Match:'*' conditional-write; immutability enforced by app+bucket-policy layer (FOUND-04, MinIO gap)
 - [Phase ?]: Four-layer WORM: registry no-op + content-addressed key + head_object guard + versioning/object-lock/delete-deny policy (FOUND-04)
+- [Phase ?]: Plain-function pipeline for Phase 1 (no Dagster)
+- [Phase ?]: Qdrant point ID = bare UUID (strip chk_ prefix); full prefixed ID in payload as chunk_id
+- [Phase ?]: ID prefix expansion: full ID length >= 40 chars (type_prefix + _ + 36-char UUID)
 
 ### Pending Todos
 
@@ -100,5 +104,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 **Stopped at:** Completed 01-03-PLAN.md
 
-Last session: 2026-07-03T02:03:03.241Z
+Last session: 2026-07-03T04:18:15.263Z
 Resume file: None
