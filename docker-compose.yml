@@ -9,6 +9,13 @@
 #   docker compose up -d
 #   docker compose ps          # wait for all services healthy
 #   curl localhost:8000/health # → {"status":"ok"}
+#
+# SECURITY NOTE (WR-09): KLAKE_STORAGE__ACCESS_KEY_ID and
+# KLAKE_STORAGE__SECRET_ACCESS_KEY have NO defaults. They MUST be set in .env
+# or the shell environment before running `docker compose up`. The compose stack
+# will fail at startup with a clear error if they are missing. This prevents
+# accidental deployment with the well-known 'minioadmin' credentials.
+# See .env.example for the required variables.
 
 x-common-env: &common-env
   # Registry database (application schema — Alembic-managed)
@@ -20,8 +27,9 @@ x-common-env: &common-env
   KLAKE_STORAGE__ENDPOINT_URL: "http://minio:9000"
   KLAKE_STORAGE__BUCKET: "${KLAKE_STORAGE__BUCKET:-klake-data}"
   KLAKE_STORAGE__REGION: "${KLAKE_STORAGE__REGION:-us-east-1}"
-  KLAKE_STORAGE__ACCESS_KEY_ID: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
-  KLAKE_STORAGE__SECRET_ACCESS_KEY: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+  # No default for credentials — operators must set these in .env (WR-09)
+  KLAKE_STORAGE__ACCESS_KEY_ID: "${KLAKE_STORAGE__ACCESS_KEY_ID:?Set KLAKE_STORAGE__ACCESS_KEY_ID in .env (see .env.example)}"
+  KLAKE_STORAGE__SECRET_ACCESS_KEY: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:?Set KLAKE_STORAGE__SECRET_ACCESS_KEY in .env (see .env.example)}"
   KLAKE_EMBEDDER: "${KLAKE_EMBEDDER:-local}"
   KLAKE_PARSER: "${KLAKE_PARSER:-docling}"
   KLAKE_VECTORSTORE: "${KLAKE_VECTORSTORE:-qdrant}"
@@ -52,8 +60,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
-      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:?Set KLAKE_STORAGE__ACCESS_KEY_ID in .env}"
+      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:?Set KLAKE_STORAGE__SECRET_ACCESS_KEY in .env}"
     volumes:
       - minio-data:/data
     ports:
@@ -74,8 +82,8 @@ services:
       minio:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:-minioadmin}"
-      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:-minioadmin}"
+      MINIO_ROOT_USER: "${KLAKE_STORAGE__ACCESS_KEY_ID:?Set KLAKE_STORAGE__ACCESS_KEY_ID in .env}"
+      MINIO_ROOT_PASSWORD: "${KLAKE_STORAGE__SECRET_ACCESS_KEY:?Set KLAKE_STORAGE__SECRET_ACCESS_KEY in .env}"
       BUCKET_NAME: "${KLAKE_STORAGE__BUCKET:-klake-data}"
     entrypoint: >
       /bin/sh -c "
