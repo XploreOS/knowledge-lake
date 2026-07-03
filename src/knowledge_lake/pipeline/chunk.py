@@ -69,9 +69,13 @@ def chunk(
             section_path = raw["section_path"]
             page = raw["page"]
 
-            content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            # Include parsed_artifact_id in the hash so identical chunk text from
+            # different documents creates distinct artifacts (WR-05: dedup key must
+            # include parent to prevent lineage corruption across documents)
+            hash_input = f"{parsed_artifact_id}:{text}"
+            content_hash = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
 
-            # Registry no-op: if this chunk already exists, use existing node
+            # Registry no-op: if this chunk already exists for THIS parent, use existing node
             existing = registry_repo.get_artifact_by_hash(session, content_hash, "chunk")
             if existing is not None:
                 results.append({
