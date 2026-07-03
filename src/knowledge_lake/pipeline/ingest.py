@@ -24,7 +24,7 @@ import mimetypes
 import socket
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit, urljoin
 
 import httpx
 import structlog
@@ -43,6 +43,9 @@ MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 # HTTP timeout for URL fetches
 FETCH_TIMEOUT_SECONDS = 30.0
 
+# Maximum number of redirects to follow manually (SSRF redirect-hop cap)
+_MAX_REDIRECTS = 10
+
 # Private/reserved IP ranges blocked for SSRF prevention (T-01-11)
 _PRIVATE_NETS = [
     ipaddress.ip_network("10.0.0.0/8"),
@@ -55,11 +58,50 @@ _PRIVATE_NETS = [
 ]
 
 
-def _validate_url_scheme(url: str) -> None:
-    """Raise ValueError if the URL scheme is not https or resolves to a private IP (SSRF guard, T-01-11).
+# ── URL Normalization (D-06) ─────────────────────────────────────────────────
+
+
+def normalize_url(url: str) -> str:
+    """Conservative URL normalization per D-06.
+
+    Transformations (stdlib only — no w3lib/courlan/url-normalize):
+        - Lowercase scheme and host
+        - Strip fragment (#...)
+        - Strip trailing slash (but keep root "/")
+        - Preserve explicit non-default port
+        - Keep query string exactly as-is (NO reordering, NO tracking-param removal)
+
+    This is idempotent: normalize_url(normalize_url(u)) == normalize_url(u).
+    """
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    # netloc = host (lowered) + optional port (preserved)
+    host = (parts.hostname or "").lower()
+    port = parts.port
+    if port:
+        netloc = f"{host}:{port}"
+    else:
+        netloc = host
+    path = parts.path
+    # Strip trailing slash but keep root "/"
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    query = parts.query  # preserved verbatim
+    fragment = ""  # always stripped
+    return urlunsplit((scheme, netloc, path, query, fragment))
+
+
+# ── Shared SSRF Guard (T-02-01) ─────────────────────────────────────────────
+
+
+def validate_public_url(url: str) -> None:
+    """Raise ValueError if the URL scheme is not https or resolves to a private IP.
+
+    This is the shared SSRF guard consumed by every crawler and discovery plan
+    (02-02..02-06). Renamed from _validate_url_scheme to be module-public.
 
     Blocks:
-      - Non-https schemes
+      - Non-https schemes (http URLs rejected by design — conservative SSRF posture)
       - RFC-1918 private IP ranges (10.x, 172.16-31.x, 192.168.x)
       - Link-local/cloud IMDS (169.254.x — AWS/GCP/Azure metadata service)
       - Loopback (127.x, ::1)
@@ -78,8 +120,6 @@ def _validate_url_scheme(url: str) -> None:
             "Use ingest_file() for local paths."
         )
     # Resolve ALL addresses (IPv4 + IPv6) and block every private/reserved range.
-    # getaddrinfo is used instead of gethostbyname to avoid single-address limitation
-    # and OS-dependent behaviour on IPv6-only hostnames (CR-01, T-01-11).
     hostname = parsed.hostname or ""
     try:
         infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
@@ -104,6 +144,10 @@ def _validate_url_scheme(url: str) -> None:
                 )
 
 
+# Keep backward compat alias for any existing internal callers
+_validate_url_scheme = validate_public_url
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
@@ -111,7 +155,15 @@ def _validate_url_scheme(url: str) -> None:
     reraise=True,
 )
 def _fetch_with_retry(url: str) -> tuple[bytes, str]:
-    """Fetch URL bytes with retry, timeout, and size cap enforcement.
+    """Fetch URL bytes with retry, timeout, size cap, and per-redirect-hop SSRF validation.
+
+    Security (T-02-01b): httpx auto-redirect is DISABLED. Each 3xx redirect hop
+    is followed manually: the Location header is resolved against the current URL,
+    then validate_public_url() is called on the resolved target BEFORE issuing the
+    next request. This closes the redirect-hop / DNS-rebinding SSRF gap where a
+    public URL 302-redirects to 169.254.169.254 or an RFC-1918 host.
+
+    The redirect chain is capped at _MAX_REDIRECTS to prevent infinite loops.
 
     Returns:
         Tuple of (body_bytes, content_type). The content_type is the MIME type
@@ -119,21 +171,50 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
         parameters like charset). Falls back to 'application/octet-stream' if
         the header is absent. (WR-08)
     """
-    with httpx.stream("GET", url, timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=True) as resp:
-        resp.raise_for_status()
-        content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
-        chunks: list[bytes] = []
-        total = 0
-        for chunk in resp.iter_bytes():
-            total += len(chunk)
-            if total > MAX_DOWNLOAD_BYTES:
-                raise ValueError(
-                    f"Download from {url!r} exceeded size cap of "
-                    f"{MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB (T-01-12). "
-                    "Increase MAX_DOWNLOAD_BYTES or reject oversized documents."
-                )
-            chunks.append(chunk)
-        return b"".join(chunks), content_type
+    current_url = url
+    with httpx.Client(timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
+        for hop in range(_MAX_REDIRECTS + 1):
+            resp = client.send(client.build_request("GET", current_url), stream=True)
+
+            if resp.status_code in (301, 302, 303, 307, 308):
+                resp.close()
+                location = resp.headers.get("location")
+                if not location:
+                    raise ValueError(
+                        f"Redirect from {current_url!r} has no Location header."
+                    )
+                # Resolve relative Location against current URL
+                resolved = urljoin(current_url, location)
+                # SSRF re-validation on the redirect target (T-02-01b)
+                validate_public_url(resolved)
+                current_url = resolved
+                continue
+
+            # Non-redirect response — read body with size cap
+            resp.raise_for_status()
+            content_type = resp.headers.get(
+                "content-type", "application/octet-stream"
+            ).split(";")[0].strip()
+            chunks: list[bytes] = []
+            total = 0
+            for chunk in resp.iter_bytes():
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    resp.close()
+                    raise ValueError(
+                        f"Download from {url!r} exceeded size cap of "
+                        f"{MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB (T-01-12). "
+                        "Increase MAX_DOWNLOAD_BYTES or reject oversized documents."
+                    )
+                chunks.append(chunk)
+            resp.close()
+            return b"".join(chunks), content_type
+
+        # Exceeded redirect cap
+        raise ValueError(
+            f"URL {url!r} exceeded maximum redirect chain of {_MAX_REDIRECTS} hops — "
+            "possible redirect loop or too many hops."
+        )
 
 
 def ingest_url(
@@ -171,7 +252,7 @@ def ingest_url(
         httpx.HTTPStatusError: If the server returns a non-2xx response.
         ValueError: If the download exceeds MAX_DOWNLOAD_BYTES.
     """
-    _validate_url_scheme(url)
+    validate_public_url(url)
     s = settings or get_settings()
     storage = StorageBackend(s.storage)
 

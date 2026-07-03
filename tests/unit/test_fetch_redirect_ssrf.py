@@ -9,33 +9,10 @@ Verifies:
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import httpx
 import pytest
-
-
-class _MockResponse:
-    """Minimal mock for httpx response used in redirect tests."""
-
-    def __init__(self, status_code: int, headers: dict, body: bytes = b""):
-        self.status_code = status_code
-        self.headers = httpx.Headers(headers)
-        self._body = body
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            raise httpx.HTTPStatusError(
-                f"Status {self.status_code}",
-                request=httpx.Request("GET", "https://example.com"),
-                response=self,  # type: ignore[arg-type]
-            )
-
-    def iter_bytes(self):
-        yield self._body
-
-    def read(self):
-        return self._body
 
 
 class TestFetchRedirectSSRF:
@@ -52,7 +29,7 @@ class TestFetchRedirectSSRF:
                 url = str(request.url)
                 call_log.append(url)
                 if "example.com" in url:
-                    # First request → 302 to a private IP
+                    # First request -> 302 to a private IP hostname
                     return httpx.Response(
                         status_code=302,
                         headers={"location": "https://internal.evil.com/secret"},
@@ -60,7 +37,7 @@ class TestFetchRedirectSSRF:
                 # Should NOT reach here
                 return httpx.Response(status_code=200, content=b"secret data")
 
-        # Mock getaddrinfo: example.com → public, internal.evil.com → private
+        # Mock getaddrinfo: example.com -> public, internal.evil.com -> private
         def fake_getaddrinfo(host, port, *args, **kwargs):
             if host == "example.com":
                 return [(2, 1, 6, "", ("93.184.216.34", 443))]
@@ -69,8 +46,9 @@ class TestFetchRedirectSSRF:
             return [(2, 1, 6, "", ("93.184.216.34", 443))]
 
         with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
-            with pytest.raises(ValueError, match="private|SSRF"):
-                _fetch_with_retry("https://example.com/start")
+            with patch("httpx.Client", return_value=httpx.Client(transport=MockTransport())):
+                with pytest.raises(ValueError, match="private|SSRF"):
+                    _fetch_with_retry("https://example.com/start")
 
         # The private host should NOT have been contacted
         assert not any("internal.evil.com" in url for url in call_log), (
@@ -98,8 +76,9 @@ class TestFetchRedirectSSRF:
                 return httpx.Response(status_code=200, content=b"data")
 
         with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
-            with pytest.raises(ValueError, match="private|SSRF"):
-                _fetch_with_retry("https://public.example.com/resource")
+            with patch("httpx.Client", return_value=httpx.Client(transport=MockTransport())):
+                with pytest.raises(ValueError, match="private|SSRF"):
+                    _fetch_with_retry("https://public.example.com/resource")
 
     def test_normal_200_returns_body(self):
         """A normal 200 response (no redirects) returns body bytes and content type."""
@@ -120,7 +99,8 @@ class TestFetchRedirectSSRF:
                 )
 
         with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
-            body, ct = _fetch_with_retry("https://safe.example.com/page")
+            with patch("httpx.Client", return_value=httpx.Client(transport=MockTransport())):
+                body, ct = _fetch_with_retry("https://safe.example.com/page")
 
         assert body == expected_body
         assert ct == expected_ct
@@ -137,12 +117,13 @@ class TestFetchRedirectSSRF:
         class MockTransport(httpx.BaseTransport):
             def handle_request(self, request: httpx.Request) -> httpx.Response:
                 redirect_count[0] += 1
-                # Always redirect to the same public URL
+                # Always redirect to a new public URL
                 return httpx.Response(
                     status_code=302,
                     headers={"location": f"https://safe.example.com/page{redirect_count[0]}"},
                 )
 
         with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo):
-            with pytest.raises(ValueError, match="redirect|too many"):
-                _fetch_with_retry("https://safe.example.com/start")
+            with patch("httpx.Client", return_value=httpx.Client(transport=MockTransport())):
+                with pytest.raises(ValueError, match="redirect|too many"):
+                    _fetch_with_retry("https://safe.example.com/start")
