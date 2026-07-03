@@ -59,7 +59,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Crawls respect robots.txt and apply per-host rate limits with retries and backoff; interrupted crawl jobs resume without re-fetching completed pages
   5. User can run a SearXNG discovery query and see candidate sources stored in the source registry for review
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+- [ ] 02-01-PLAN.md — Source registration + single-URL/file ingest + dedup foundation; shared validate_public_url + normalize_url (INGEST-01, 02, 03, 08) [Wave 1]
+- [ ] 02-02-PLAN.md — Crawler substrate: CrawlerPlugin protocol, crawl_states schema, put_bronze, robots + 3-tier rate-limit primitives (INGEST-04, 09) [Wave 2]
+- [ ] 02-03-PLAN.md — Crawl4AI adapter + orchestrator (two-artifact lineage, resume, robots_blocked) + crawl CLI/API (INGEST-04, 08, 09) [Wave 3]
+- [ ] 02-04-PLAN.md — Scrapy subprocess adapter + sitemap auto-selection (INGEST-05) [Wave 4]
+- [ ] 02-05-PLAN.md — Playwright adapter + SPA selection/escalation + browser binaries (INGEST-06) [Wave 5]
+- [ ] 02-06-PLAN.md — SearXNG discovery: DiscoveryPlugin + auto-register + compose service (INGEST-07) [Wave 6]
 
 ### Phase 3: Parse, Clean & Chunk
 
@@ -132,7 +139,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
-| 2. Ingestion | 0/TBD | Not started | - |
+| 2. Ingestion | 0/6 | Planned | - |
 | 3. Parse, Clean & Chunk | 0/TBD | Not started | - |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
