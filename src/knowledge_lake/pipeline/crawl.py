@@ -67,7 +67,7 @@ async def crawl_source(
           pages_failed, pages_total
     """
     s = settings or get_settings()
-    effective_max_pages = max_pages or s.crawl.max_pages
+    effective_max_pages = max_pages if max_pages is not None else s.crawl.max_pages
     crawler_name = crawler or s.crawler
 
     # Validate seed URL
