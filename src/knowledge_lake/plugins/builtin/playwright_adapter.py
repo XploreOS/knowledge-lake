@@ -158,11 +158,13 @@ class PlaywrightAdapter:
         validate_public_url(url)
 
         # 2. Robots check — MUST run before rendering (T-02-20, D-11)
+        # fetch_robots uses httpx.Client (synchronous) — offload to a thread to
+        # avoid blocking the event loop during robots.txt fetch (WR-004).
         parsed = urlparse(url)
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         url_path = parsed.path or "/"
 
-        robots_policy = fetch_robots(base_url)
+        robots_policy = await asyncio.get_event_loop().run_in_executor(None, fetch_robots, base_url)
         robots_delay = robots_policy.crawl_delay()
 
         if not robots_policy.is_allowed(url_path):

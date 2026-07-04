@@ -91,9 +91,11 @@ async def crawl_source(
     # Find or create crawl job (resume support: reuse existing incomplete job)
     job_id = _find_or_create_job(source_id, crawler_name, effective_max_pages, source_url)
 
-    # Fetch robots.txt for the seed host
+    # Fetch robots.txt for the seed host — offload the blocking HTTP call to a
+    # thread so the event loop is not stalled (fetch_robots uses httpx.Client,
+    # which is synchronous; WR-004).
     base_url = f"{urlparse(source_url).scheme}://{urlparse(source_url).netloc}"
-    robots_policy = fetch_robots(base_url)
+    robots_policy = await asyncio.get_event_loop().run_in_executor(None, fetch_robots, base_url)
     robots_crawl_delay = robots_policy.crawl_delay()
 
     # Seed URLs: start with the source_url itself
