@@ -386,6 +386,7 @@ def _record_state(
             raw_artifact_id=raw_artifact_id,
             bronze_artifact_id=bronze_artifact_id,
             fetched_at=fetched_at,
+            error_msg=error,
         )
 
 

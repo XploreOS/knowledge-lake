@@ -379,11 +379,12 @@ def upsert_crawl_state(
     raw_artifact_id: Optional[str] = None,
     bronze_artifact_id: Optional[str] = None,
     fetched_at: Optional[datetime.datetime] = None,
+    error_msg: Optional[str] = None,
 ) -> CrawlState:
     """Insert or update a crawl state row (keyed on job_id + normalized_url).
 
     If a row with (job_id, normalized_url) already exists, updates its status,
-    artifact IDs, and fetched_at. Otherwise, creates a new row.
+    artifact IDs, fetched_at, and error_msg. Otherwise, creates a new row.
 
     Parameters
     ----------
@@ -403,6 +404,8 @@ def upsert_crawl_state(
         FK to the bronze artifact (set after processing).
     fetched_at:
         Timestamp of fetch completion.
+    error_msg:
+        Human-readable failure reason for 'failed'/'robots_blocked' states (WR-03).
 
     Returns
     -------
@@ -426,6 +429,7 @@ def upsert_crawl_state(
             existing.bronze_artifact_id = bronze_artifact_id
         if fetched_at is not None:
             existing.fetched_at = fetched_at
+        existing.error_msg = error_msg  # always update (clears error on retry success)
         return existing
 
     state = CrawlState(
@@ -437,6 +441,7 @@ def upsert_crawl_state(
         raw_artifact_id=raw_artifact_id,
         bronze_artifact_id=bronze_artifact_id,
         fetched_at=fetched_at,
+        error_msg=error_msg,
         created_at=datetime.datetime.now(datetime.timezone.utc),
     )
     session.add(state)

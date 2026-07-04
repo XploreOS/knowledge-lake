@@ -355,6 +355,13 @@ class CrawlState(Base):
     )
     """FK to the bronze artifact (markdown/processed) from this page."""
 
+    error_msg: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    """Human-readable error message for failed/robots_blocked states (WR-03).
+
+    Populated by the crawl orchestrator when SSRF guard, adapter error, or
+    other failure occurs.  NULL for successful ('complete') states.
+    """
+
     fetched_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
