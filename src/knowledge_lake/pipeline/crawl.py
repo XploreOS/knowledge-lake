@@ -271,6 +271,7 @@ async def _crawl_loop(
             url_domain = _registrable_domain(url)
             if url_domain != seed_domain:
                 log.info("crawl.cross_domain_skip", url=url, domain=url_domain)
+                pages_total -= 1  # undo the pre-loop increment; skip doesn't count
                 continue
 
         # Check robots.txt locally (our own Protego policy)
