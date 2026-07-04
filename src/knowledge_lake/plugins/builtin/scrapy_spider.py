@@ -94,6 +94,12 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
             _out_file.write(json.dumps(obj) + "\n")
             _out_file.flush()
 
+    # NOTE: _out_file is also closed in KlakeSpider.closed() via the Scrapy
+    # signal callback.  The try/finally below ensures the file is closed even
+    # when CrawlerProcess raises before the spider's closed signal fires (e.g.
+    # middleware loading failure — WR-04).  The .closed check avoids a
+    # double-close when the spider did fire closed() successfully.
+
     class MaxPagesExtension:
         """Close the spider once max_pages completed pages have been written."""
 
@@ -207,9 +213,14 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         "STATS_DUMP": False,
     }
 
-    process = CrawlerProcess(settings=settings_dict)
-    process.crawl(KlakeSpider)
-    process.start()  # blocks until done — safe because this IS the reactor's lifetime
+    try:
+        process = CrawlerProcess(settings=settings_dict)
+        process.crawl(KlakeSpider)
+        process.start()  # blocks until done — safe because this IS the reactor's lifetime
+    finally:
+        if not _out_file.closed:
+            _out_file.flush()
+            _out_file.close()
 
 
 def main() -> None:
