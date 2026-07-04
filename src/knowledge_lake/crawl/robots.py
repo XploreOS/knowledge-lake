@@ -72,6 +72,13 @@ class RobotsPolicy:
         bool
             True if the path is allowed, False if disallowed.
         """
+        # Normalise path: ensure it starts with "/" so the constructed URL is
+        # well-formed (e.g. "" → "/", "noslash" → "/noslash"). Without this,
+        # "http://example.comnoslash" is a different hostname and Protego's
+        # can_fetch returns True (allow-all for unknown domains), bypassing
+        # any Disallow rules silently.
+        if not path.startswith("/"):
+            path = "/" + path
         # Protego expects a full URL for can_fetch; we construct one with a
         # dummy base since we only care about the path matching.
         url = f"http://example.com{path}"
