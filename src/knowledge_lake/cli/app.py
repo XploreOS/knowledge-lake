@@ -15,6 +15,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import typer
 
@@ -67,7 +68,7 @@ def cmd_add_source(
     """
     from knowledge_lake.pipeline.ingest import register_source
 
-    effective_name = name or url.split("/")[2] if "/" in url else url
+    effective_name = name or (urlparse(url).hostname or url)
     try:
         result = register_source(
             url=url,

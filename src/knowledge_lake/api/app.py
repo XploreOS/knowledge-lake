@@ -197,7 +197,7 @@ async def create_source_endpoint(body: SourceCreate) -> SourceOut:
 
     logger.info("api.sources.create", url=body.url, name=body.name)
 
-    effective_name = body.name or body.url.split("/")[2] if "/" in body.url else body.url
+    effective_name = body.name or (urlparse(body.url).hostname or body.url)
     try:
         result = register_source(
             url=body.url,
