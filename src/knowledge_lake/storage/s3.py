@@ -245,6 +245,7 @@ class StorageBackend:
             session.flush()
         except IntegrityError:
             session.rollback()
+            session.expire_all()  # clear identity map after rollback (CR-003)
             artifact = repo.get_artifact_by_hash(session, content_hash, "raw_document")
             if artifact is None:
                 raise  # unexpected — constraint violation on a different column
@@ -345,6 +346,7 @@ class StorageBackend:
             session.flush()
         except IntegrityError:
             session.rollback()
+            session.expire_all()  # clear identity map after rollback (CR-003)
             artifact = repo.get_artifact_by_hash(session, content_hash, "bronze_document")
             if artifact is None:
                 raise  # unexpected — constraint violation on a different column
