@@ -470,6 +470,35 @@ def pending_states(session: Session, job_id: str) -> list[CrawlState]:
     return list(session.execute(stmt).scalars())
 
 
+def list_sources_by_type(
+    session: Session,
+    source_type: str,
+) -> list[Source]:
+    """Return all sources matching the given source_type.
+
+    Used by discover_sources to list discovered candidates for review.
+    ORM-only query (T-02-02: no raw SQL).
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_type:
+        The source type to filter by (e.g. 'discovered', 'web', 'upload').
+
+    Returns
+    -------
+    list[Source]
+        Source rows matching the type, ordered by created_at descending.
+    """
+    stmt = (
+        select(Source)
+        .where(Source.source_type == source_type)
+        .order_by(Source.created_at.desc())
+    )
+    return list(session.execute(stmt).scalars())
+
+
 def get_raw_artifact_for_source(
     session: Session,
     source_id: str,

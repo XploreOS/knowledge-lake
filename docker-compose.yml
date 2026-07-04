@@ -33,6 +33,7 @@ x-common-env: &common-env
   KLAKE_EMBEDDER: "${KLAKE_EMBEDDER:-local}"
   KLAKE_PARSER: "${KLAKE_PARSER:-docling}"
   KLAKE_VECTORSTORE: "${KLAKE_VECTORSTORE:-qdrant}"
+  KLAKE_SEARXNG_URL: "http://searxng:8080"
 
 services:
   # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
@@ -203,6 +204,21 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
+
+  # ── SearXNG (source discovery meta-search) ─────────────────────────────────
+  searxng:
+    image: searxng/searxng:latest
+    volumes:
+      - ./infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    ports:
+      - "${SEARXNG_PORT:-8888}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
 volumes:

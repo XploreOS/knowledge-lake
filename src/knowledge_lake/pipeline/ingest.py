@@ -223,6 +223,7 @@ def register_source(
     *,
     domain: Optional[str] = None,
     license_type: str = "unknown",
+    source_type_override: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Register a source URL with URL-first dedup (INGEST-01).
@@ -232,11 +233,13 @@ def register_source(
     with normalized_url set and domain stored in Source.config.
 
     Args:
-        url:          The source URL to register.
-        name:         Human-readable name for the source.
-        domain:       Optional domain classification (stored in config).
-        license_type: SPDX license identifier.
-        settings:     Settings override.
+        url:                  The source URL to register.
+        name:                 Human-readable name for the source.
+        domain:               Optional domain classification (stored in config).
+        license_type:         SPDX license identifier.
+        source_type_override: Override the default source_type ('web'). Used by
+                              discover_sources to set 'discovered' (D-08).
+        settings:             Settings override.
 
     Returns:
         dict with source_id, name, url, normalized_url, domain, is_new.
@@ -265,7 +268,7 @@ def register_source(
         source = registry_repo.create_source(
             session,
             name=name,
-            source_type="web",
+            source_type=source_type_override or "web",
             url=url,
             normalized_url=norm_url,
             license_type=license_type,

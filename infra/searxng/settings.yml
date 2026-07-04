@@ -1,0 +1,33 @@
+# SearXNG settings for Knowledge Lake source discovery (INGEST-07).
+#
+# CRITICAL (Pitfall 3): The 'formats' list MUST include 'json'.
+# Without it, SearXNG returns 403 on ?format=json requests.
+# The Knowledge Lake discovery pipeline uses the JSON API exclusively.
+
+use_default_settings: true
+
+general:
+  instance_name: "Knowledge Lake Discovery"
+  debug: false
+
+server:
+  # Secret key for CSRF and session security.
+  # Override in production via SEARXNG_SECRET env var.
+  secret_key: "klake-dev-searxng-secret-change-in-production"
+  bind_address: "0.0.0.0"
+  port: 8080
+
+search:
+  # MUST include 'json' — the discovery plugin uses ?format=json.
+  # A missing 'json' entry causes a 403 Forbidden response (Pitfall 3).
+  formats:
+    - html
+    - json
+  safe_search: 0
+  default_lang: "en"
+
+ui:
+  static_use_hash: true
+
+# Engines can be customized per domain pack.
+# Default: use all built-in search engines.
