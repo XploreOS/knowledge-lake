@@ -243,8 +243,13 @@ def probe_site(url: str) -> tuple[str, bool]:
 
     has_sitemap = False
 
-    # Check robots.txt for Sitemap: directive
+    # Check robots.txt for Sitemap: directive.
+    # Defense-in-depth: re-validate derived URLs before fetching (WR-007).
+    # Even though base is derived from the already-validated entry URL, IPv6
+    # bracket notation or user-info tricks could encode a different host after
+    # urlparse round-tripping.
     robots_url = f"{base}/robots.txt"
+    validate_public_url(robots_url)
     try:
         robots_resp = _safe_get(robots_url, timeout=_PROBE_TIMEOUT)
         if robots_resp.status_code == 200:
@@ -262,6 +267,7 @@ def probe_site(url: str) -> tuple[str, bool]:
     # Check /sitemap.xml directly (only if not already detected)
     if not has_sitemap:
         sitemap_url = f"{base}/sitemap.xml"
+        validate_public_url(sitemap_url)  # defense-in-depth: re-validate (WR-007)
         try:
             sitemap_resp = _safe_get(sitemap_url, timeout=_PROBE_TIMEOUT)
             if sitemap_resp.status_code == 200:
