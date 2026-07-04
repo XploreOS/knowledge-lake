@@ -28,6 +28,7 @@ from urllib.parse import urlparse, urlsplit, urlunsplit, urljoin
 
 import httpx
 import structlog
+from sqlalchemy.exc import IntegrityError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -273,16 +274,37 @@ def register_source(
             }
 
         config = {"domain": domain} if domain else None
-        source = registry_repo.create_source(
-            session,
-            name=name,
-            source_type=source_type_override or "web",
-            url=url,
-            normalized_url=norm_url,
-            license_type=license_type,
-            config=config,
-        )
-        session.flush()
+        try:
+            source = registry_repo.create_source(
+                session,
+                name=name,
+                source_type=source_type_override or "web",
+                url=url,
+                normalized_url=norm_url,
+                license_type=license_type,
+                config=config,
+            )
+            session.flush()
+        except IntegrityError:
+            # Concurrent worker inserted the same normalized_url — roll back and
+            # return the winner's row (WR-005, uq_sources_normalized_url).
+            session.rollback()
+            source = registry_repo.get_source_by_normalized_url(session, norm_url)
+            if source is None:
+                raise  # unexpected
+            log.info(
+                "register_source.dedup_hit_concurrent",
+                source_id=source.id,
+                normalized_url=norm_url,
+            )
+            return {
+                "source_id": source.id,
+                "name": source.name,
+                "url": source.url,
+                "normalized_url": source.normalized_url,
+                "domain": (source.config or {}).get("domain"),
+                "is_new": False,
+            }
         result = {
             "source_id": source.id,
             "name": source.name,
@@ -368,16 +390,24 @@ def ingest_url(
     log.info("ingest_url.downloaded", url=url, size=len(data), mime_type=effective_mime)
 
     with get_session() as session:
-        source = registry_repo.create_source(
-            session,
-            name=source_name,
-            source_type="web",
-            url=url,
-            normalized_url=norm_url,
-            license_type=license_type,
-            robots_checked=robots_checked,
-        )
-        session.flush()
+        try:
+            source = registry_repo.create_source(
+                session,
+                name=source_name,
+                source_type="web",
+                url=url,
+                normalized_url=norm_url,
+                license_type=license_type,
+                robots_checked=robots_checked,
+            )
+            session.flush()
+        except IntegrityError:
+            # Concurrent worker inserted the same normalized_url — roll back and
+            # reuse the winner's source row (WR-005, uq_sources_normalized_url).
+            session.rollback()
+            source = registry_repo.get_source_by_normalized_url(session, norm_url)
+            if source is None:
+                raise  # unexpected
         artifact = storage.put_raw(source.id, data, ext, session)
         session.flush()
         result = {
