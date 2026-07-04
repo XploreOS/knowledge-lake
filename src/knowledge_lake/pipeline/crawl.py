@@ -186,9 +186,11 @@ def _find_or_create_job(
             return job.id
         except IntegrityError:
             session.rollback()
-            # Another worker created the job between our SELECT and INSERT —
-            # fetch and return the concurrent winner's job ID.
-            winner = session.execute(stmt).scalar_one_or_none()
+            # Another worker created the job between our SELECT and INSERT.
+            # Re-query on a FRESH session so we always see the concurrent
+            # winner's committed row, regardless of isolation level (WR-006).
+            with get_session() as fresh:
+                winner = fresh.execute(stmt).scalar_one_or_none()
             if winner is not None:
                 log.info("crawl.resume_job_concurrent", job_id=winner.id)
                 return winner.id
