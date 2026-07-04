@@ -23,6 +23,10 @@ Every domain resource ingested must be traceable from raw source through every t
 - ✓ S3-compatible object storage (MinIO dev) — Phase 1
 - ✓ PostgreSQL metadata registry — Phase 1
 - ✓ All LLM calls routed through LiteLLM with task-based model aliases — Phase 1
+- ✓ Automated crawling via Crawl4AI, Scrapy, Playwright as swappable plugins — Phase 2
+- ✓ Manual file upload + single-URL ingest with provenance and SHA256 dedup — Phase 2
+- ✓ SearXNG-based source discovery with auto-registration — Phase 2
+- ✓ Robots.txt, rate-limit, SSRF guard, resumable crawl jobs — Phase 2
 
 ### Active
 
@@ -120,4 +124,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-03 after Phase 1 — Foundation & End-to-End Spike*
+*Last updated: 2026-07-04 after Phase 2 — Ingestion*
