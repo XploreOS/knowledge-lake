@@ -204,10 +204,14 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         "DOWNLOADER_MIDDLEWARES": {
             "knowledge_lake.plugins.builtin.scrapy_spider.SSRFGuardMiddleware": 100,
         },
-        # Disable default cookies/redirects to reduce attack surface
+        # Disable cookies and redirects to reduce attack surface.
+        # Redirects are disabled because Scrapy's built-in RedirectMiddleware
+        # follows 3xx responses before SSRFGuardMiddleware sees the new URL,
+        # allowing a redirect to an internal/private address to bypass the SSRF
+        # guard (CR-005 / T-02-15).  All redirect handling must go through the
+        # SSRF guard, so we disable automatic following entirely.
         "COOKIES_ENABLED": False,
-        "REDIRECT_ENABLED": True,
-        "REDIRECT_MAX_TIMES": 5,
+        "REDIRECT_ENABLED": False,
         # Disable stats logging
         "STATS_DUMP": False,
     }
