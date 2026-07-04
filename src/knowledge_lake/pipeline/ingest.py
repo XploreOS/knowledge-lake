@@ -190,24 +190,29 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
                 current_url = resolved
                 continue
 
-            # Non-redirect response — read body with size cap
-            resp.raise_for_status()
-            content_type = resp.headers.get(
-                "content-type", "application/octet-stream"
-            ).split(";")[0].strip()
-            chunks: list[bytes] = []
-            total = 0
-            for chunk in resp.iter_bytes():
-                total += len(chunk)
-                if total > MAX_DOWNLOAD_BYTES:
-                    resp.close()
-                    raise ValueError(
-                        f"Download from {url!r} exceeded size cap of "
-                        f"{MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB (T-01-12). "
-                        "Increase MAX_DOWNLOAD_BYTES or reject oversized documents."
-                    )
-                chunks.append(chunk)
-            resp.close()
+            # Non-redirect response — read body with size cap.
+            # Wrap in try/finally so the streaming response is always closed,
+            # even when raise_for_status() raises on 4xx/5xx (WR-05).
+            # An unclosed streaming response leaks an HTTP connection on every
+            # failed attempt, multiplied by the tenacity retry count.
+            try:
+                resp.raise_for_status()
+                content_type = resp.headers.get(
+                    "content-type", "application/octet-stream"
+                ).split(";")[0].strip()
+                chunks: list[bytes] = []
+                total = 0
+                for chunk in resp.iter_bytes():
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_BYTES:
+                        raise ValueError(
+                            f"Download from {url!r} exceeded size cap of "
+                            f"{MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB (T-01-12). "
+                            "Increase MAX_DOWNLOAD_BYTES or reject oversized documents."
+                        )
+                    chunks.append(chunk)
+            finally:
+                resp.close()
             return b"".join(chunks), content_type
 
         # Exceeded redirect cap
