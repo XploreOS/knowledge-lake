@@ -1,9 +1,14 @@
-"""Crawler selection logic (INGEST-04, D-02, D-04).
+"""Crawler selection logic (INGEST-04, D-02, D-04, INGEST-06).
 
 Provides:
   select_crawler(url, html, has_sitemap) -> str
       Route to the right crawler adapter based on site signals.
       Priority: has_sitemap → scrapy; SPA markers → playwright; default → crawl4ai.
+
+  should_escalate(markdown, status_code) -> bool
+      Crawl4AI→Playwright escalation predicate (02-05, D-04).
+      Returns True when a Crawl4AI result is near-empty and the page returned HTTP 200
+      (suggesting JS-rendered content was not captured by the static crawler).
 
   probe_site(url) -> tuple[str, bool]
       Cheap one-off HTTP probe: fetch entry URL + robots.txt + /sitemap.xml HEAD,
@@ -27,6 +32,10 @@ import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 log = logging.getLogger(__name__)
+
+# Near-empty escalation threshold in characters (A2 — tunable).
+# Crawl4AI results below this length for a 200 page are escalated to Playwright.
+ESCALATION_THRESHOLD_CHARS = 200
 
 # SPA detection markers (Pattern 3 from RESEARCH.md)
 _SPA_MARKERS = (
@@ -108,6 +117,36 @@ def select_crawler(
 
     # Default: Crawl4AI for static/server-rendered HTML
     return "crawl4ai"
+
+
+def should_escalate(markdown: str, status_code: int) -> bool:
+    """Return True if a Crawl4AI result should be re-fetched with Playwright.
+
+    Escalation logic (D-04, 02-05, Assumption A2):
+      - Only escalate on HTTP 200 responses: a non-200 status indicates a genuine
+        server-side error/redirect, not a JS-rendering gap.
+      - Escalate when the markdown length is below ESCALATION_THRESHOLD_CHARS
+        (default 200 chars, tunable via the module constant).
+
+    This predicate lives in select.py so the orchestrator can call it after
+    a Crawl4AI fetch and re-dispatch to the Playwright adapter (the orchestrator's
+    escalation hook was reserved in 02-03).
+
+    Parameters
+    ----------
+    markdown:
+        The markdown text returned by Crawl4AI for the page.
+    status_code:
+        The HTTP status code of the Crawl4AI page fetch.
+
+    Returns
+    -------
+    bool
+        True if the result should be escalated to Playwright.
+    """
+    if status_code != 200:
+        return False
+    return len(markdown) < ESCALATION_THRESHOLD_CHARS
 
 
 def probe_site(url: str) -> tuple[str, bool]:
