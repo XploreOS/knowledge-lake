@@ -21,6 +21,9 @@ D-02 compliance:
 from __future__ import annotations
 
 import re
+from pathlib import Path
+from urllib.parse import urlparse
+
 import structlog
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -43,6 +46,32 @@ from knowledge_lake.api.schemas import (
 from knowledge_lake.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
+
+# Upload root: all file paths supplied to /uploads must be under this directory.
+# Override via KLAKE_UPLOAD_ROOT env var or set upload_root in settings.
+# Defaults to /data/uploads; the path must exist on the server.
+_UPLOAD_ROOT = Path("/data/uploads")
+
+
+def _safe_upload_path(raw: str) -> Path:
+    """Resolve ``raw`` and assert it is inside ``_UPLOAD_ROOT``.
+
+    Prevents arbitrary file-read: callers cannot supply /etc/passwd or
+    any path outside the designated upload directory (CR-01).
+
+    Raises:
+        HTTPException 400: When the resolved path escapes the upload root.
+    """
+    p = Path(raw).resolve()
+    try:
+        p.relative_to(_UPLOAD_ROOT.resolve())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Path is outside the allowed upload directory.",
+        )
+    return p
+
 
 # Collection names must be alphanumeric with underscores/hyphens, max 64 chars (WR-04).
 # Rejects arbitrary strings that could enumerate Qdrant collections or cause confusion.
@@ -210,16 +239,17 @@ async def upload_endpoint(
     For hermetic/integration testing: accepts a file path (not multipart).
     Hash-second dedup: identical content returns existing artifact IDs (D-07).
 
-    Security (T-02-04):
-        - file_path is validated by the pipeline (must exist on disk).
+    Security (T-02-04, CR-01):
+        - file_path is constrained to _UPLOAD_ROOT to prevent arbitrary file read.
     """
     from knowledge_lake.pipeline.ingest import ingest_file
 
-    logger.info("api.uploads.create", file_path=file_path, source_name=source_name)
+    safe_path = _safe_upload_path(file_path)
+    logger.info("api.uploads.create", file_path=str(safe_path), source_name=source_name)
 
     try:
         result = ingest_file(
-            path=file_path,
+            path=safe_path,
             source_name=source_name,
             license_type=license_type,
         )
