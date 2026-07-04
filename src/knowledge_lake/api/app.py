@@ -26,6 +26,9 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from knowledge_lake.api.schemas import (
+    CrawlJobCreate,
+    CrawlJobOut,
+    CrawlStateOut,
     DiscoverOut,
     DiscoverRequest,
     DiscoverResultItem,
@@ -273,6 +276,117 @@ async def discover_endpoint(body: DiscoverRequest) -> DiscoverOut:
         query=body.query,
         total=len(items),
         results=items,
+    )
+
+
+@app.post(
+    "/crawl-jobs",
+    response_model=CrawlJobOut,
+    tags=["crawl"],
+    summary="Start a crawl job for a source URL",
+    status_code=201,
+)
+async def create_crawl_job_endpoint(body: CrawlJobCreate) -> CrawlJobOut:
+    """Start a crawl job for the given source URL (INGEST-04).
+
+    Creates a crawl job and runs it synchronously, writing raw+bronze artifacts
+    for each successfully fetched page. Resume-safe: re-running for the same
+    source URL picks up where a prior interrupted crawl left off.
+
+    Security (T-02-13 / ASVS V5):
+        - source_url is validated by pydantic (min_length=8).
+        - crawler override is validated against registered crawlers.
+        - max_pages is bounded [1, 10000].
+    """
+    from knowledge_lake.pipeline.crawl import crawl_source
+
+    logger.info("api.crawl_jobs.create", source_url=body.source_url, crawler=body.crawler)
+
+    try:
+        result = crawl_source(
+            body.source_url,
+            crawler=body.crawler,
+            max_pages=body.max_pages,
+        )
+    except ValueError as exc:
+        logger.warning("api.crawl_jobs.validation_error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LookupError as exc:
+        logger.warning("api.crawl_jobs.crawler_not_found", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    states = CrawlStateOut(
+        complete=result.get("pages_complete", 0),
+        robots_blocked=result.get("pages_robots_blocked", 0),
+        failed=result.get("pages_failed", 0),
+        pending=0,
+    )
+
+    logger.info("api.crawl_jobs.complete", job_id=result["job_id"])
+    return CrawlJobOut(
+        job_id=result["job_id"],
+        source_id=result["source_id"],
+        crawler=result["crawler"],
+        status="complete",
+        states=states,
+    )
+
+
+@app.get(
+    "/crawl-jobs/{job_id}",
+    response_model=CrawlJobOut,
+    tags=["crawl"],
+    summary="Get crawl job status and page counts",
+    responses={
+        404: {"description": "Crawl job not found"},
+    },
+)
+async def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
+    """Get the status and page counts of a crawl job (INGEST-04).
+
+    Returns the job header + crawl_states summary (counts by status).
+    Returns 404 for an unknown job_id.
+
+    Security (T-01-14 / ASVS V5):
+        - job_id is parameterized in SQL (no injection).
+        - Unknown IDs return 404 with a clear JSON error body.
+    """
+    from sqlalchemy import select, func
+
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import CrawlState, Job
+
+    logger.info("api.crawl_jobs.get", job_id=job_id)
+
+    with get_session() as session:
+        job = session.get(Job, job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Crawl job {job_id!r} not found.",
+            )
+
+        # Count states by status
+        stmt = (
+            select(CrawlState.status, func.count(CrawlState.id))
+            .where(CrawlState.job_id == job_id)
+            .group_by(CrawlState.status)
+        )
+        counts = dict(session.execute(stmt).all())
+
+    states = CrawlStateOut(
+        complete=counts.get("complete", 0),
+        robots_blocked=counts.get("robots_blocked", 0),
+        failed=counts.get("failed", 0),
+        pending=counts.get("pending", 0),
+    )
+
+    return CrawlJobOut(
+        job_id=job.id,
+        source_id=job.source_id or "",
+        crawler=job.crawler or "",
+        status=job.status or "unknown",
+        states=states,
     )
 
 

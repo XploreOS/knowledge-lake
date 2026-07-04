@@ -178,6 +178,55 @@ class UploadOut(BaseModel):
 # ── Discovery schemas (02-06) ────────────────────────────────────────────────
 
 
+# ── Crawl job schemas (02-03) ──────────────────────────────────────────────
+
+
+class CrawlJobCreate(BaseModel):
+    """Request body for POST /crawl-jobs — start a crawl.
+
+    Pydantic validates at the API boundary (ASVS V5, T-02-13).
+    """
+
+    source_url: str = Field(
+        ...,
+        description="https:// seed URL to crawl.",
+        min_length=8,
+    )
+    crawler: Optional[str] = Field(
+        default=None,
+        description="Override crawler adapter name (must be a registered crawler).",
+        max_length=64,
+    )
+    max_pages: Optional[int] = Field(
+        default=None,
+        description="Maximum number of pages to crawl.",
+        ge=1,
+        le=10000,
+    )
+
+
+class CrawlStateOut(BaseModel):
+    """Summary counts of crawl states for a job."""
+
+    complete: int = Field(default=0, description="Number of pages successfully crawled.")
+    robots_blocked: int = Field(default=0, description="Pages blocked by robots.txt.")
+    failed: int = Field(default=0, description="Pages that failed to fetch.")
+    pending: int = Field(default=0, description="Pages not yet processed.")
+
+
+class CrawlJobOut(BaseModel):
+    """Response body for POST /crawl-jobs and GET /crawl-jobs/{job_id}."""
+
+    job_id: str = Field(description="Crawl job ID (job_...).")
+    source_id: str = Field(description="Source registry ID (src_...).")
+    crawler: str = Field(description="Crawler adapter used for this job.")
+    status: str = Field(description="Job status: pending, running, complete, failed.")
+    states: CrawlStateOut = Field(
+        default_factory=CrawlStateOut,
+        description="Summary of page-level crawl states.",
+    )
+
+
 class DiscoverRequest(BaseModel):
     """Request body for POST /discover — run a discovery query.
 

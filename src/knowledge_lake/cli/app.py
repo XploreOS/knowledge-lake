@@ -164,6 +164,51 @@ def cmd_discover(
         typer.echo(f"  [{status_marker}] {sid} {r['url']}")
 
 
+@app.command(name="crawl")
+def cmd_crawl(
+    url: str = typer.Argument(..., help="https:// seed URL to crawl."),
+    crawler: Optional[str] = typer.Option(
+        None,
+        "--crawler",
+        "-c",
+        help="Override crawler adapter (default: settings.crawler). Must be a registered crawler.",
+    ),
+    max_pages: Optional[int] = typer.Option(
+        None,
+        "--max-pages",
+        "-m",
+        help="Maximum number of pages to crawl (1–10000).",
+        min=1,
+        max=10000,
+    ),
+) -> None:
+    """Crawl a public site into the lake: raw HTML + bronze markdown per page.
+
+    Creates a crawl job, fetches pages with rate limiting and robots.txt respect,
+    and writes two artifacts per page (raw HTML + bronze markdown) with full lineage.
+    Resume-safe: re-running fetches only pending URLs.
+    """
+    from knowledge_lake.pipeline.crawl import crawl_source
+
+    try:
+        result = crawl_source(
+            url,
+            crawler=crawler,
+            max_pages=max_pages,
+        )
+        typer.echo(f"Crawl complete:")
+        typer.echo(f"  job_id:              {result['job_id']}")
+        typer.echo(f"  source_id:           {result['source_id']}")
+        typer.echo(f"  crawler:             {result['crawler']}")
+        typer.echo(f"  pages_complete:      {result['pages_complete']}")
+        typer.echo(f"  pages_robots_blocked: {result['pages_robots_blocked']}")
+        typer.echo(f"  pages_failed:        {result['pages_failed']}")
+        typer.echo(f"  pages_total:         {result['pages_total']}")
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="ingest-url")
 def cmd_ingest_url(
     url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),
