@@ -39,10 +39,6 @@ log = structlog.get_logger(__name__)
 # 30 seconds is generous for a JS-heavy SPA; prevents runaway page loads.
 _NAV_TIMEOUT_MS = 30_000
 
-# Shared per-host limiter — module-level so multiple fetch_page calls share state.
-_limiter = PerHostLimiter()
-
-
 def _html_to_markdown(html: str, url: str) -> str:
     """Convert rendered HTML to markdown using crawl4ai's DefaultMarkdownGenerator.
 
@@ -91,6 +87,11 @@ class PlaywrightAdapter:
         self._results: dict[str, list[CrawlPageResult]] = {}
         self._nav_timeout_ms = nav_timeout_ms
         self._global_rate_limit = global_rate_limit
+        # Per-instance limiter: asyncio.Lock objects are bound to the event loop
+        # that created them.  A module-level singleton would hold stale locks
+        # from a dead event loop when fetch_page_sync creates a new loop via
+        # asyncio.run(), causing RuntimeError on the second call (WR-002).
+        self._limiter = PerHostLimiter()
 
     # ── CrawlerPlugin protocol methods ────────────────────────────────────────
 
@@ -178,7 +179,7 @@ class PlaywrightAdapter:
 
         # 3. Rate-limit wait — before navigation (T-02-21)
         delay = resolve_delay(source_config, robots_delay, self._global_rate_limit)
-        await _limiter.wait(url, delay)
+        await self._limiter.wait(url, delay)
 
         # 4. Headless Chromium navigation
         try:
