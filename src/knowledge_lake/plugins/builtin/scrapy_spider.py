@@ -179,8 +179,13 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
             )
 
         def closed(self, reason: str) -> None:
-            _out_file.flush()
-            _out_file.close()
+            # Guard: _out_file is None if the spider closes before the try
+            # block on line 216 assigns it (e.g. Scrapy raises during setup).
+            # Without this check, closed() raises AttributeError and masks the
+            # original exception (CR-006).
+            if _out_file is not None and not _out_file.closed:
+                _out_file.flush()
+                _out_file.close()
             log.info("scrapy_spider.closed", reason=reason)
 
     settings_dict: dict[str, Any] = {
