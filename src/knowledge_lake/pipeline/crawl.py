@@ -143,8 +143,16 @@ def _find_or_create_job(
 
     Resume logic: if a job with status 'running' or 'pending' exists for this
     source_id and crawler, reuse it. Otherwise, create a new one.
+
+    Uses a single session for lookup + conditional insert to eliminate the
+    TOCTOU race where two concurrent workers both see no existing job and
+    both attempt to insert a new one. The partial UNIQUE index on
+    (source_id, crawler) WHERE status IN ('running', 'pending') makes the
+    second insert raise IntegrityError; we catch it and return the winner's
+    job ID (CR-004).
     """
     from sqlalchemy import select as sa_select
+    from sqlalchemy.exc import IntegrityError
     from knowledge_lake.registry.models import Job
 
     with get_session() as session:
@@ -161,16 +169,28 @@ def _find_or_create_job(
             log.info("crawl.resume_job", job_id=existing.id)
             return existing.id
 
-    with get_session() as session:
-        job = registry_repo.create_crawl_job(
-            session,
-            source_id=source_id,
-            crawler=crawler_name,
-            config={"max_pages": max_pages, "source_url": source_url},
-            status="running",
-        )
-        session.flush()
-        return job.id
+        # No existing job — attempt to create one.
+        # Catch IntegrityError from the partial unique index in case a
+        # concurrent worker inserts the same (source_id, crawler/running) row.
+        try:
+            job = registry_repo.create_crawl_job(
+                session,
+                source_id=source_id,
+                crawler=crawler_name,
+                config={"max_pages": max_pages, "source_url": source_url},
+                status="running",
+            )
+            session.flush()
+            return job.id
+        except IntegrityError:
+            session.rollback()
+            # Another worker created the job between our SELECT and INSERT —
+            # fetch and return the concurrent winner's job ID.
+            winner = session.execute(stmt).scalar_one_or_none()
+            if winner is not None:
+                log.info("crawl.resume_job_concurrent", job_id=winner.id)
+                return winner.id
+            raise  # unexpected — re-raise if still not found
 
 
 def _get_urls_to_process(
