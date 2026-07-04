@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urljoin
 
 import httpx
 from protego import Protego
@@ -95,21 +96,42 @@ class RobotsPolicy:
         return float(delay)
 
 
+_MAX_ROBOTS_REDIRECTS = 10
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=0.5, min=0.5, max=5),
     reraise=True,
 )
 def _fetch_robots_text(base_url: str) -> str:
-    """Internal: HTTP GET /robots.txt with tenacity retries."""
+    """Internal: HTTP GET /robots.txt with tenacity retries.
+
+    Security (T-02-01b): redirect following is manual (follow_redirects=False).
+    Each 3xx Location header is resolved and validated via validate_public_url()
+    before following, preventing a robots.txt endpoint from redirecting to a
+    cloud IMDS address (e.g. 169.254.169.254).
+    """
+    from knowledge_lake.pipeline.ingest import validate_public_url
+
     url = f"{base_url.rstrip('/')}/robots.txt"
-    with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-        resp = client.get(url)
-        if resp.status_code == 404:
-            # No robots.txt = allow everything
-            return ""
-        resp.raise_for_status()
-        return resp.text
+    with httpx.Client(timeout=10.0, follow_redirects=False) as client:
+        for _ in range(_MAX_ROBOTS_REDIRECTS):
+            resp = client.get(url)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location", "")
+                if not location:
+                    break
+                resolved = urljoin(url, location)
+                validate_public_url(resolved)  # raises ValueError on private IP
+                url = resolved
+                continue
+            if resp.status_code == 404:
+                # No robots.txt = allow everything
+                return ""
+            resp.raise_for_status()
+            return resp.text
+    raise ValueError(f"Too many redirects fetching robots.txt for {base_url!r}")
 
 
 def fetch_robots(base_url: str) -> RobotsPolicy:
