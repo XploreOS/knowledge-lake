@@ -124,6 +124,46 @@ def cmd_upload(
         raise typer.Exit(code=1)
 
 
+@app.command(name="discover")
+def cmd_discover(
+    query: str = typer.Argument(..., help="Natural-language search query for source discovery."),
+    limit: int = typer.Option(
+        20, "--limit", "-l", help="Maximum number of results (1–100).", min=1, max=100
+    ),
+) -> None:
+    """Discover candidate sources via meta-search and auto-register them.
+
+    Each result URL is SSRF-validated and URL-deduped before registration.
+    Discovered sources have source_type='discovered' with minimal metadata
+    (URL + title only, D-09).
+    """
+    from knowledge_lake.pipeline.discover import discover_sources
+
+    try:
+        results = discover_sources(query=query, limit=limit)
+    except (RuntimeError, LookupError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    registered = [r for r in results if r["status"] == "registered"]
+    existing = [r for r in results if r["status"] == "existing"]
+    skipped = [r for r in results if r["status"] == "skipped_ssrf"]
+
+    typer.echo(f"Discovery: {len(results)} results, "
+               f"{len(registered)} registered, "
+               f"{len(existing)} existing, "
+               f"{len(skipped)} skipped (SSRF)")
+
+    for r in results:
+        status_marker = {
+            "registered": "+",
+            "existing": "=",
+            "skipped_ssrf": "X",
+        }.get(r["status"], "?")
+        sid = r["source_id"] or "n/a"
+        typer.echo(f"  [{status_marker}] {sid} {r['url']}")
+
+
 @app.command(name="ingest-url")
 def cmd_ingest_url(
     url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),

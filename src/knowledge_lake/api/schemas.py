@@ -173,3 +173,50 @@ class UploadOut(BaseModel):
         description="S3 URI of the stored content.",
     )
     content_hash: str = Field(description="SHA-256 hash of the uploaded content.")
+
+
+# ── Discovery schemas (02-06) ────────────────────────────────────────────────
+
+
+class DiscoverRequest(BaseModel):
+    """Request body for POST /discover — run a discovery query.
+
+    Pydantic validates at the API boundary (ASVS V5, T-02-25).
+    """
+
+    query: str = Field(
+        ...,
+        description="Natural-language search query for source discovery.",
+        min_length=1,
+        max_length=500,
+    )
+    limit: int = Field(
+        default=20,
+        description="Maximum number of results to request from the discovery engine.",
+        ge=1,
+        le=100,
+    )
+
+
+class DiscoverResultItem(BaseModel):
+    """A single discovered source result in POST /discover response."""
+
+    url: str = Field(description="The discovered URL.")
+    title: str = Field(description="Title from the search result.")
+    source_id: Optional[str] = Field(
+        default=None,
+        description="Registry source ID (None if skipped).",
+    )
+    status: str = Field(
+        description="Result status: 'registered', 'existing', or 'skipped_ssrf'."
+    )
+
+
+class DiscoverOut(BaseModel):
+    """Response body for POST /discover — list of discovery results."""
+
+    query: str = Field(description="The query that was executed.")
+    total: int = Field(description="Total number of results returned by the engine.")
+    results: list[DiscoverResultItem] = Field(
+        description="Per-result status with source IDs."
+    )

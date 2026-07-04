@@ -26,6 +26,9 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from knowledge_lake.api.schemas import (
+    DiscoverOut,
+    DiscoverRequest,
+    DiscoverResultItem,
     LineageGraph,
     LineageNode,
     SearchHit,
@@ -224,6 +227,53 @@ async def upload_endpoint(
 
     logger.info("api.uploads.complete", artifact_id=result["artifact_id"])
     return UploadOut(**result)
+
+
+@app.post(
+    "/discover",
+    response_model=DiscoverOut,
+    tags=["discovery"],
+    summary="Discover candidate sources via meta-search",
+    status_code=200,
+)
+async def discover_endpoint(body: DiscoverRequest) -> DiscoverOut:
+    """Run a source discovery query and auto-register valid results (INGEST-07).
+
+    Uses the configured DiscoveryPlugin (default: SearXNG) to search for
+    candidate sources. Each result URL is SSRF-validated (T-02-22) and
+    URL-deduped (D-08) before registration.
+
+    Security (T-02-25 / ASVS V5):
+        - query is bounded [1, 500] characters by pydantic.
+        - limit is bounded [1, 100] by pydantic.
+        - SSRF validation on every result URL before registration.
+    """
+    from knowledge_lake.pipeline.discover import discover_sources
+
+    logger.info("api.discover", query=body.query[:80], limit=body.limit)
+
+    try:
+        results = discover_sources(query=body.query, limit=body.limit)
+    except (RuntimeError, LookupError) as exc:
+        logger.warning("api.discover.error", error=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    items = [
+        DiscoverResultItem(
+            url=r["url"],
+            title=r["title"],
+            source_id=r["source_id"],
+            status=r["status"],
+        )
+        for r in results
+    ]
+
+    logger.info("api.discover.complete", total=len(items))
+    return DiscoverOut(
+        query=body.query,
+        total=len(items),
+        results=items,
+    )
 
 
 @app.get(
