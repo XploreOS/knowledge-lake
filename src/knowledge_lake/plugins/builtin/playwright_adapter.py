@@ -164,7 +164,7 @@ class PlaywrightAdapter:
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         url_path = parsed.path or "/"
 
-        robots_policy = await asyncio.get_event_loop().run_in_executor(None, fetch_robots, base_url)
+        robots_policy = await asyncio.get_running_loop().run_in_executor(None, fetch_robots, base_url)
         robots_delay = robots_policy.crawl_delay()
 
         if not robots_policy.is_allowed(url_path):

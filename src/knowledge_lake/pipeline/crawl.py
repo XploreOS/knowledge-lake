@@ -95,7 +95,7 @@ async def crawl_source(
     # thread so the event loop is not stalled (fetch_robots uses httpx.Client,
     # which is synchronous; WR-004).
     base_url = f"{urlparse(source_url).scheme}://{urlparse(source_url).netloc}"
-    robots_policy = await asyncio.get_event_loop().run_in_executor(None, fetch_robots, base_url)
+    robots_policy = await asyncio.get_running_loop().run_in_executor(None, fetch_robots, base_url)
     robots_crawl_delay = robots_policy.crawl_delay()
 
     # Seed URLs: start with the source_url itself
