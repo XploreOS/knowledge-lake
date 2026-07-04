@@ -241,3 +241,96 @@ class StorageBackend:
             storage_uri=artifact.storage_uri,
         )
         return artifact
+
+    # ── Content-addressed bronze zone (D-01, INGEST-04) ──────────────────────
+
+    def put_bronze(
+        self,
+        source_id: str,
+        data: bytes,
+        ext: str,
+        session: "Session",
+        *,
+        parent_artifact_id: str,
+    ) -> "Artifact":
+        """Write bytes to the content-addressed bronze zone with lineage.
+
+        Mirrors the put_raw pattern exactly (six enforcement layers) but:
+          - Zone prefix: ``bronze/`` (not ``raw/``)
+          - Artifact type: ``bronze_document`` (not ``raw_document``)
+          - parent_artifact_id: REQUIRED (links bronze -> raw, D-01 two-artifact lineage)
+
+        The hash-second no-op reuses get_artifact_by_hash("bronze_document") so
+        re-processing identical content is a registry-level no-op.
+
+        Parameters
+        ----------
+        source_id:
+            Registry source ID (used as the key prefix).
+        data:
+            Processed bytes to store (e.g. markdown, cleaned HTML).
+        ext:
+            File extension without the leading dot (e.g. ``"md"``).
+        session:
+            Active SQLAlchemy session for the registry lookup and write.
+        parent_artifact_id:
+            ID of the raw artifact this bronze artifact derives from (D-01 lineage).
+
+        Returns
+        -------
+        Artifact
+            Either the existing artifact (no-op path) or the newly created
+            bronze artifact.
+
+        Raises
+        ------
+        RuntimeError
+            If the content-addressed key already exists in S3 but no
+            registry artifact exists for this hash (defense-in-depth guard).
+        """
+        from knowledge_lake.registry import repo
+
+        # Layer 1: compute content hash
+        content_hash = hashlib.sha256(data).hexdigest()
+
+        # Layer 2: registry no-op — return existing artifact without any S3 write
+        existing = repo.get_artifact_by_hash(session, content_hash, "bronze_document")
+        if existing is not None:
+            log.debug(
+                "put_bronze no-op: artifact already in registry",
+                content_hash=content_hash,
+                artifact_id=existing.id,
+            )
+            return existing
+
+        # Layer 3: build content-addressed key
+        key = f"bronze/{source_id}/{content_hash}.{ext}"
+
+        # Layer 4: head_object guard — refuse overwrite if key already exists
+        if self.exists(key):
+            raise RuntimeError(
+                f"Bronze key already exists, refusing overwrite: {key!r}. "
+                "This should not happen for SHA256 content-addressed keys. "
+                "Possible corruption — do not overwrite the bronze zone."
+            )
+
+        # Layer 5: write bytes to S3
+        self.put_object(key, data)
+        log.info("put_bronze stored new bronze artifact", key=key, size=len(data))
+
+        # Layer 6: create registry artifact node with parent linkage
+        artifact = repo.create_bronze_artifact(
+            session,
+            source_id=source_id,
+            content_hash=content_hash,
+            storage_uri=self.object_uri(key),
+            parent_artifact_id=parent_artifact_id,
+        )
+        session.flush()
+        log.info(
+            "put_bronze created registry node",
+            artifact_id=artifact.id,
+            parent_artifact_id=parent_artifact_id,
+            storage_uri=artifact.storage_uri,
+        )
+        return artifact

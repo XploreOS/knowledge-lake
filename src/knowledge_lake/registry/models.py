@@ -260,16 +260,107 @@ class LineageEvent(Base):
 
 
 class Job(Base):
-    """Pipeline job record — created empty in migration #1 (FOUND-05).
+    """Pipeline job record (FOUND-05, INGEST-04).
 
-    Exercised in later phases when Dagster run IDs are linked to artifact
-    production batches.
+    Extended in Phase 2 with source_id, job_type, crawler, config, stats,
+    and updated_at to support crawl job tracking.
     """
 
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+
+    source_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("sources.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """FK to the source being crawled (nullable for legacy jobs)."""
+
+    job_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="crawl"
+    )
+    """Job type discriminator (default 'crawl')."""
+
+    crawler: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    """Name of the crawler adapter that owns this job."""
+
+    config: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    """Job-specific configuration (max_pages, max_depth, etc.)."""
+
+    stats: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    """Job statistics (pages_fetched, errors, duration, etc.)."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    """Timestamp of last status update."""
+
+
+class CrawlState(Base):
+    """Per-URL crawl state tracking (INGEST-04, T-02-05).
+
+    Records the crawl status of each URL within a job. The UNIQUE constraint
+    on (job_id, normalized_url) — NOT on content_hash — prevents duplicate
+    processing of the same URL within a job while allowing identical content
+    under different URLs to have separate state rows (Pitfall 4).
+    """
+
+    __tablename__ = "crawl_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "job_id", "normalized_url", name="uq_crawl_states_job_url"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always 'cst_<uuidv7>'."""
+
+    job_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("jobs.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    """FK to the parent crawl job."""
+
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    """Original URL as discovered during the crawl."""
+
+    normalized_url: Mapped[str] = mapped_column(Text, nullable=False)
+    """Normalized URL for dedup within the job (lowercase host, strip fragment)."""
+
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    """Page-level status: 'pending', 'complete', 'failed', 'robots_blocked'."""
+
+    raw_artifact_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """FK to the raw artifact created from this page (NULL until fetched)."""
+
+    bronze_artifact_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """FK to the bronze artifact (markdown/processed) from this page."""
+
+    fetched_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    """UTC timestamp of when this URL was successfully fetched."""
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
