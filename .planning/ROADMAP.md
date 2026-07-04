@@ -47,7 +47,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 2: Ingestion
 
-**Goal**: Users can get any public resource into the lake — register sources, pull single URLs, upload local files, crawl static/structured/dynamic sites with swappable crawler plugins, and discover new candidate sources — all with provenance, dedup, and legal politeness built in
+**Goal**: As a domain researcher, I want to ingest any public resource (URL, file, or crawl) into the lake with provenance and dedup, so that I have a traceable raw zone of source material to build AI datasets from.
 **Mode:** mvp
 **Depends on**: Phase 1
 **Requirements**: INGEST-01, INGEST-02, INGEST-03, INGEST-04, INGEST-05, INGEST-06, INGEST-07, INGEST-08, INGEST-09
