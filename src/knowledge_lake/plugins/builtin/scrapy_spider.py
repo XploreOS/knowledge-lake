@@ -36,6 +36,31 @@ log = structlog.get_logger(__name__)
 _DOWNLOAD_MAXSIZE = 50 * 1024 * 1024
 
 
+class SSRFGuardMiddleware:
+    """Block requests to private/internal addresses (T-02-15, CR-03).
+
+    Defined at module level so Scrapy can resolve it by the dotted string
+    'knowledge_lake.plugins.builtin.scrapy_spider.SSRFGuardMiddleware'.
+    A locally-scoped class inside a function body is not reachable via
+    importlib.import_module + getattr, which is how Scrapy loads middleware.
+    """
+
+    @classmethod
+    def from_crawler(cls, crawler: Any) -> "SSRFGuardMiddleware":
+        return cls()
+
+    def process_request(self, request: Any, spider: Any) -> None:
+        from knowledge_lake.pipeline.ingest import validate_public_url
+
+        try:
+            validate_public_url(request.url)
+        except ValueError as exc:
+            import scrapy.exceptions
+
+            log.warning("scrapy_spider.ssrf_blocked", url=request.url, error=str(exc))
+            raise scrapy.exceptions.IgnoreRequest(str(exc)) from exc
+
+
 def _registrable_domain(url: str) -> str:
     """Return host for same-domain scoping (simple hostname check)."""
     parsed = urlparse(url)
@@ -54,8 +79,6 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
     from scrapy.crawler import CrawlerProcess
     from scrapy.http import Response
 
-    from knowledge_lake.pipeline.ingest import validate_public_url
-
     max_pages: int = int(config.get("max_pages", 50))
     max_depth: int = int(config.get("max_depth", 3))
     per_host_delay: float = float(config.get("per_host_delay", 1.0))
@@ -70,20 +93,6 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         with _lock:
             _out_file.write(json.dumps(obj) + "\n")
             _out_file.flush()
-
-    class SSRFGuardMiddleware:
-        """Reject any request whose URL fails the SSRF guard (T-02-15)."""
-
-        @classmethod
-        def from_crawler(cls, crawler: Any) -> "SSRFGuardMiddleware":
-            return cls()
-
-        def process_request(self, request: Any, spider: Any) -> None:
-            try:
-                validate_public_url(request.url)
-            except ValueError as exc:
-                log.warning("scrapy_spider.ssrf_blocked", url=request.url, error=str(exc))
-                raise scrapy.exceptions.IgnoreRequest(str(exc)) from exc
 
     class MaxPagesExtension:
         """Close the spider once max_pages completed pages have been written."""
@@ -197,9 +206,6 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         # Disable stats logging
         "STATS_DUMP": False,
     }
-
-    # Expose middleware class for Scrapy discovery
-    SSRFGuardMiddleware.__module__ = __name__
 
     process = CrawlerProcess(settings=settings_dict)
     process.crawl(KlakeSpider)
