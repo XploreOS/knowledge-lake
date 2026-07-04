@@ -115,7 +115,7 @@ async def health() -> dict[str, str]:
     tags=["search"],
     summary="Semantic search over indexed chunks",
 )
-async def search_endpoint(
+def search_endpoint(
     q: str = Query(..., description="Natural-language search query."),
     top_k: int = Query(
         default=5,
@@ -183,7 +183,7 @@ async def search_endpoint(
     summary="Register a source URL",
     status_code=201,
 )
-async def create_source_endpoint(body: SourceCreate) -> SourceOut:
+def create_source_endpoint(body: SourceCreate) -> SourceOut:
     """Register a source URL with URL-first dedup (INGEST-01).
 
     If the normalized URL already exists, returns the existing source (HTTP 201
@@ -220,7 +220,7 @@ async def create_source_endpoint(body: SourceCreate) -> SourceOut:
     summary="Upload a local file into the raw zone",
     status_code=201,
 )
-async def upload_endpoint(
+def upload_endpoint(
     file_path: str = Query(
         ...,
         description="Absolute path to the file on the server filesystem.",
@@ -269,7 +269,7 @@ async def upload_endpoint(
     summary="Discover candidate sources via meta-search",
     status_code=200,
 )
-async def discover_endpoint(body: DiscoverRequest) -> DiscoverOut:
+def discover_endpoint(body: DiscoverRequest) -> DiscoverOut:
     """Run a source discovery query and auto-register valid results (INGEST-07).
 
     Uses the configured DiscoveryPlugin (default: SearXNG) to search for
@@ -429,7 +429,7 @@ async def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
         404: {"description": "Artifact not found in the registry"},
     },
 )
-async def lineage_endpoint(artifact_id: str) -> list[LineageNode]:
+def lineage_endpoint(artifact_id: str) -> list[LineageNode]:
     """Resolve the full ancestry chain of an artifact (FOUND-07 API).
 
     Walks from the given artifact up to the raw source via the recursive CTE
