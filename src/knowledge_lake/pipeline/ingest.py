@@ -485,16 +485,31 @@ def ingest_file(
             log.info("ingest_file.dedup_hit", **result)
             return result
 
+    # URL-first dedup (WR-004): if source_url is provided, check for an
+    # existing source with the same normalized URL before creating a new one.
+    # Without this check, repeated calls with the same source_url would attempt
+    # to INSERT duplicate source rows, raising IntegrityError from the
+    # uq_sources_normalized_url constraint added in migration 0005.
+    norm_url = normalize_url(source_url) if source_url else None
     with get_session() as session:
-        source = registry_repo.create_source(
-            session,
-            name=source_name,
-            source_type="upload",
-            url=source_url or str(fpath),
-            normalized_url=normalize_url(source_url) if source_url else None,
-            license_type=license_type,
-            robots_checked=False,  # local uploads don't need robots.txt check
-        )
+        if norm_url:
+            existing_source = registry_repo.get_source_by_normalized_url(session, norm_url)
+        else:
+            existing_source = None
+
+        if existing_source is not None:
+            source = existing_source
+            log.info("ingest_file.source_url_dedup_hit", source_id=source.id, norm_url=norm_url)
+        else:
+            source = registry_repo.create_source(
+                session,
+                name=source_name,
+                source_type="upload",
+                url=source_url or str(fpath),
+                normalized_url=norm_url,
+                license_type=license_type,
+                robots_checked=False,  # local uploads don't need robots.txt check
+            )
         session.flush()
         artifact = storage.put_raw(source.id, data, ext, session)
         session.flush()
