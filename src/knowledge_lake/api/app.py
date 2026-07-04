@@ -333,7 +333,7 @@ async def create_crawl_job_endpoint(body: CrawlJobCreate) -> CrawlJobOut:
     logger.info("api.crawl_jobs.create", source_url=body.source_url, crawler=body.crawler)
 
     try:
-        result = crawl_source(
+        result = await crawl_source(
             body.source_url,
             crawler=body.crawler,
             max_pages=body.max_pages,

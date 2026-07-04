@@ -188,14 +188,15 @@ def cmd_crawl(
     and writes two artifacts per page (raw HTML + bronze markdown) with full lineage.
     Resume-safe: re-running fetches only pending URLs.
     """
+    import asyncio
     from knowledge_lake.pipeline.crawl import crawl_source
 
     try:
-        result = crawl_source(
+        result = asyncio.run(crawl_source(
             url,
             crawler=crawler,
             max_pages=max_pages,
-        )
+        ))
         typer.echo(f"Crawl complete:")
         typer.echo(f"  job_id:              {result['job_id']}")
         typer.echo(f"  source_id:           {result['source_id']}")

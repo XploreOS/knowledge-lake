@@ -35,7 +35,7 @@ from knowledge_lake.storage.s3 import StorageBackend
 log = logging.getLogger(__name__)
 
 
-def crawl_source(
+async def crawl_source(
     source_url: str,
     *,
     crawler: Optional[str] = None,
@@ -44,7 +44,10 @@ def crawl_source(
 ) -> dict[str, Any]:
     """Crawl a source URL end-to-end: fetch pages, write raw+bronze, track state.
 
-    This is the main entry point called by the CLI and API. It orchestrates:
+    This is the main entry point called by the CLI (via asyncio.run) and the
+    API (awaited directly from the async handler — CR-02).
+
+    Orchestrates:
       1. Source registration
       2. Crawl job creation
       3. Robots.txt policy fetch
@@ -101,19 +104,17 @@ def crawl_source(
         max_pages=effective_max_pages,
     )
 
-    # Run the async crawl loop
-    stats = asyncio.run(
-        _crawl_loop(
-            urls=urls_to_process,
-            job_id=job_id,
-            source_id=source_id,
-            adapter=adapter,
-            robots_policy=robots_policy,
-            robots_crawl_delay=robots_crawl_delay,
-            seed_domain=seed_domain,
-            max_pages=effective_max_pages,
-            settings=s,
-        )
+    # Await the async crawl loop directly (no asyncio.run — CR-02)
+    stats = await _crawl_loop(
+        urls=urls_to_process,
+        job_id=job_id,
+        source_id=source_id,
+        adapter=adapter,
+        robots_policy=robots_policy,
+        robots_crawl_delay=robots_crawl_delay,
+        seed_domain=seed_domain,
+        max_pages=effective_max_pages,
+        settings=s,
     )
 
     # Update job status
