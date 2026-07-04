@@ -22,6 +22,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import tldextract
 
@@ -83,7 +84,12 @@ def _domain_key(url: str) -> str:
         Registrable domain (e.g. 'example.com').
     """
     extracted = tldextract.extract(url)
-    return f"{extracted.domain}.{extracted.suffix}"
+    if extracted.domain and extracted.suffix:
+        return f"{extracted.domain}.{extracted.suffix}"
+    # Raw IP or bare hostname (no public suffix) — use the full hostname as the
+    # bucket key to avoid trailing-dot keys like "localhost." or "10." that would
+    # incorrectly group unrelated hosts under the same rate-limit bucket.
+    return urlparse(url).hostname or url
 
 
 class PerHostLimiter:
