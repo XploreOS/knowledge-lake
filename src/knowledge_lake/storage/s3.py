@@ -26,6 +26,8 @@ import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
 
+from sqlalchemy.exc import IntegrityError
+
 from knowledge_lake.config.settings import StorageSettings
 
 if TYPE_CHECKING:
@@ -228,13 +230,24 @@ class StorageBackend:
         log.info("put_raw stored new raw artifact", key=key, size=len(data))
 
         # Layer 6: create registry artifact node
-        artifact = repo.create_raw_artifact(
-            session,
-            source_id=source_id,
-            content_hash=content_hash,
-            storage_uri=self.object_uri(key),
-        )
-        session.flush()
+        # Catch IntegrityError from concurrent writes of identical content:
+        # both workers pass layers 1-2 (registry check), then both write to S3
+        # (idempotent for SHA256 content-addressed keys), then both attempt the
+        # registry insert. The second writer gets IntegrityError on
+        # uq_artifacts_hash_type; we roll back and return the first writer's row.
+        try:
+            artifact = repo.create_raw_artifact(
+                session,
+                source_id=source_id,
+                content_hash=content_hash,
+                storage_uri=self.object_uri(key),
+            )
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            artifact = repo.get_artifact_by_hash(session, content_hash, "raw_document")
+            if artifact is None:
+                raise  # unexpected — constraint violation on a different column
         log.info(
             "put_raw created registry node",
             artifact_id=artifact.id,
@@ -319,14 +332,22 @@ class StorageBackend:
         log.info("put_bronze stored new bronze artifact", key=key, size=len(data))
 
         # Layer 6: create registry artifact node with parent linkage
-        artifact = repo.create_bronze_artifact(
-            session,
-            source_id=source_id,
-            content_hash=content_hash,
-            storage_uri=self.object_uri(key),
-            parent_artifact_id=parent_artifact_id,
-        )
-        session.flush()
+        # Same concurrent-write race protection as put_raw: catch IntegrityError
+        # and return the winning writer's artifact row.
+        try:
+            artifact = repo.create_bronze_artifact(
+                session,
+                source_id=source_id,
+                content_hash=content_hash,
+                storage_uri=self.object_uri(key),
+                parent_artifact_id=parent_artifact_id,
+            )
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            artifact = repo.get_artifact_by_hash(session, content_hash, "bronze_document")
+            if artifact is None:
+                raise  # unexpected — constraint violation on a different column
         log.info(
             "put_bronze created registry node",
             artifact_id=artifact.id,
