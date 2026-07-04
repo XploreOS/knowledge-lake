@@ -47,24 +47,23 @@ from knowledge_lake.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
-# Upload root: all file paths supplied to /uploads must be under this directory.
-# Override via KLAKE_UPLOAD_ROOT env var or set upload_root in settings.
-# Defaults to /data/uploads; the path must exist on the server.
-_UPLOAD_ROOT = Path("/data/uploads")
-
-
 def _safe_upload_path(raw: str) -> Path:
-    """Resolve ``raw`` and assert it is inside ``_UPLOAD_ROOT``.
+    """Resolve ``raw`` and assert it is inside the configured upload root.
+
+    The upload root is read from ``settings.upload_root`` (default ``/data/uploads``,
+    overridable via ``KLAKE_UPLOAD_ROOT`` env var) so the guard tracks the
+    deployment configuration rather than a hardcoded constant (CR-004).
 
     Prevents arbitrary file-read: callers cannot supply /etc/passwd or
-    any path outside the designated upload directory (CR-01).
+    any path outside the designated upload directory.
 
     Raises:
         HTTPException 400: When the resolved path escapes the upload root.
     """
+    upload_root = Path(get_settings().upload_root).resolve()
     p = Path(raw).resolve()
     try:
-        p.relative_to(_UPLOAD_ROOT.resolve())
+        p.relative_to(upload_root)
     except ValueError:
         raise HTTPException(
             status_code=400,

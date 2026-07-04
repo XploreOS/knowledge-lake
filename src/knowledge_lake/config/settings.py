@@ -123,6 +123,15 @@ class Settings(BaseSettings):
     discovery: str = "searxng"
     """Discovery plugin name. 'searxng' = SearXNG meta-search engine (D-10)."""
 
+    # ── Upload root ───────────────────────────────────────────────────────────
+    upload_root: str = "/data/uploads"
+    """Directory under which all uploaded file paths must reside.
+
+    Override via KLAKE_UPLOAD_ROOT env var. The _safe_upload_path guard in
+    api/app.py resolves this at request time so the running server always
+    uses the current value (CR-004).
+    """
+
     # ── Nested settings ───────────────────────────────────────────────────────
     storage: StorageSettings = Field(default_factory=StorageSettings)
     """S3-compatible object storage configuration."""
