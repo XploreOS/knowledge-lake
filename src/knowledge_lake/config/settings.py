@@ -17,10 +17,11 @@ Environment variable pattern:
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -47,6 +48,30 @@ class StorageSettings(BaseModel):
 
     secret_access_key: str | None = None
     """AWS secret access key or MinIO root password. None = use instance credentials."""
+
+
+class CrawlSettings(BaseModel):
+    """Crawl-related configuration (INGEST-04, INGEST-09).
+
+    Controls crawler behavior: depth, breadth, rate limiting, and scope.
+    These are the global defaults; per-source overrides live in Source.config.
+    """
+
+    max_pages: int = 50
+    """Maximum number of pages to crawl per job."""
+
+    max_depth: int = 2
+    """Maximum link-follow depth from the seed URL."""
+
+    rate_limit_seconds: float = 1.0
+    """Global default delay between requests to the same host (tier 3, D-12)."""
+
+    same_domain_only: bool = True
+    """If True, only follow links on the same registrable domain as the seed."""
+
+
+# Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
+_SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
 
 class Settings(BaseSettings):
@@ -89,9 +114,32 @@ class Settings(BaseSettings):
     vectorstore: str = "qdrant"
     """Vector-store plugin name. 'qdrant' = Qdrant client."""
 
+    crawler: str = "crawl4ai"
+    """Crawler plugin name. 'crawl4ai' = Crawl4AI async crawler; 'scrapy' = Scrapy."""
+
     # ── Nested settings ───────────────────────────────────────────────────────
     storage: StorageSettings = Field(default_factory=StorageSettings)
     """S3-compatible object storage configuration."""
+
+    crawl: CrawlSettings = Field(default_factory=CrawlSettings)
+    """Crawl-related configuration (depth, rate limiting, scope)."""
+
+    # ── Validators ────────────────────────────────────────────────────────────
+
+    @field_validator("crawler", "embedder", "parser", "vectorstore", mode="after")
+    @classmethod
+    def _validate_swap_key(cls, v: str) -> str:
+        """Validate swap keys against ASVS V5 (input validation).
+
+        Swap keys must be alphanumeric (+ hyphen/underscore), starting with a
+        letter, max 64 chars.  This prevents path traversal, injection, and
+        arbitrary code-loading via malicious entry-point names.
+        """
+        if not _SWAP_KEY_RE.match(v):
+            raise ValueError(
+                f"Invalid swap key {v!r}: must match ^[a-zA-Z][a-zA-Z0-9_-]{{0,63}}$"
+            )
+        return v
 
     def __init__(self, **data: Any) -> None:
         # If _env_file is explicitly passed as None (e.g. in tests), suppress .env loading.

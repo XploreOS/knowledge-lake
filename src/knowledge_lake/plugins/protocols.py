@@ -231,3 +231,125 @@ class VectorStorePlugin(Protocol):
             List of Hit objects ordered by score descending.
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Crawler data structures (INGEST-04, INGEST-09)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CrawlJob:
+    """Represents an in-progress or completed crawl job.
+
+    Created by CrawlerPlugin.start_crawl() and tracked in the jobs table.
+    The status field reflects the crawler adapter's view of the job lifecycle.
+    """
+
+    job_id: str
+    """Registry job ID (prefixed UUIDv7, e.g. 'job_<uuid>')."""
+
+    source_url: str
+    """The seed URL that initiated this crawl."""
+
+    crawler: str
+    """Name of the crawler adapter that owns this job (e.g. 'crawl4ai')."""
+
+    status: str = "pending"
+    """Job status: 'pending', 'running', 'complete', 'failed'."""
+
+    config: dict[str, Any] = field(default_factory=dict)
+    """Crawler-specific configuration passed at job creation."""
+
+
+@dataclass
+class CrawlPageResult:
+    """A single page result from a completed crawl.
+
+    Returned by CrawlerPlugin.get_results() for each URL fetched during the
+    crawl.  The html/markdown fields may be None for failed or blocked pages.
+    """
+
+    url: str
+    """The URL that was fetched."""
+
+    status: str
+    """Page-level status: 'complete', 'failed', 'robots_blocked'."""
+
+    html: bytes | None = None
+    """Raw HTML bytes (None if fetch failed or was blocked)."""
+
+    markdown: str | None = None
+    """Cleaned markdown output (None if not produced by the crawler)."""
+
+    error: str | None = None
+    """Error message if status is 'failed' (None on success)."""
+
+    fetched_at: str | None = None
+    """ISO-8601 timestamp of when the page was fetched (None if not fetched)."""
+
+
+# ---------------------------------------------------------------------------
+# Crawler Plugin Protocol (INGEST-04, D-02)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class CrawlerPlugin(Protocol):
+    """Protocol for web crawlers that fetch pages from a seed URL.
+
+    Implementations must expose a multi-method interface supporting long-running
+    crawls (D-02):
+      name        — stable identifier for resolver lookup
+      start_crawl — initiate a crawl job for a given URL
+      poll_status — check the current status of a running job
+      get_results — retrieve page results once a job completes
+
+    Default built-in: Crawl4AIAdapter ('crawl4ai') — async-first, JS-rendered,
+    LLM-ready markdown output.
+    Config switch:    ScrapyAdapter ('scrapy') — high-volume structured crawling.
+
+    The crawler swap key (settings.crawler) selects the active implementation
+    via the 'knowledge_lake.crawlers' entry-point group. No os.environ reads
+    in builtins (CR-03); service URLs/config injected from Settings.
+    """
+
+    name: str
+    """Stable name used to look up this implementation via the resolver."""
+
+    def start_crawl(self, source_url: str, config: dict[str, Any]) -> CrawlJob:
+        """Initiate a crawl job for the given seed URL.
+
+        Args:
+            source_url: The URL to start crawling from.
+            config:     Crawler-specific configuration (max_pages, max_depth, etc.).
+
+        Returns:
+            A CrawlJob with a unique job_id and initial status 'pending'.
+        """
+        ...
+
+    def poll_status(self, job_id: str) -> str:
+        """Check the current status of a crawl job.
+
+        Args:
+            job_id: The job ID returned by start_crawl().
+
+        Returns:
+            Current status string: 'pending', 'running', 'complete', or 'failed'.
+        """
+        ...
+
+    def get_results(self, job_id: str) -> list[CrawlPageResult]:
+        """Retrieve the page results of a completed crawl job.
+
+        Args:
+            job_id: The job ID of a completed crawl.
+
+        Returns:
+            List of CrawlPageResult objects, one per URL fetched during the crawl.
+
+        Raises:
+            RuntimeError: If the job is not yet complete.
+        """
+        ...

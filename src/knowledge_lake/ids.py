@@ -34,6 +34,9 @@ _PREFIX: dict[str, str] = {
     "parsed_document": "doc",
     "chunk": "chk",
     "artifact": "art",
+    "crawl_job": "job",
+    "crawl_state": "cst",
+    "bronze_document": "doc",
 }
 
 

@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 GROUP_PARSERS = "knowledge_lake.parsers"
 GROUP_EMBEDDERS = "knowledge_lake.embedders"
 GROUP_VECTORSTORES = "knowledge_lake.vectorstores"
+GROUP_CRAWLERS = "knowledge_lake.crawlers"
 
 
 def resolve(group: str, name: str) -> Any:
@@ -139,3 +140,24 @@ def get_vectorstore(settings: "Settings") -> Any:
         f"Check that the package declaring this plugin is installed and that "
         f"the name is spelled correctly in your settings."
     )
+
+
+def get_crawler(settings: "Settings") -> Any:
+    """Return the CrawlerPlugin named by settings.crawler.
+
+    Reads the 'crawler' swap key from the provided Settings instance and
+    resolves it via the 'knowledge_lake.crawlers' entry-point group.
+
+    Default: 'crawl4ai' -> Crawl4AIAdapter (async-first, JS-rendered, markdown output).
+    Switch:  'scrapy'   -> ScrapyAdapter (high-volume structured crawling).
+
+    No os.environ reads in builtins (CR-03); service URLs/config are injected
+    from Settings where needed by the adapter factory.
+
+    Args:
+        settings: Application Settings instance.
+
+    Returns:
+        An instantiated CrawlerPlugin (satisfies CrawlerPlugin Protocol).
+    """
+    return resolve(GROUP_CRAWLERS, settings.crawler)
