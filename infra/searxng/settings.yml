@@ -12,8 +12,11 @@ general:
 
 server:
   # Secret key for CSRF and session security.
-  # Override in production via SEARXNG_SECRET env var.
-  secret_key: "klake-dev-searxng-secret-change-in-production"
+  # REQUIRED: set SEARXNG_SECRET before any non-local deployment.
+  # Generate a value with:
+  #   python3 -c "import secrets; print(secrets.token_hex(32))"
+  # Then export SEARXNG_SECRET=<generated value> in your environment or .env file.
+  secret_key: "${SEARXNG_SECRET:?SEARXNG_SECRET environment variable must be set}"
   bind_address: "0.0.0.0"
   port: 8080
 
