@@ -316,28 +316,34 @@ def discover_endpoint(body: DiscoverRequest) -> DiscoverOut:
     summary="Start a crawl job for a source URL",
     status_code=201,
 )
-async def create_crawl_job_endpoint(body: CrawlJobCreate) -> CrawlJobOut:
+def create_crawl_job_endpoint(body: CrawlJobCreate) -> CrawlJobOut:
     """Start a crawl job for the given source URL (INGEST-04).
 
     Creates a crawl job and runs it synchronously, writing raw+bronze artifacts
     for each successfully fetched page. Resume-safe: re-running for the same
     source URL picks up where a prior interrupted crawl left off.
 
+    Declared as `def` (not `async def`) so FastAPI runs it in a thread pool
+    via anyio.to_thread.run_sync — consistent with the other sync handlers and
+    avoiding blocking the event loop with synchronous DB calls (WR-007).
+    crawl_source is async and is invoked via asyncio.run() inside the thread.
+
     Security (T-02-13 / ASVS V5):
         - source_url is validated by pydantic (min_length=8).
         - crawler override is validated against registered crawlers.
         - max_pages is bounded [1, 10000].
     """
+    import asyncio as _asyncio
     from knowledge_lake.pipeline.crawl import crawl_source
 
     logger.info("api.crawl_jobs.create", source_url=body.source_url, crawler=body.crawler)
 
     try:
-        result = await crawl_source(
+        result = _asyncio.run(crawl_source(
             body.source_url,
             crawler=body.crawler,
             max_pages=body.max_pages,
-        )
+        ))
     except ValueError as exc:
         logger.warning("api.crawl_jobs.validation_error", error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -371,7 +377,7 @@ async def create_crawl_job_endpoint(body: CrawlJobCreate) -> CrawlJobOut:
         404: {"description": "Crawl job not found"},
     },
 )
-async def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
+def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
     """Get the status and page counts of a crawl job (INGEST-04).
 
     Returns the job header + crawl_states summary (counts by status).
