@@ -142,11 +142,25 @@ def _make_mock_response(status_code: int, text: str = "") -> MagicMock:
     return resp
 
 
-class TestProbeSite:
-    """Tests for probe_site with mocked httpx calls."""
+def _make_mock_client(responses: list) -> MagicMock:
+    """Build a mock httpx.Client context manager with a sequence of GET responses.
 
-    @patch("knowledge_lake.crawl.select.httpx")
-    def test_has_sitemap_from_sitemap_xml_200(self, mock_httpx: Any) -> None:
+    probe_site uses _safe_get, which calls ``httpx.Client(follow_redirects=False)``
+    as a context manager.  Each call to ``client.get(url, ...)`` inside the
+    ``with`` block consumes the next response from ``responses``.
+    """
+    mock_client = MagicMock()
+    mock_client.__enter__ = MagicMock(return_value=mock_client)
+    mock_client.__exit__ = MagicMock(return_value=False)
+    mock_client.get.side_effect = responses
+    return mock_client
+
+
+class TestProbeSite:
+    """Tests for probe_site with mocked httpx.Client calls."""
+
+    @patch("knowledge_lake.crawl.select.httpx.Client")
+    def test_has_sitemap_from_sitemap_xml_200(self, mock_client_cls: Any) -> None:
         """probe_site returns has_sitemap=True when /sitemap.xml responds 200."""
         # Entry URL GET → 200 + minimal HTML
         entry_resp = _make_mock_response(200, STATIC_HTML)
@@ -155,15 +169,14 @@ class TestProbeSite:
         # /sitemap.xml GET → 200
         sitemap_resp = _make_mock_response(200, "<?xml version='1.0'?>...")
 
-        # Sequence: entry GET, robots GET, sitemap GET
-        mock_httpx.get.side_effect = [entry_resp, robots_resp, sitemap_resp]
+        mock_client_cls.return_value = _make_mock_client([entry_resp, robots_resp, sitemap_resp])
 
         html, has_sitemap = probe_site("https://example.com")
         assert has_sitemap is True
         assert html == STATIC_HTML
 
-    @patch("knowledge_lake.crawl.select.httpx")
-    def test_has_sitemap_from_robots_directive(self, mock_httpx: Any) -> None:
+    @patch("knowledge_lake.crawl.select.httpx.Client")
+    def test_has_sitemap_from_robots_directive(self, mock_client_cls: Any) -> None:
         """probe_site returns has_sitemap=True when robots.txt has Sitemap: directive."""
         entry_resp = _make_mock_response(200, STATIC_HTML)
         # /robots.txt contains Sitemap: directive
@@ -174,13 +187,13 @@ class TestProbeSite:
         # /sitemap.xml is 404 (but robots.txt Sitemap: is enough)
         sitemap_resp = _make_mock_response(404, "")
 
-        mock_httpx.get.side_effect = [entry_resp, robots_resp, sitemap_resp]
+        mock_client_cls.return_value = _make_mock_client([entry_resp, robots_resp, sitemap_resp])
 
         html, has_sitemap = probe_site("https://example.com")
         assert has_sitemap is True
 
-    @patch("knowledge_lake.crawl.select.httpx")
-    def test_no_sitemap(self, mock_httpx: Any) -> None:
+    @patch("knowledge_lake.crawl.select.httpx.Client")
+    def test_no_sitemap(self, mock_client_cls: Any) -> None:
         """probe_site returns has_sitemap=False when both robots.txt and /sitemap.xml are absent."""
         entry_resp = _make_mock_response(200, STATIC_HTML)
         # /robots.txt → no Sitemap: directive
@@ -188,25 +201,24 @@ class TestProbeSite:
         # /sitemap.xml → 404
         sitemap_resp = _make_mock_response(404, "")
 
-        mock_httpx.get.side_effect = [entry_resp, robots_resp, sitemap_resp]
+        mock_client_cls.return_value = _make_mock_client([entry_resp, robots_resp, sitemap_resp])
 
         html, has_sitemap = probe_site("https://example.com")
         assert has_sitemap is False
 
-    @patch("knowledge_lake.crawl.select.httpx")
-    def test_robots_404_sitemap_404(self, mock_httpx: Any) -> None:
+    @patch("knowledge_lake.crawl.select.httpx.Client")
+    def test_robots_404_sitemap_404(self, mock_client_cls: Any) -> None:
         """probe_site returns has_sitemap=False when robots.txt is 404 and /sitemap.xml is 404."""
         entry_resp = _make_mock_response(200, STATIC_HTML)
         robots_resp = _make_mock_response(404, "")
         sitemap_resp = _make_mock_response(404, "")
 
-        mock_httpx.get.side_effect = [entry_resp, robots_resp, sitemap_resp]
+        mock_client_cls.return_value = _make_mock_client([entry_resp, robots_resp, sitemap_resp])
 
         html, has_sitemap = probe_site("https://example.com")
         assert has_sitemap is False
 
-    @patch("knowledge_lake.crawl.select.httpx")
-    def test_raises_on_private_ip(self, mock_httpx: Any) -> None:
+    def test_raises_on_private_ip(self) -> None:
         """probe_site raises ValueError for private/SSRF-blocked URLs."""
         with pytest.raises(ValueError):
             probe_site("https://192.168.1.1/")
