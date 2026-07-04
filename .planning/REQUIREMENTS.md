@@ -21,15 +21,15 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Ingestion
 
-- [ ] **INGEST-01**: User can register a source URL with domain assignment via CLI and API
-- [ ] **INGEST-02**: User can download a single URL into the raw zone with SHA256, MIME type, source URL, timestamp, and license metadata recorded
-- [ ] **INGEST-03**: User can upload a local file into the raw zone with the same provenance metadata
-- [ ] **INGEST-04**: User can crawl a source with Crawl4AI producing LLM-ready markdown into the raw/bronze zones
+- [x] **INGEST-01**: User can register a source URL with domain assignment via CLI and API
+- [x] **INGEST-02**: User can download a single URL into the raw zone with SHA256, MIME type, source URL, timestamp, and license metadata recorded
+- [x] **INGEST-03**: User can upload a local file into the raw zone with the same provenance metadata
+- [x] **INGEST-04**: User can crawl a source with Crawl4AI producing LLM-ready markdown into the raw/bronze zones
 - [x] **INGEST-05**: User can crawl structured sites with Scrapy as an alternative crawler plugin
 - [x] **INGEST-06**: User can crawl dynamic pages with Playwright as an alternative crawler plugin
-- [ ] **INGEST-07**: User can discover candidate sources via SearXNG search query and store them in the source registry
-- [ ] **INGEST-08**: Ingestion deduplicates by normalized URL and content hash — re-ingesting identical content is a no-op
-- [ ] **INGEST-09**: Crawler respects robots.txt and applies per-host rate limits with retries and backoff
+- [x] **INGEST-07**: User can discover candidate sources via SearXNG search query and store them in the source registry
+- [x] **INGEST-08**: Ingestion deduplicates by normalized URL and content hash — re-ingesting identical content is a no-op
+- [x] **INGEST-09**: Crawler respects robots.txt and applies per-host rate limits with retries and backoff
 
 ### Parsing
 
@@ -148,15 +148,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FOUND-07 | Phase 1 | Complete |
 | FOUND-08 | Phase 1 | Complete |
 | FOUND-09 | Phase 1 | Complete |
-| INGEST-01 | Phase 2 | Pending |
-| INGEST-02 | Phase 2 | Pending |
-| INGEST-03 | Phase 2 | Pending |
-| INGEST-04 | Phase 2 | Pending |
+| INGEST-01 | Phase 2 | Complete |
+| INGEST-02 | Phase 2 | Complete |
+| INGEST-03 | Phase 2 | Complete |
+| INGEST-04 | Phase 2 | Complete |
 | INGEST-05 | Phase 2 | Complete |
 | INGEST-06 | Phase 2 | Complete |
-| INGEST-07 | Phase 2 | Pending |
-| INGEST-08 | Phase 2 | Pending |
-| INGEST-09 | Phase 2 | Pending |
+| INGEST-07 | Phase 2 | Complete |
+| INGEST-08 | Phase 2 | Complete |
+| INGEST-09 | Phase 2 | Complete |
 | PARSE-01 | Phase 3 | Pending |
 | PARSE-02 | Phase 3 | Pending |
 | PARSE-03 | Phase 3 | Pending |

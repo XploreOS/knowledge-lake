@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
-| 2. Ingestion | 6/6 | Complete   | 2026-07-04 |
+| 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 0/TBD | Not started | - |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
