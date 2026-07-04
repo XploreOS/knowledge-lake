@@ -1,8 +1,8 @@
 ---
 phase: 02-ingestion
-reviewed: 2026-07-04T00:00:00Z
+reviewed: 2026-07-04T12:00:00Z
 depth: standard
-files_reviewed: 46
+files_reviewed: 47
 files_reviewed_list:
   - infra/searxng/settings.yml
   - src/knowledge_lake/api/app.py
@@ -26,6 +26,8 @@ files_reviewed_list:
   - src/knowledge_lake/plugins/resolver.py
   - src/knowledge_lake/registry/alembic/versions/0002_source_normalized_url.py
   - src/knowledge_lake/registry/alembic/versions/0003_crawl_jobs_states.py
+  - src/knowledge_lake/registry/alembic/versions/0004_crawl_state_error_msg.py
+  - src/knowledge_lake/registry/alembic/versions/0005_unique_sources_normalized_url.py
   - src/knowledge_lake/registry/models.py
   - src/knowledge_lake/registry/repo.py
   - src/knowledge_lake/storage/s3.py
@@ -46,498 +48,303 @@ files_reviewed_list:
   - tests/unit/test_put_bronze.py
   - tests/unit/test_robots_ratelimit.py
   - tests/unit/test_url_normalize.py
-  - src/knowledge_lake/plugins/builtin/scrapy_spider.py
-  - src/knowledge_lake/crawl/select.py
-  - src/knowledge_lake/api/app.py
-  - src/knowledge_lake/pipeline/crawl.py
 findings:
-  critical: 5
-  warning: 5
+  critical: 2
+  warning: 3
   info: 3
-  total: 13
+  total: 8
 status: issues_found
 ---
 
 # Phase 02: Code Review Report
 
-**Reviewed:** 2026-07-04T00:00:00Z
+**Reviewed:** 2026-07-04T12:00:00Z
 **Depth:** standard
-**Files Reviewed:** 46
+**Files Reviewed:** 47
 **Status:** issues_found
 
 ## Summary
 
-The phase 02 ingestion implementation is architecturally sound. SSRF guards, robots.txt compliance,
-dedup at URL and hash level, three-tier rate limiting, and lineage tracking are all present and
-correctly integrated in most paths. However five blockers were found that cause crashes or constitute
-exploitable security vulnerabilities, plus five warnings that degrade correctness or robustness.
-
-Key blocker summary:
-
-1. **Arbitrary file read** — The `/uploads` API endpoint accepts an arbitrary server-side filesystem
-   path with no validation or allow-list, enabling any caller to read files outside the upload root.
-2. **Scrapy SSRF guard is dead code** — `SSRFGuardMiddleware` is a locally-scoped class inside
-   `_run_scrapy()`; Scrapy loads middleware by module attribute lookup and cannot find it, silently
-   omitting SSRF protection for all Scrapy-crawled URLs.
-3. **Runtime crash on every POST /crawl-jobs** — `crawl_source` calls `asyncio.run()` which raises
-   `RuntimeError` when already inside a running event loop (every uvicorn async handler).
-4. **SSRF bypass in `probe_site`** — `probe_site` validates the seed URL before fetching but then
-   uses `follow_redirects=True` on all three probes without re-validating redirect targets, allowing
-   a 302 to an RFC-1918 address to bypass the guard.
-5. **Hardcoded SearXNG secret** — A known-value `secret_key` is committed in the repository and
-   used unless explicitly overridden.
+All fixes from the previous review iterations have been applied and verified. The core SSRF
+guard, redirect-hop re-validation, robots.txt enforcement, rate limiting, URL-first and hash-second
+dedup, concurrent-write IntegrityError recovery, and the lifespan context manager migration all
+look correct in the current code. Two critical security gaps remain: the SSRF guard does not block
+IPv6 link-local addresses (`fe80::/10`), and the robots.txt HTTP fetch follows redirects without
+re-validating their targets. Three warnings cover a fragile robots-policy URL construction, a
+module-level import-time assertion, and a trailing-dot key in the rate limiter.
 
 ---
 
 ## Critical Issues
 
-### CR-01: `/uploads` endpoint accepts arbitrary server-side filesystem paths — arbitrary file read
+### CR-01: `_PRIVATE_NETS` missing `fe80::/10` — SSRF bypass via IPv6 link-local
 
-**File:** `src/knowledge_lake/api/app.py:194`
+**File:** `src/knowledge_lake/pipeline/ingest.py:51-59`
 
-**Issue:** The `POST /uploads` handler accepts `file_path: str = Query(...)` described as "Absolute
-path to the file on the server filesystem." No path-prefix restriction, allow-list, or authentication
-guard is applied. The raw value is passed directly to `ingest_file`:
+**Issue:** The SSRF guard blocks IPv4 link-local (`169.254.0.0/16`) for cloud IMDS endpoints, but
+does not block the IPv6 link-local range `fe80::/10`. An attacker who controls DNS for a hostname
+they own can return an `fe80::` address; `getaddrinfo` will resolve it, `ipaddress.ip_address`
+will parse it, and the loop over `_PRIVATE_NETS` will find no matching network, allowing the
+request to proceed to a link-local address on the machine's network interface. On Linux/macOS,
+`fe80::1` is a valid loopback-equivalent on most network stacks.
 
-```python
-result = ingest_file(Path(file_path), source_url=body.source_url, ...)
-```
-
-Any caller — including unauthenticated callers if no auth middleware is deployed — can supply
-`/etc/passwd`, `/etc/shadow`, `~/.ssh/id_rsa`, or any other path readable by the server process.
-The file contents are uploaded to S3 and registered in the artifact registry, exfiltrating them.
-
-**Fix:** Constrain accepted paths to a configured upload root and reject anything outside it:
+The comment on line 55 reads `"link-local / cloud IMDS (AWS/GCP/Azure)"`, making the omission of
+the IPv6 counterpart clearly an oversight rather than a deliberate design decision.
 
 ```python
-from pathlib import Path
-
-UPLOAD_ROOT = settings.upload_root   # e.g. Path("/data/uploads") from config
-
-def _safe_upload_path(raw: str) -> Path:
-    p = Path(raw).resolve()
-    if not str(p).startswith(str(UPLOAD_ROOT.resolve())):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Path is outside the allowed upload directory.",
-        )
-    return p
-
-# In the handler:
-safe_path = _safe_upload_path(file_path)
-result = ingest_file(safe_path, ...)
-```
-
-Alternatively, replace the filesystem-path parameter with a standard multipart file upload so the
-server never touches arbitrary caller-supplied paths.
-
----
-
-### CR-02: `asyncio.run()` inside `crawl_source` crashes every `POST /crawl-jobs` at runtime
-
-**File:** `src/knowledge_lake/pipeline/crawl.py:105`
-**Also:** `src/knowledge_lake/api/app.py:307`
-
-**Issue:** `crawl_source` is a synchronous function that calls `asyncio.run(_crawl_loop(...))`.
-The FastAPI handler `create_crawl_job_endpoint` (api/app.py line 289) is declared `async def` and
-calls `crawl_source(...)` directly with no `await` and no thread hand-off. Under uvicorn/anyio,
-every `async def` handler runs inside a running event loop. Python 3.10+ raises:
-
-```
-RuntimeError: asyncio.run() cannot be called when another event loop is running
-```
-
-Every `POST /crawl-jobs` request returns HTTP 500. The CLI path works because it has no running
-loop when `crawl_source` is called.
-
-**Fix — Option A (recommended):** Declare `crawl_source` as `async def` and `await` the loop:
-
-```python
-# pipeline/crawl.py
-async def crawl_source(source_url, *, crawler=None, settings=None, max_pages=None):
+# current — missing fe80::/10
+_PRIVATE_NETS = [
     ...
-    stats = await _crawl_loop(...)
-    return stats
-
-# api/app.py — already async, just await
-result = await crawl_source(body.source_url, ...)
-
-# cli/app.py — wrap for sync context
-import asyncio
-result = asyncio.run(crawl_source(url, ...))
+    ipaddress.ip_network("169.254.0.0/16"),   # IPv4 link-local only
+    ...
+    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA only
+]
 ```
 
-**Fix — Option B:** Keep `crawl_source` synchronous and dispatch it to a threadpool from the async
-handler so `asyncio.run()` has no running loop in the worker thread:
+**Fix:** Add the IPv6 link-local range:
 
 ```python
-# api/app.py
-import asyncio
-result = await asyncio.get_running_loop().run_in_executor(
-    None, lambda: crawl_source(body.source_url, ...)
-)
+_PRIVATE_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),    # IPv4 link-local / cloud IMDS
+    ipaddress.ip_network("127.0.0.0/8"),       # IPv4 loopback
+    ipaddress.ip_network("::1/128"),           # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),          # IPv6 ULA
+    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local  ← ADD THIS
+]
 ```
 
 ---
 
-### CR-03: Scrapy `SSRFGuardMiddleware` is a locally-scoped class — Scrapy cannot load it; SSRF protection is absent in all Scrapy crawls
+### CR-02: `_fetch_robots_text` follows redirects without SSRF re-validation
 
-**File:** `src/knowledge_lake/plugins/builtin/scrapy_spider.py:74–202`
+**File:** `src/knowledge_lake/crawl/robots.py:106`
 
-**Issue:** `SSRFGuardMiddleware` is defined inside the `_run_scrapy()` function body (line 74), making
-it a local variable, not a module-level attribute. It is registered in Scrapy's settings as:
+**Issue:** `_fetch_robots_text` constructs the robots URL from a caller-validated `base_url` and
+then fetches it with `follow_redirects=True`:
 
 ```python
-"DOWNLOADER_MIDDLEWARES": {
-    "knowledge_lake.plugins.builtin.scrapy_spider.SSRFGuardMiddleware": 100,
-},
+with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+    resp = client.get(url)
 ```
 
-Scrapy resolves middleware strings by doing:
+A crawl target can serve a `302 Location: http://169.254.169.254/latest/meta-data/iam/security-credentials/`
+from its `/robots.txt` endpoint. The initial SSRF guard accepted the base URL because it is a
+public IP. The httpx client then follows the redirect to the cloud IMDS endpoint — making a
+credentialed HTTP request to AWS/GCP/Azure metadata service from within the cloud environment —
+without any SSRF check on the redirect target.
+
+This is the exact gap that `_fetch_with_retry` in `pipeline/ingest.py` and `_safe_get` in
+`crawl/select.py` were both hardened against. The robots fetch was missed.
+
+**Fix:** Replace `follow_redirects=True` with manual hop-by-hop following that calls
+`validate_public_url` on each Location header before following it:
 
 ```python
-module = importlib.import_module("knowledge_lake.plugins.builtin.scrapy_spider")
-cls = getattr(module, "SSRFGuardMiddleware")   # AttributeError — not a module attribute
-```
-
-The assignment `SSRFGuardMiddleware.__module__ = __name__` (line 202) only updates the class's
-`__module__` metadata attribute (used for `repr` and `pickle`) and does **not** inject the class
-into the module's namespace. Scrapy raises `AttributeError`, typically causing it to skip or
-disable the middleware silently, leaving every URL crawled by Scrapy without SSRF validation.
-
-No test detects this because `test_scrapy_subprocess.py` mocks `subprocess.Popen` and never
-executes real Scrapy middleware loading.
-
-**Fix:** Move `SSRFGuardMiddleware` to module level (outside any function):
-
-```python
-# TOP-LEVEL — not inside _run_scrapy()
-class SSRFGuardMiddleware:
-    """Block requests to private/internal addresses (T-02-15)."""
-
-    @classmethod
-    def from_crawler(cls, crawler):
-        return cls()
-
-    def process_request(self, request, spider):
-        from knowledge_lake.pipeline.ingest import validate_public_url
-        try:
-            validate_public_url(request.url)
-        except ValueError as exc:
-            from scrapy.exceptions import IgnoreRequest
-            raise IgnoreRequest(str(exc)) from exc
-```
-
-Remove the `SSRFGuardMiddleware.__module__ = __name__` line; it is no longer needed.
-
----
-
-### CR-04: `probe_site` follows redirects without re-validating target IPs — SSRF bypass
-
-**File:** `src/knowledge_lake/crawl/select.py:183–222`
-
-**Issue:** `probe_site` calls `validate_public_url(url)` on the seed URL (line 183) and then
-makes all three probes with `follow_redirects=True`:
-
-```python
-entry_resp = httpx.get(url, timeout=_PROBE_TIMEOUT, follow_redirects=True)      # line 190
-robots_resp = httpx.get(robots_url, timeout=_PROBE_TIMEOUT, follow_redirects=True)   # line 201
-sitemap_resp = httpx.get(sitemap_url, timeout=_PROBE_TIMEOUT, follow_redirects=True)  # line 218
-```
-
-If any of these URLs responds with a 301/302 to `http://169.254.169.254/latest/meta-data/` or any
-RFC-1918 address, `httpx` follows the redirect without re-validating the resolved Location header.
-The initial `validate_public_url` guard is bypassed.
-
-This is the exact scenario that `_fetch_with_retry` in `pipeline/ingest.py` was hardened against by
-manually following each hop and re-calling `validate_public_url` on each Location header. `probe_site`
-does not apply the same discipline.
-
-**Fix:** Replace `follow_redirects=True` with manual hop-by-hop redirect following, re-validating
-each Location header:
-
-```python
-def _safe_get(url: str, timeout: float) -> httpx.Response:
-    """GET url, re-validating SSRF guard on each redirect hop."""
+def _fetch_robots_text(base_url: str) -> str:
     from knowledge_lake.pipeline.ingest import validate_public_url
-    with httpx.Client(follow_redirects=False) as client:
-        for _ in range(10):   # max redirects
-            resp = client.get(url, timeout=timeout)
+    from urllib.parse import urljoin
+
+    url = f"{base_url.rstrip('/')}/robots.txt"
+    _MAX_HOPS = 10
+    with httpx.Client(timeout=10.0, follow_redirects=False) as client:
+        for _ in range(_MAX_HOPS):
+            resp = client.get(url)
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("location", "")
-                validate_public_url(location)   # raises on private IP
-                url = location
+                if not location:
+                    break
+                resolved = urljoin(url, location)
+                validate_public_url(resolved)  # raises on private IP
+                url = resolved
                 continue
-            return resp
-    raise ValueError("Too many redirects")
+            if resp.status_code == 404:
+                return ""
+            resp.raise_for_status()
+            return resp.text
+    raise ValueError("Too many redirects fetching robots.txt")
 ```
-
-Use `_safe_get` in place of all three `httpx.get(..., follow_redirects=True)` calls.
-
----
-
-### CR-05: Hardcoded SearXNG `secret_key` committed in the repository
-
-**File:** `infra/searxng/settings.yml:16`
-
-**Issue:**
-
-```yaml
-secret_key: "klake-dev-searxng-secret-change-in-production"
-```
-
-This key is committed to source control and becomes the default for any deployment that mounts
-this file without explicitly setting `SEARXNG_SECRET`. SearXNG uses it to sign CSRF tokens and
-session cookies. An attacker who can read this repository can forge any SearXNG session or CSRF
-token against any deployment using the default key.
-
-**Fix:** Replace the literal with a template that forces an explicit override:
-
-```yaml
-# REQUIRED before any non-local deployment.
-# Generate: python -c "import secrets; print(secrets.token_hex(32))"
-# Then set the SEARXNG_SECRET environment variable.
-secret_key: "${SEARXNG_SECRET:?SEARXNG_SECRET environment variable must be set}"
-```
-
-Alternatively remove the `secret_key` line entirely; SearXNG will refuse to start without it,
-making misconfigured deployments loud rather than silently insecure.
 
 ---
 
 ## Warnings
 
-### WR-01: Operator precedence bug in `effective_name` — IndexError on path-only URLs
+### WR-01: `RobotsPolicy.is_allowed` constructs a malformed URL when `path` lacks a leading slash
 
-**File:** `src/knowledge_lake/api/app.py:171`
-**Also:** `src/knowledge_lake/cli/app.py:70`
+**File:** `src/knowledge_lake/crawl/robots.py:76`
 
-**Issue:** Both files contain:
+**Issue:** `is_allowed` builds a dummy URL for Protego with:
 
 ```python
-effective_name = body.name or body.url.split("/")[2] if "/" in body.url else body.url
+url = f"http://example.com{path}"
 ```
 
-Python parses the ternary operator with lower precedence than `or`, yielding:
+If `path` is an empty string (`""`), the URL becomes `"http://example.com"` — which Protego
+accepts but matches the root, not an explicit path. If `path` is `"noslash"` (no leading `/`),
+the URL becomes `"http://example.comnoslash"` — a completely different hostname that Protego will
+not recognise as belonging to `example.com`, causing `can_fetch` to return `True` (allow-all
+fallback for unknown domains), silently bypassing the disallow rule.
+
+Current callers use `urlparse(url).path or "/"` so the bug is masked in practice. But the
+public method signature accepts any string, and future callers may forget the guard.
+
+**Fix:** Validate and normalise `path` inside the method:
 
 ```python
-effective_name = (body.name or body.url.split("/")[2]) if ("/" in body.url) else body.url
-```
-
-Two problems with this expression:
-
-1. When `body.url` is a path-only string like `"/some/path"` (contains `/` but no host component),
-   `split("/")[2]` yields the first path segment (`"some"`), not the hostname. This silently records
-   wrong metadata.
-2. If `body.url` is `"/"` (one slash), `split("/")` produces `["", ""]` — `[2]` raises `IndexError`,
-   crashing the endpoint.
-
-**Fix:** Use `urlparse` for safe hostname extraction at both call sites:
-
-```python
-from urllib.parse import urlparse
-effective_name = body.name or (urlparse(body.url).hostname or body.url)
+def is_allowed(self, path: str, user_agent: str = "*") -> bool:
+    if not path.startswith("/"):
+        path = "/" + path
+    url = f"http://example.com{path}"
+    return self._parser.can_fetch(url, user_agent)
 ```
 
 ---
 
-### WR-02: All async FastAPI handlers call blocking synchronous pipeline functions — event loop starvation
+### WR-02: Module-level `assert isinstance(ScrapyAdapter(), CrawlerPlugin)` is a side-effectful import-time assertion
 
-**File:** `src/knowledge_lake/api/app.py:119–147, 173–184, 221–231, 258–262, 305–311`
-
-**Issue:** Every `async def` handler directly calls synchronous blocking functions:
-
-- `search(...)` — database + vector store I/O
-- `register_source(...)` — database + network I/O
-- `ingest_file(...)` — filesystem + HTTP + database I/O
-- `discover_sources(...)` — HTTP + database I/O
-- `resolve_ancestry(...)` — recursive database I/O
-
-Blocking synchronous calls inside `async def` handlers block uvicorn's event loop for the duration
-of each call. Under concurrent load, all other requests queue behind each slow handler.
-
-**Fix:** Dispatch blocking work to the default thread pool executor:
-
-```python
-import asyncio
-
-# In each async handler:
-result = await asyncio.get_running_loop().run_in_executor(
-    None, lambda: register_source(body.url, name=effective_name)
-)
-```
-
-FastAPI also supports declaring handlers as plain `def` (non-async); FastAPI automatically
-dispatches them to a thread pool, making this the simplest fix for handler bodies that are
-entirely synchronous:
-
-```python
-@app.post("/sources", ...)
-def create_source_endpoint(body: SourceCreate) -> dict:   # sync, not async
-    ...
-```
-
----
-
-### WR-03: `_record_state` accepts `error` parameter but never forwards it to `upsert_crawl_state` — failures are undiagnosable
-
-**File:** `src/knowledge_lake/pipeline/crawl.py:361–388`
-**Also:** `src/knowledge_lake/registry/models.py`, `src/knowledge_lake/registry/repo.py`
-
-**Issue:** `_record_state` has signature `(job_id, url, state, *, error=None)`. It is called with
-error messages at lines 244, 280, and 289 when SSRF guard, adapter error, or other failures occur.
-The function body never passes `error` to `upsert_crawl_state`, and `CrawlState` has no `error_msg`
-column. All failure reasons are silently discarded from the database.
-
-**Impact:** Operators debugging a failed crawl cannot see which URLs failed or why without
-re-running the crawl or scanning logs. This makes production triage of large-scale crawl failures
-effectively impossible from the registry alone.
-
-**Fix:** Add `error_msg` to `CrawlState`, extend `upsert_crawl_state` to accept and persist it,
-and wire through in `_record_state`:
-
-```python
-# registry/models.py — add column
-error_msg: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-# registry/repo.py — extend upsert signature
-def upsert_crawl_state(..., error_msg: Optional[str] = None) -> CrawlState:
-    ...
-    obj.error_msg = error_msg
-
-# pipeline/crawl.py — forward in _record_state
-registry_repo.upsert_crawl_state(session, ..., error_msg=error)
-```
-
-A new Alembic migration is required to add the column.
-
----
-
-### WR-04: `_run_scrapy` opens `_out_file` without `try/finally` — file handle leaked on exception
-
-**File:** `src/knowledge_lake/plugins/builtin/scrapy_spider.py:67`
+**File:** `src/knowledge_lake/plugins/builtin/scrapy_adapter.py:316-318`
 
 **Issue:**
 
 ```python
-_out_file = open(out_jsonl, "w", encoding="utf-8")   # no context manager, no try/finally
+assert isinstance(ScrapyAdapter(), CrawlerPlugin), (
+    "ScrapyAdapter does not satisfy CrawlerPlugin protocol ..."
+)
 ```
 
-The file is closed inside `KlakeSpider.closed()` (Scrapy's spider-done signal callback). If
-`CrawlerProcess(settings=settings_dict)` raises before the spider's `closed` signal fires — for
-example because the `SSRFGuardMiddleware` class is unresolvable (see CR-03) — `_out_file` is
-never closed. The file descriptor leaks in the subprocess and the empty/partial output file is
-indistinguishable from a zero-result crawl, masking the underlying error.
+This code runs at module import time and has two problems:
 
-**Fix:**
+1. **Optimised builds:** Python skips `assert` statements when running with `-O` (optimise), which
+   is the default in some production Docker builds and CI configurations. The protocol check then
+   silently disappears rather than serving as a gate.
+
+2. **Import-time side effects:** The assertion instantiates `ScrapyAdapter()`, initialising its
+   `dict` fields, on every import. If `ScrapyAdapter.__init__` is ever extended (e.g., to acquire
+   a resource or spawn a background thread), this becomes a hidden cost on each import. It also
+   makes import errors harder to debug — a protocol mismatch surfaces as an `AssertionError` during
+   `import`, not a clear test failure.
+
+**Fix:** Remove the module-level assertion and add a dedicated unit test:
 
 ```python
-_out_file = open(out_jsonl, "w", encoding="utf-8")
-try:
-    process = CrawlerProcess(settings=settings_dict)
-    process.crawl(KlakeSpider)
-    process.start()
-finally:
-    if not _out_file.closed:
-        _out_file.flush()
-        _out_file.close()
+# tests/unit/test_scrapy_adapter_protocol.py
+from knowledge_lake.plugins.builtin.scrapy_adapter import ScrapyAdapter
+from knowledge_lake.plugins.protocols import CrawlerPlugin
+
+def test_scrapy_adapter_satisfies_protocol():
+    assert isinstance(ScrapyAdapter(), CrawlerPlugin)
 ```
 
 ---
 
-### WR-05: `_fetch_with_retry` does not close streaming response on 4xx/5xx — HTTP connection leak
+### WR-03: `_domain_key` returns a trailing-dot key for raw IPs and internal hostnames
 
-**File:** `src/knowledge_lake/pipeline/ingest.py:193–211`
+**File:** `src/knowledge_lake/crawl/ratelimit.py:85-86`
 
-**Issue:** When a non-redirect response arrives, the code calls `resp.raise_for_status()` and then
-reads the body with `resp.iter_bytes()`. If `raise_for_status()` raises (4xx or 5xx), the streaming
-response object `resp` is never closed: there is no `finally` block and no context manager wrapping
-the streaming section. On HTTP/1.1, the unread response body prevents connection keep-alive reuse;
-on HTTP/2 it leaves a stream open until timeout.
-
-This does not affect the correctness of the SSRF guard (redirect validation is sound), but under
-retried requests (`@retry`) each failed attempt may leak a connection. The tenacity retry decorator
-will retry the same request up to `stop_after_attempt(3)` times, potentially leaking three
-connections per invocation.
-
-**Fix:** Wrap the streaming body read in `try/finally`:
+**Issue:**
 
 ```python
-resp.raise_for_status()
-content_type = resp.headers.get("content-type", "application/octet-stream").split(";")[0].strip()
-chunks: list[bytes] = []
-total = 0
-try:
-    for chunk in resp.iter_bytes():
-        total += len(chunk)
-        if total > MAX_DOWNLOAD_BYTES:
-            raise ValueError(f"Download exceeded size cap {MAX_DOWNLOAD_BYTES}")
-        chunks.append(chunk)
-finally:
-    resp.close()
-return b"".join(chunks), content_type
+extracted = tldextract.extract(url)
+return f"{extracted.domain}.{extracted.suffix}"
+```
+
+For `https://localhost/page`, `tldextract.extract` returns `ExtractResult(subdomain='', domain='localhost', suffix='')`, producing the key `"localhost."` (trailing dot). For raw IPv4 addresses like `https://10.0.0.1/`, the result is `".".join(['10', ''])` through the same pattern, producing `"10."`.
+
+In production, `validate_public_url` blocks both patterns before they reach `_domain_key`. However,
+the rate-limiter is also called with attacker-controlled URLs during crawl (the URL from a page's
+`href` attribute), and if any code path reaches `_domain_key` before validation, the malformed key
+causes incorrect per-host bucketing — all requests with a trailing-dot key would be rate-limited
+together, potentially defeating per-host isolation.
+
+**Fix:**
+
+```python
+def _domain_key(url: str) -> str:
+    extracted = tldextract.extract(url)
+    if extracted.domain and extracted.suffix:
+        return f"{extracted.domain}.{extracted.suffix}"
+    # Raw IP or bare hostname — use the full hostname as the key
+    from urllib.parse import urlparse
+    return urlparse(url).hostname or url
 ```
 
 ---
 
 ## Info
 
-### IN-01: `raw_document`, `parsed_document`, and `bronze_document` share the `"doc_"` ID prefix — ambiguous in logs
+### IN-01: `raw_document`, `parsed_document`, and `bronze_document` share the `"doc_"` ID prefix
 
-**File:** `src/knowledge_lake/ids.py:32–40`
+**File:** `src/knowledge_lake/ids.py:34-39`
 
-**Issue:** Three distinct artifact kinds all map to the `"doc"` prefix, so any `doc_XXXX` ID in a
-log line or API response is ambiguous without a registry lookup. Operators cannot tell from the ID
-alone whether a given artifact is a raw HTML download, a Docling-parsed document, or a bronze
-markdown artifact.
+**Issue:** Three distinct artifact kinds all generate IDs with the `"doc_"` prefix:
 
-**Fix:** Use distinct per-kind prefixes (`raw_`, `par_`, `bro_`) or add a comment explicitly
-documenting why sharing a prefix is intentional (e.g., "all are documents in the lineage chain,
-type is always co-stored with the ID").
+```python
+"raw_document":    "doc",
+"parsed_document": "doc",
+"bronze_document": "doc",
+```
+
+A bare `doc_XXXX` in a log line, error message, or API response is ambiguous without a registry
+lookup to determine whether the artifact is a raw HTML download, a Docling-parsed document, or a
+bronze markdown conversion. The stated goal of self-describing prefixed IDs (D-15) is not met for
+these three types.
+
+**Fix:** Assign distinct prefixes (`raw_`, `par_`, `brz_`) or add a comment explicitly documenting
+why sharing the prefix is intentional. Note this is a breaking schema change for any existing rows.
 
 ---
 
-### IN-02: `@app.on_event("startup")` is deprecated since FastAPI 0.93
+### IN-02: `crawl_source` uses an anonymous type to construct a settings-like object
 
-**File:** `src/knowledge_lake/api/app.py:60`
+**File:** `src/knowledge_lake/pipeline/crawl.py:81`
 
-**Issue:** `@app.on_event("startup")` emits a `DeprecationWarning` in the pinned FastAPI 0.139.x.
-The preferred pattern is the `lifespan` context manager.
-
-**Fix:**
+**Issue:**
 
 ```python
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
+adapter = get_crawler(
+    type("_S", (), {"crawler": crawler_name})()  # minimal settings-like obj
+)
+```
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    _init_logging()
-    log.info("api.startup", version=APP_VERSION)
-    yield
+`get_crawler` only reads `settings.crawler`, but the caller constructs a throwaway anonymous class
+just to satisfy the interface. This pattern is opaque to readers, cannot be type-checked, and will
+break silently if `get_crawler` ever reads a second attribute from the settings object.
 
-app = FastAPI(title="Knowledge Lake API", lifespan=lifespan)
+**Fix:** Pass `crawler_name` directly and update `get_crawler` to accept either a string or a
+settings object, or use a named dataclass:
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class _CrawlerOverride:
+    crawler: str
+
+adapter = get_crawler(_CrawlerOverride(crawler=crawler_name))
 ```
 
 ---
 
-### IN-03: `scrapy_spider._registrable_domain` uses `urlparse.hostname` instead of `tldextract`
+### IN-03: `scrapy_spider._registrable_domain` returns full hostname, inconsistent with `tldextract` usage elsewhere
 
-**File:** `src/knowledge_lake/plugins/builtin/scrapy_spider.py:41`
+**File:** `src/knowledge_lake/plugins/builtin/scrapy_spider.py:64-67`
 
 **Issue:**
 
 ```python
 def _registrable_domain(url: str) -> str:
-    return urlparse(url).hostname or ""
+    parsed = urlparse(url)
+    return parsed.hostname or ""
 ```
 
-The rest of the codebase (e.g., `ratelimit.py`) uses `tldextract` to extract the registrable
-domain (e.g., `example.co.uk` → `example.co.uk` not just `co.uk`). Using raw `hostname` returns
-the full hostname including subdomains (`www.example.com`), causing per-subdomain domain-key
-partitioning in the Scrapy rate-limiter bucket instead of per-registrable-domain partitioning.
-This inconsistency could allow a site to effectively avoid per-domain rate limits by rotating
-subdomains.
+This returns the full hostname including subdomain (e.g., `www.example.com`), while `crawl.py`
+and `ratelimit.py` both use `tldextract` to extract the registrable domain (`example.com`). A site
+that rotates crawl-blocking responses across subdomains (`sub1.example.com`, `sub2.example.com`)
+would be treated as different domains in the Scrapy spider's same-domain scope filter, allowing
+cross-registrable-domain link following that the orchestrator would reject. This inconsistency
+can cause the Scrapy spider to skip or follow different links than the orchestrator expects.
 
 **Fix:** Use `tldextract` consistently:
 
@@ -553,6 +360,6 @@ def _registrable_domain(url: str) -> str:
 
 ---
 
-_Reviewed: 2026-07-04T00:00:00Z_
+_Reviewed: 2026-07-04T12:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
