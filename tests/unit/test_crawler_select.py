@@ -1,13 +1,17 @@
-"""Unit tests for crawler auto-selection (INGEST-05, D-04).
+"""Unit tests for crawler auto-selection (INGEST-05, D-04, INGEST-06).
 
-Tests the select_crawler table logic and probe_site sitemap detection.
+Tests the select_crawler table logic, probe_site sitemap detection, and
+should_escalate near-empty markdown escalation predicate (02-05).
 
 Coverage:
   - has_sitemap=True short-circuits to 'scrapy' (sitemap wins over SPA markers)
   - static HTML, no sitemap → 'crawl4ai'
-  - SPA-marker HTML, no sitemap → 'playwright' (02-05 reserved path; test asserts it)
+  - SPA-marker HTML, no sitemap → 'playwright' (02-05 SPA auto-selection)
   - probe_site (mocked httpx) returns has_sitemap=True when /sitemap.xml is HTTP 200
   - probe_site returns has_sitemap=False when both robots.txt and /sitemap.xml are absent
+  - should_escalate: near-empty markdown + HTTP 200 → True (Crawl4AI→Playwright escalation)
+  - should_escalate: ample markdown → False
+  - should_escalate: non-200 status code → False (page genuinely empty/errored)
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from knowledge_lake.crawl.select import probe_site, select_crawler
+from knowledge_lake.crawl.select import probe_site, select_crawler, should_escalate
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -206,3 +210,56 @@ class TestProbeSite:
         """probe_site raises ValueError for private/SSRF-blocked URLs."""
         with pytest.raises(ValueError):
             probe_site("https://192.168.1.1/")
+
+
+# ---------------------------------------------------------------------------
+# should_escalate tests (02-05 Crawl4AI→Playwright escalation, A1/A2)
+# ---------------------------------------------------------------------------
+
+# Near-empty threshold: < 200 chars triggers escalation (tunable, A2)
+_NEAR_EMPTY = ""
+_JUST_BELOW = "x" * 199
+_AT_THRESHOLD = "x" * 200  # NOT escalated (boundary)
+_AMPLE = "x" * 1000
+
+
+class TestShouldEscalate:
+    """Table-driven tests for should_escalate (near-empty markdown predicate)."""
+
+    @pytest.mark.parametrize(
+        "markdown, status_code, expected",
+        [
+            # Near-empty markdown + HTTP 200 → escalate to Playwright
+            (_NEAR_EMPTY, 200, True),
+            (_JUST_BELOW, 200, True),
+            # At/above threshold → no escalation
+            (_AT_THRESHOLD, 200, False),
+            (_AMPLE, 200, False),
+            # Non-200 status — genuinely empty/errored page, do not escalate
+            (_NEAR_EMPTY, 404, False),
+            (_NEAR_EMPTY, 500, False),
+            (_NEAR_EMPTY, 403, False),
+            # Non-200 + short markdown — don't escalate (server-side error)
+            (_JUST_BELOW, 404, False),
+        ],
+    )
+    def test_should_escalate_table(
+        self,
+        markdown: str,
+        status_code: int,
+        expected: bool,
+    ) -> None:
+        result = should_escalate(markdown, status_code)
+        assert result == expected, (
+            f"should_escalate({len(markdown)} chars, {status_code}) "
+            f"returned {result!r}, expected {expected!r}"
+        )
+
+    def test_empty_string_200_escalates(self) -> None:
+        """Empty markdown from a 200 page should always trigger escalation."""
+        assert should_escalate("", 200) is True
+
+    def test_long_markdown_200_no_escalate(self) -> None:
+        """Long markdown from a 200 page should not trigger escalation."""
+        long_md = "# Section\n\n" + ("Some real content here. " * 20)
+        assert should_escalate(long_md, 200) is False
