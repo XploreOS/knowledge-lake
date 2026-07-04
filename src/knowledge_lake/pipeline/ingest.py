@@ -212,7 +212,10 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
                         )
                     chunks.append(chunk)
             finally:
-                resp.close()
+                try:
+                    resp.close()
+                except Exception:
+                    pass  # never mask the original exception (WR-03)
             return b"".join(chunks), content_type
 
         # Exceeded redirect cap
