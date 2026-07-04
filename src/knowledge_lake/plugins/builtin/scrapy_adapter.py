@@ -268,18 +268,24 @@ class ScrapyAdapter:
         if job_id not in self._procs:
             return "unknown"
         proc = self._procs[job_id]
+        # Use communicate() instead of wait() to drain stdout/stderr pipes
+        # concurrently.  If the child writes enough to fill the OS pipe buffer
+        # (~64 KB) before exiting, proc.wait() deadlocks: the child blocks
+        # waiting for the parent to read, while the parent blocks waiting for
+        # the child to exit (WR-003).
         try:
-            exit_code = proc.wait(timeout=timeout)
+            _, stderr_bytes = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
+            proc.communicate()  # drain pipes after kill to avoid zombie
             raise TimeoutError(f"Scrapy crawl job {job_id} timed out after {timeout}s")
 
+        exit_code = proc.returncode
         if exit_code == 0:
             if job_id in self._jobs:
                 self._jobs[job_id].status = "complete"
             return "complete"
         else:
-            _, stderr_bytes = proc.communicate() if proc.stderr else (None, b"")
             stderr_text = (stderr_bytes or b"").decode("utf-8", errors="replace")
             log.warning(
                 "scrapy_adapter.child_failed",
