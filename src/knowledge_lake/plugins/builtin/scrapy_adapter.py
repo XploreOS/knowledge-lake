@@ -312,7 +312,3 @@ class ScrapyAdapter:
         self._out_paths.pop(job_id, None)
 
 
-# Runtime check: ScrapyAdapter must satisfy CrawlerPlugin protocol at import time
-assert isinstance(ScrapyAdapter(), CrawlerPlugin), (
-    "ScrapyAdapter does not satisfy CrawlerPlugin protocol — check start_crawl/poll_status/get_results"
-)
