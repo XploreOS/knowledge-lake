@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from urllib.parse import urljoin
 
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -149,6 +150,51 @@ def should_escalate(markdown: str, status_code: int) -> bool:
     return len(markdown) < ESCALATION_THRESHOLD_CHARS
 
 
+def _safe_get(url: str, timeout: float) -> httpx.Response:
+    """GET url, re-validating the SSRF guard on every redirect hop (CR-04).
+
+    ``follow_redirects=True`` on httpx bypasses the initial SSRF guard when a
+    server responds with a 302 to an RFC-1918 or link-local address.  This
+    function follows redirects manually and calls ``validate_public_url`` on
+    each Location header before following it.
+
+    Parameters
+    ----------
+    url:
+        The URL to GET (caller must have validated the initial URL already).
+    timeout:
+        Request timeout in seconds.
+
+    Returns
+    -------
+    httpx.Response
+        The final non-redirect response.
+
+    Raises
+    ------
+    ValueError
+        If any redirect target fails the SSRF guard, or if more than 10
+        redirects are encountered.
+    """
+    from knowledge_lake.pipeline.ingest import validate_public_url
+
+    _MAX_HOPS = 10
+    with httpx.Client(follow_redirects=False) as client:
+        for _ in range(_MAX_HOPS):
+            resp = client.get(url, timeout=timeout)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location", "")
+                if not location:
+                    return resp
+                # Resolve relative Location against current URL
+                resolved = urljoin(url, location)
+                validate_public_url(resolved)  # raises on private IP
+                url = resolved
+                continue
+            return resp
+    raise ValueError("Too many redirects during probe")
+
+
 def probe_site(url: str) -> tuple[str, bool]:
     """Probe a site to determine if it has a sitemap (for crawler auto-selection).
 
@@ -159,7 +205,9 @@ def probe_site(url: str) -> tuple[str, bool]:
       - /robots.txt contains a 'Sitemap:' directive (case-insensitive)
       - /sitemap.xml returns HTTP 200
 
-    SECURITY (T-02-15): validate_public_url is called BEFORE any network request.
+    SECURITY (T-02-15, CR-04): validate_public_url is called BEFORE any network
+    request AND on every redirect hop so a 302 to an RFC-1918 address cannot
+    bypass the guard.
 
     Parameters
     ----------
@@ -185,9 +233,9 @@ def probe_site(url: str) -> tuple[str, bool]:
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}"
 
-    # Fetch entry URL
+    # Fetch entry URL — re-validate on each redirect hop (CR-04)
     try:
-        entry_resp = httpx.get(url, timeout=_PROBE_TIMEOUT, follow_redirects=True)
+        entry_resp = _safe_get(url, timeout=_PROBE_TIMEOUT)
         html = entry_resp.text
     except Exception as exc:
         log.warning("probe_site.entry_failed", url=url, error=str(exc))
@@ -198,7 +246,7 @@ def probe_site(url: str) -> tuple[str, bool]:
     # Check robots.txt for Sitemap: directive
     robots_url = f"{base}/robots.txt"
     try:
-        robots_resp = httpx.get(robots_url, timeout=_PROBE_TIMEOUT, follow_redirects=True)
+        robots_resp = _safe_get(robots_url, timeout=_PROBE_TIMEOUT)
         if robots_resp.status_code == 200:
             robots_text = robots_resp.text
             # Case-insensitive check for 'Sitemap:' directive
@@ -215,7 +263,7 @@ def probe_site(url: str) -> tuple[str, bool]:
     if not has_sitemap:
         sitemap_url = f"{base}/sitemap.xml"
         try:
-            sitemap_resp = httpx.get(sitemap_url, timeout=_PROBE_TIMEOUT, follow_redirects=True)
+            sitemap_resp = _safe_get(sitemap_url, timeout=_PROBE_TIMEOUT)
             if sitemap_resp.status_code == 200:
                 has_sitemap = True
                 log.info("probe_site.sitemap_from_xml", url=url)
