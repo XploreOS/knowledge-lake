@@ -234,6 +234,63 @@ class VectorStorePlugin(Protocol):
 
 
 # ---------------------------------------------------------------------------
+# Discovery data structures (INGEST-07)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DiscoveryResult:
+    """A single discovery result returned by a DiscoveryPlugin.
+
+    Carries only the minimal fields needed to register a candidate source:
+    the URL and a human-readable title (D-09: URL + title only).
+    """
+
+    url: str
+    """The discovered URL."""
+
+    title: str
+    """Human-readable title of the discovered resource (empty string if absent)."""
+
+
+# ---------------------------------------------------------------------------
+# Discovery Plugin Protocol (INGEST-07, D-10)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class DiscoveryPlugin(Protocol):
+    """Protocol for source discovery engines that find candidate URLs.
+
+    Implementations must expose:
+      name   — stable identifier for resolver lookup
+      search — run a query and return a list of DiscoveryResult items
+
+    Default built-in: SearXNGDiscovery ('searxng') — self-hosted meta-search,
+    JSON API, no API keys needed.
+
+    The discovery swap key (settings.discovery) selects the active implementation
+    via the 'knowledge_lake.discovery' entry-point group. No os.environ reads
+    in builtins (CR-03); searxng_url injected from Settings.
+    """
+
+    name: str
+    """Stable name used to look up this implementation via the resolver."""
+
+    def search(self, query: str, limit: int) -> list[DiscoveryResult]:
+        """Run a discovery query and return candidate results.
+
+        Args:
+            query: Natural-language search query.
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of DiscoveryResult items (url + title), capped at limit.
+        """
+        ...
+
+
+# ---------------------------------------------------------------------------
 # Crawler data structures (INGEST-04, INGEST-09)
 # ---------------------------------------------------------------------------
 

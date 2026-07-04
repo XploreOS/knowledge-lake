@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     litellm_url: str = "http://localhost:4000"
     """LiteLLM proxy URL for all model calls."""
 
+    searxng_url: str = "http://localhost:8888"
+    """SearXNG meta-search engine URL for source discovery (INGEST-07)."""
+
     # ── Plugin swap keys ──────────────────────────────────────────────────────
     embedder: str = "local"
     """Embedder plugin name. 'local' = sentence-transformers; 'litellm' = gateway."""
@@ -117,6 +120,9 @@ class Settings(BaseSettings):
     crawler: str = "crawl4ai"
     """Crawler plugin name. 'crawl4ai' = Crawl4AI async crawler; 'scrapy' = Scrapy."""
 
+    discovery: str = "searxng"
+    """Discovery plugin name. 'searxng' = SearXNG meta-search engine (D-10)."""
+
     # ── Nested settings ───────────────────────────────────────────────────────
     storage: StorageSettings = Field(default_factory=StorageSettings)
     """S3-compatible object storage configuration."""
@@ -126,7 +132,7 @@ class Settings(BaseSettings):
 
     # ── Validators ────────────────────────────────────────────────────────────
 
-    @field_validator("crawler", "embedder", "parser", "vectorstore", mode="after")
+    @field_validator("crawler", "discovery", "embedder", "parser", "vectorstore", mode="after")
     @classmethod
     def _validate_swap_key(cls, v: str) -> str:
         """Validate swap keys against ASVS V5 (input validation).

@@ -34,6 +34,7 @@ GROUP_PARSERS = "knowledge_lake.parsers"
 GROUP_EMBEDDERS = "knowledge_lake.embedders"
 GROUP_VECTORSTORES = "knowledge_lake.vectorstores"
 GROUP_CRAWLERS = "knowledge_lake.crawlers"
+GROUP_DISCOVERY = "knowledge_lake.discovery"
 
 
 def resolve(group: str, name: str) -> Any:
@@ -137,6 +138,37 @@ def get_vectorstore(settings: "Settings") -> Any:
             return factory()
     raise LookupError(
         f"No plugin {name!r} registered in entry-point group {GROUP_VECTORSTORES!r}. "
+        f"Check that the package declaring this plugin is installed and that "
+        f"the name is spelled correctly in your settings."
+    )
+
+
+def get_discovery(settings: "Settings") -> Any:
+    """Return the DiscoveryPlugin named by settings.discovery.
+
+    Reads the 'discovery' swap key from the provided Settings instance and
+    resolves it via the 'knowledge_lake.discovery' entry-point group.
+
+    Default: 'searxng' → SearXNGDiscovery (self-hosted meta-search, JSON API).
+
+    The SearXNG URL is injected from settings.searxng_url rather than read
+    from env directly (CR-03: no os.environ.get in plugin builtins).
+
+    Args:
+        settings: Application Settings instance.
+
+    Returns:
+        An instantiated DiscoveryPlugin (satisfies DiscoveryPlugin Protocol).
+    """
+    name = settings.discovery
+    for ep in entry_points(group=GROUP_DISCOVERY):
+        if ep.name == name:
+            factory = ep.load()
+            if name == "searxng":
+                return factory(searxng_url=settings.searxng_url)
+            return factory()
+    raise LookupError(
+        f"No plugin {name!r} registered in entry-point group {GROUP_DISCOVERY!r}. "
         f"Check that the package declaring this plugin is installed and that "
         f"the name is spelled correctly in your settings."
     )
