@@ -33,6 +33,7 @@ dependencies = [
     "protego>=0.3.1",
     "tldextract>=5.1.0",
     "crawl4ai==0.9.0",
+    "scrapy==2.16.0",
 ]
 
 [project.scripts]
@@ -50,6 +51,7 @@ qdrant = "knowledge_lake.plugins.builtin.qdrant_store:QdrantVectorStore"
 
 [project.entry-points."knowledge_lake.crawlers"]
 crawl4ai = "knowledge_lake.plugins.builtin.crawl4ai_adapter:Crawl4AIAdapter"
+scrapy = "knowledge_lake.plugins.builtin.scrapy_adapter:ScrapyAdapter"
 
 [project.entry-points."knowledge_lake.discovery"]
 searxng = "knowledge_lake.plugins.builtin.searxng_discovery:SearXNGDiscovery"
