@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_phase_name: Ingestion
+current_phase: 02
+current_phase_name: ingestion
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-03T15:38:58.019Z"
-last_activity: 2026-07-03
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-07-04T08:23:51.206Z"
+last_activity: 2026-07-04
+last_activity_desc: Phase 02 execution resumed (wave continue)
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 12
+  completed_plans: 11
   percent: 17
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 01 — foundation-end-to-end-spike
+**Current focus:** Phase 02 — ingestion
 
 ## Current Position
 
-Phase: 2 — Ingestion
-Plan: Not started
+Phase: 02 (ingestion) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-03 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-07-04 — Phase 02 execution resumed (wave continue)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 45 | 3 tasks | 17 files |
 | Phase 01 P03 | 12m | 2 tasks | 5 files |
 | Phase 01 P05 | 109m | 3 tasks | 16 files |
+| Phase 02 P04 | 6m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plain-function pipeline for Phase 1 (no Dagster)
 - [Phase ?]: Qdrant point ID = bare UUID (strip chk_ prefix); full prefixed ID in payload as chunk_id
 - [Phase ?]: ID prefix expansion: full ID length >= 40 chars (type_prefix + _ + 36-char UUID)
+- [Phase ?]: Subprocess isolation for Scrapy: each crawl job spawns python -m scrapy_spider child; reactor dies with child (T-02-14)
+- [Phase ?]: JSONL IPC for Scrapy: child writes base64-encoded HTML per page; parent parses after subprocess completes
+- [Phase ?]: D-04 sitemap branch: has_sitemap=True short-circuits to scrapy; probe_site detects via robots.txt Sitemap: directive and /sitemap.xml HTTP 200
 
 ### Pending Todos
 
@@ -102,7 +106,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Phase 2 context gathered
+**Stopped at:** Completed 02-04-PLAN.md
 
-Last session: 2026-07-03T13:32:29.039Z
-Resume file: .planning/phases/02-ingestion/02-CONTEXT.md
+Last session: 2026-07-04T08:23:51.198Z
+Resume file: None
