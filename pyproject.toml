@@ -66,6 +66,9 @@ build-backend = "uv_build"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v"
+markers = [
+    "browser: marks tests that require a Playwright Chromium binary (skip with -m 'not browser' or when binary absent)",
+]
 
 [tool.ruff]
 line-length = 100
