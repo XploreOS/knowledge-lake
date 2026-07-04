@@ -14,7 +14,7 @@ Build a tool-agnostic knowledge lake framework by first proving a single documen
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & End-to-End Spike** - Registries, immutable storage, plugin interfaces, and one document flowing through the full pipe on a one-command dev stack (completed 2026-07-03)
-- [ ] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling
+- [x] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling (completed 2026-07-04)
 - [ ] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking
 - [ ] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations
 - [ ] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports
@@ -59,7 +59,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Crawls respect robots.txt and apply per-host rate limits with retries and backoff; interrupted crawl jobs resume without re-fetching completed pages
   5. User can run a SearXNG discovery query and see candidate sources stored in the source registry for review
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Source registration + single-URL/file ingest + dedup foundation; shared validate_public_url + normalize_url (INGEST-01, 02, 03, 08) [Wave 1]
@@ -78,7 +78,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 02-05-PLAN.md — Playwright adapter + SPA selection/escalation + browser binaries (INGEST-06) [Wave 5]
+- [x] 02-05-PLAN.md — Playwright adapter + SPA selection/escalation + browser binaries (INGEST-06) [Wave 5]
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
-| 2. Ingestion | 5/6 | In Progress|  |
+| 2. Ingestion | 6/6 | Complete   | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 0/TBD | Not started | - |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |

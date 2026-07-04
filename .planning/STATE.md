@@ -6,15 +6,15 @@ current_phase: 02
 current_phase_name: ingestion
 status: executing
 stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-04T08:23:51.206Z"
+last_updated: "2026-07-04T08:33:32.627Z"
 last_activity: 2026-07-04
 last_activity_desc: Phase 02 execution resumed (wave continue)
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 11
-  percent: 17
+  completed_plans: 12
+  percent: 33
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 02 (ingestion) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-04 — Phase 02 execution resumed (wave continue)
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 12m | 2 tasks | 5 files |
 | Phase 01 P05 | 109m | 3 tasks | 16 files |
 | Phase 02 P04 | 6m | 3 tasks | 6 files |
+| Phase 02 P05 | 25m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Subprocess isolation for Scrapy: each crawl job spawns python -m scrapy_spider child; reactor dies with child (T-02-14)
 - [Phase ?]: JSONL IPC for Scrapy: child writes base64-encoded HTML per page; parent parses after subprocess completes
 - [Phase ?]: D-04 sitemap branch: has_sitemap=True short-circuits to scrapy; probe_site detects via robots.txt Sitemap: directive and /sitemap.xml HTTP 200
+- [Phase ?]: playwright==1.49.0 pinned for PlaywrightAdapter (1.61.0 unavailable on PyPI)
+- [Phase ?]: ESCALATION_THRESHOLD_CHARS=200 tunable near-empty markdown escalation boundary (A2, D-04)
 
 ### Pending Todos
 
@@ -108,5 +111,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 **Stopped at:** Completed 02-04-PLAN.md
 
-Last session: 2026-07-04T08:23:51.198Z
+Last session: 2026-07-04T08:33:27.041Z
 Resume file: None

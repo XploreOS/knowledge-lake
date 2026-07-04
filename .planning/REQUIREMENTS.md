@@ -26,7 +26,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **INGEST-03**: User can upload a local file into the raw zone with the same provenance metadata
 - [ ] **INGEST-04**: User can crawl a source with Crawl4AI producing LLM-ready markdown into the raw/bronze zones
 - [x] **INGEST-05**: User can crawl structured sites with Scrapy as an alternative crawler plugin
-- [ ] **INGEST-06**: User can crawl dynamic pages with Playwright as an alternative crawler plugin
+- [x] **INGEST-06**: User can crawl dynamic pages with Playwright as an alternative crawler plugin
 - [ ] **INGEST-07**: User can discover candidate sources via SearXNG search query and store them in the source registry
 - [ ] **INGEST-08**: Ingestion deduplicates by normalized URL and content hash — re-ingesting identical content is a no-op
 - [ ] **INGEST-09**: Crawler respects robots.txt and applies per-host rate limits with retries and backoff
@@ -153,7 +153,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INGEST-03 | Phase 2 | Pending |
 | INGEST-04 | Phase 2 | Pending |
 | INGEST-05 | Phase 2 | Complete |
-| INGEST-06 | Phase 2 | Pending |
+| INGEST-06 | Phase 2 | Complete |
 | INGEST-07 | Phase 2 | Pending |
 | INGEST-08 | Phase 2 | Pending |
 | INGEST-09 | Phase 2 | Pending |
