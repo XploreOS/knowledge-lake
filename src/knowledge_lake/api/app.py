@@ -21,6 +21,7 @@ D-02 compliance:
 from __future__ import annotations
 
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -76,18 +77,13 @@ def _safe_upload_path(raw: str) -> Path:
 # Rejects arbitrary strings that could enumerate Qdrant collections or cause confusion.
 _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
-app = FastAPI(
-    title="Knowledge Lake API",
-    description=(
-        "Domain-agnostic framework API — serves AI-ready assets with full lineage traceability."
-    ),
-    version="0.1.0",
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler — replaces deprecated @on_event("startup") (WR-005).
 
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    """Log startup with resolved service configuration."""
+    Logs the resolved service configuration on startup.  FastAPI 0.93+ deprecated
+    @app.on_event in favour of this lifespan context-manager pattern.
+    """
     settings = get_settings()
     logger.info(
         "api.startup",
@@ -96,6 +92,17 @@ async def on_startup() -> None:
         litellm_url=settings.litellm_url,
         embedder=settings.embedder,
     )
+    yield
+
+
+app = FastAPI(
+    title="Knowledge Lake API",
+    description=(
+        "Domain-agnostic framework API — serves AI-ready assets with full lineage traceability."
+    ),
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health", tags=["ops"], summary="Service health check")
