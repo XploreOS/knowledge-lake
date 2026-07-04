@@ -238,6 +238,9 @@ def test_two_scrapy_crawls_no_reactor_error() -> None:
     """
     results_store: dict[str, list[CrawlPageResult]] = {}
 
+    # cmd layout: [python, "-m", "<module>", source_url, out_jsonl, config_json]
+    _PYTHON_IDX, _DASH_M_IDX, _MODULE_IDX, _URL_IDX, _JSONL_IDX, _CONFIG_IDX = range(6)
+
     def _run_crawl(run_id: str, url: str) -> None:
         adapter = ScrapyAdapter()
 
@@ -248,7 +251,7 @@ def test_two_scrapy_crawls_no_reactor_error() -> None:
             captured: dict[str, Any] = {}
 
             def fake_popen(cmd: list[str], **kwargs: Any) -> _FakeProc:
-                out_jsonl_path = Path(cmd[4])  # argv[2] = out_jsonl
+                out_jsonl_path = Path(cmd[_JSONL_IDX])  # cmd[4] = out_jsonl path
                 fake = _FakeProc(
                     out_jsonl_path,
                     [
@@ -298,8 +301,10 @@ def test_two_crawls_parsed_result_count() -> None:
         "knowledge_lake.plugins.builtin.scrapy_adapter.subprocess.Popen"
     ) as mock_popen:
 
+        # cmd layout: [python, "-m", "<module>", source_url, out_jsonl, config_json]
+        _JSONL_IDX = 4
         def fake_popen(cmd: list[str], **kwargs: Any) -> _FakeProc:
-            out_path = Path(cmd[4])
+            out_path = Path(cmd[_JSONL_IDX])  # cmd[4] = out_jsonl path
             return _FakeProc(out_path, [_SAMPLE_PAGE_RESULT], exit_code=0)
 
         mock_popen.side_effect = fake_popen
