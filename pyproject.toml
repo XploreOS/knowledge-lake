@@ -30,6 +30,8 @@ dependencies = [
     "orjson==3.11.9",
     "dagster-postgres==0.29.11",
     "uuid-utils>=0.16.2",
+    "protego>=0.3.1",
+    "tldextract>=5.1.0",
 ]
 
 [project.scripts]
