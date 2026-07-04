@@ -11,6 +11,7 @@ Uses an in-memory SQLite database with mocked adapter and storage.
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 from contextlib import contextmanager
 from typing import Any
@@ -135,7 +136,7 @@ class TestRobotsBlocked:
 
             from knowledge_lake.pipeline.crawl import crawl_source
 
-            result = crawl_source(
+            result = asyncio.run(crawl_source(
                 "https://example.com",
                 settings=MagicMock(
                     crawler="crawl4ai",
@@ -146,7 +147,7 @@ class TestRobotsBlocked:
                     ),
                     storage=MagicMock(),
                 ),
-            )
+            ))
 
         # The URL should be recorded as robots_blocked
         stmt = select(CrawlState).where(
@@ -258,7 +259,7 @@ class TestRobotsBlocked:
 
             from knowledge_lake.pipeline.crawl import crawl_source
 
-            result = crawl_source(
+            result = asyncio.run(crawl_source(
                 "https://example.com",
                 settings=MagicMock(
                     crawler="crawl4ai",
@@ -269,7 +270,7 @@ class TestRobotsBlocked:
                     ),
                     storage=MagicMock(),
                 ),
-            )
+            ))
 
         # Verify allowed URL got fetched
         assert result["pages_complete"] == 1

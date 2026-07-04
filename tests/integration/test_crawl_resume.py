@@ -183,7 +183,7 @@ class TestCrawlResume:
 
             from knowledge_lake.pipeline.crawl import crawl_source
 
-            result = crawl_source(
+            result = asyncio.run(crawl_source(
                 "https://example.com",
                 settings=MagicMock(
                     crawler="crawl4ai",
@@ -194,7 +194,7 @@ class TestCrawlResume:
                     ),
                     storage=MagicMock(),
                 ),
-            )
+            ))
 
         # Verify: adapter was called only for the 2 pending URLs
         fetched_urls = [c.args[0] for c in mock_adapter.fetch_page.call_args_list]
@@ -300,7 +300,7 @@ class TestCrawlResume:
 
             from knowledge_lake.pipeline.crawl import crawl_source
 
-            crawl_source(
+            asyncio.run(crawl_source(
                 "https://example.com",
                 settings=MagicMock(
                     crawler="crawl4ai",
@@ -311,7 +311,7 @@ class TestCrawlResume:
                     ),
                     storage=MagicMock(),
                 ),
-            )
+            ))
 
         # Validate is called BEFORE fetch for the page URL
         page_actions = [(action, url) for action, url in call_order
@@ -396,7 +396,7 @@ class TestCrawlResume:
 
             from knowledge_lake.pipeline.crawl import crawl_source
 
-            crawl_source(
+            asyncio.run(crawl_source(
                 "https://example.com",
                 settings=MagicMock(
                     crawler="crawl4ai",
@@ -407,7 +407,7 @@ class TestCrawlResume:
                     ),
                     storage=MagicMock(),
                 ),
-            )
+            ))
 
         # Verify put_bronze was called with parent_artifact_id == raw.id
         mock_storage.put_bronze.assert_called_once()
