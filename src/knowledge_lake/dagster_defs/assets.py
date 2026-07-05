@@ -11,11 +11,17 @@ Pipeline stages wrapped as assets:
   parsed_document       — parse()                → parsed_document artifact
   clean_document        — clean()                → cleaned_document artifact
   chunk_document        — chunk()                → chunk artifact IDs
+  enrich_document       — enrich_document()       → enriched_document artifact
   embed_chunks          — embed()                → vectors + dim
   index_chunks          — index()                → indexed chunk IDs in Qdrant
 
 Asset ordering (deps chain):
-  ingest_raw_document → parsed_document → clean_document → chunk_document → embed_chunks → index_chunks
+  ingest_raw_document → parsed_document → clean_document → {chunk_document, enrich_document} → embed_chunks → index_chunks
+
+  clean_document fans out into two parallel branches — chunk_document and
+  enrich_document both depend on clean_document's output; neither blocks the
+  other (D-01). enrich_document calls pipeline.enrich.enrich_document — no
+  logic duplicated.
 
 NO IO managers for object bytes — each asset stores its output in the registry/S3/Qdrant
 and passes only the minimal metadata (artifact IDs, vectors) to the next stage via the
@@ -346,6 +352,62 @@ def chunk_document(
     }
 
     log.info("dagster.chunk_document.complete", chunk_count=len(chunks))
+    return result
+
+
+@asset(
+    description=(
+        "Enrich a cleaned document with LLM-judged metadata (summary, document_type, "
+        "organization, jurisdiction, keywords, entities, quality_score) — parallel "
+        "branch off clean_document, does not block chunk_document (D-01). Calls "
+        "pipeline.enrich.enrich_document — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def enrich_document(
+    clean_document: dict[str, Any],
+    postgres: PostgresResource,
+    minio: MinIOResource,
+    litellm: LiteLLMResource,
+) -> dict[str, Any]:
+    """Enrich stage: cleaned_document artifact → enriched_document artifact.
+
+    Receives the clean_document output dict and returns the enrich_document()
+    result dict (artifact_id, cached, status, quality_score, cost_usd).
+
+    Parallel branch off clean_document — same dependency as chunk_document,
+    neither blocks the other (D-01).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.enrich import enrich_document as enrich_fn
+
+    cleaned_artifact_id = clean_document["artifact_id"]
+    source_id = clean_document["source_id"]
+    parsed_doc = clean_document["parsed_doc"]
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        litellm_url=litellm.litellm_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.enrich_document.start", cleaned_artifact_id=cleaned_artifact_id)
+
+    result = enrich_fn(cleaned_artifact_id, source_id, parsed_doc=parsed_doc, settings=settings)
+
+    log.info(
+        "dagster.enrich_document.complete",
+        status=result.get("status"),
+        quality_score=result.get("quality_score"),
+    )
     return result
 
 

@@ -40,6 +40,8 @@ from knowledge_lake.api.schemas import (
     DiscoverOut,
     DiscoverRequest,
     DiscoverResultItem,
+    EnrichRequest,
+    EnrichResponse,
     LineageGraph,
     LineageNode,
     ParseRequest,
@@ -581,6 +583,44 @@ def chunk_endpoint(body: ChunkRequest) -> ChunkResponse:
     chunk_ids = [c["artifact_id"] for c in chunks]
     logger.info("api.chunk.complete", chunk_count=len(chunks))
     return ChunkResponse(chunk_count=len(chunks), chunk_ids=chunk_ids)
+
+
+@app.post(
+    "/enrich",
+    response_model=EnrichResponse,
+    tags=["pipeline"],
+    summary="Enrich a cleaned document artifact with LLM-judged metadata",
+    status_code=200,
+)
+def enrich_endpoint(body: EnrichRequest) -> EnrichResponse:
+    """Run the enrich pipeline stage on a cleaned_document artifact.
+
+    Runs deterministic (non-LLM) extraction first, then a single cached,
+    budget-capped LiteLLM call. Returns 'enriched', 'cached',
+    'skipped_budget_exceeded', or 'skipped_enrichment_failed' status.
+
+    Security (ASVS V5):
+        - cleaned_artifact_id/source_id are validated by Pydantic (min_length=1).
+        - Artifact lookup uses parameterised ORM query (no SQL injection).
+        - Invalid IDs return 422 with a clear error body.
+    """
+    from knowledge_lake.pipeline.enrich import enrich_document
+
+    logger.info("api.enrich", cleaned_artifact_id=body.cleaned_artifact_id)
+
+    try:
+        result = enrich_document(body.cleaned_artifact_id, body.source_id)
+    except ValueError as exc:
+        logger.warning("api.enrich.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.enrich.complete", status=result["status"], artifact_id=result.get("artifact_id"))
+    return EnrichResponse(
+        artifact_id=result.get("artifact_id"),
+        status=result["status"],
+        cached=result.get("cached", False),
+        quality_score=result.get("quality_score"),
+    )
 
 
 @app.get(

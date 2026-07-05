@@ -8,6 +8,7 @@ Commands:
   parse       — parse a raw_document artifact into a parsed_document artifact
   clean       — clean a parsed_document artifact (boilerplate removal, dedup)
   chunk       — chunk a parsed_document artifact into chunk artifacts
+  enrich      — enrich a cleaned_document artifact with LLM-judged metadata
   search      — embed a query and return cited search results
   lineage     — print ancestry tree (or JSON) for a given artifact ID
   demo        — run the full spike end-to-end (ingest → search → lineage)
@@ -278,6 +279,34 @@ def cmd_chunk(
         typer.echo(f"  chunk_count:  {len(result)}")
         if result:
             typer.echo(f"  first_chunk:  {result[0]['artifact_id']}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="enrich")
+def cmd_enrich(
+    cleaned_artifact_id: str = typer.Argument(
+        ..., help="ID of the cleaned_document artifact to enrich."
+    ),
+    source_id: str = typer.Argument(..., help="Source ID that owns the cleaned artifact."),
+) -> None:
+    """Enrich a cleaned_document artifact with LLM-judged metadata.
+
+    Runs deterministic (non-LLM) extraction first, then a single cached,
+    budget-capped LiteLLM call producing summary/document_type/organization/
+    jurisdiction/keywords/entities/quality_score. Prints status, artifact_id,
+    quality_score, and cached on success.
+    """
+    from knowledge_lake.pipeline.enrich import enrich_document
+
+    try:
+        result = enrich_document(cleaned_artifact_id, source_id)
+        typer.echo(f"Enriched:")
+        typer.echo(f"  status:        {result['status']}")
+        typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
+        typer.echo(f"  quality_score: {result.get('quality_score')}")
+        typer.echo(f"  cached:        {result.get('cached', False)}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)

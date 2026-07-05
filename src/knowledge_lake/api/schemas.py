@@ -314,6 +314,41 @@ class ChunkResponse(BaseModel):
     chunk_ids: list[str] = Field(description="List of chunk artifact IDs (chk_...).")
 
 
+class EnrichRequest(BaseModel):
+    """Request body for POST /enrich — run the enrich pipeline stage.
+
+    Pydantic validates at the API boundary (ASVS V5).
+    """
+
+    cleaned_artifact_id: str = Field(
+        ...,
+        description="ID of the cleaned_document artifact to enrich.",
+        min_length=1,
+    )
+    source_id: str = Field(
+        ...,
+        description="Source registry ID that owns the cleaned artifact.",
+        min_length=1,
+    )
+
+
+class EnrichResponse(BaseModel):
+    """Response body for POST /enrich."""
+
+    artifact_id: Optional[str] = Field(
+        default=None,
+        description="Enriched document artifact ID (doc_...), None when skipped.",
+    )
+    status: str = Field(
+        description="'enriched', 'cached', 'skipped_budget_exceeded', or 'skipped_enrichment_failed'."
+    )
+    cached: bool = Field(description="True when this call was an ENRICH-04 cache hit.")
+    quality_score: Optional[float] = Field(
+        default=None,
+        description="LLM-judged quality score in [0,1], None when skipped.",
+    )
+
+
 class DiscoverRequest(BaseModel):
     """Request body for POST /discover — run a discovery query.
 
