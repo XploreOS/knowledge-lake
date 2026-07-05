@@ -318,3 +318,157 @@ class TestGetArtifactByHash:
         # The same hash for a different type should not be found
         result = get_artifact_by_hash(session, "disc_hash", "chunk")
         assert result is None
+
+
+# ── Enriched artifact, LLM spend, vector collections tests (Phase 4) ─────────
+
+
+class TestEnrichedArtifactAndSpend:
+    """create_enriched_artifact, LLM spend, and vector-collection repo functions."""
+
+    @pytest.fixture()
+    def source(self, session):
+        from knowledge_lake.registry.repo import create_source
+        return create_source(session, name="Enrich Source", source_type="web")
+
+    def test_create_enriched_artifact_sets_fields(self, session, source) -> None:
+        from knowledge_lake.registry.repo import (
+            create_cleaned_artifact,
+            create_enriched_artifact,
+            create_parsed_artifact,
+            create_raw_artifact,
+        )
+
+        raw = create_raw_artifact(
+            session, source_id=source.id, content_hash="e_raw",
+            storage_uri="s3://b/raw/e_raw.pdf",
+        )
+        parsed = create_parsed_artifact(
+            session, source_id=source.id, parent_artifact_id=raw.id,
+            content_hash="e_parsed", storage_uri="s3://b/silver/e_parsed.json",
+        )
+        cleaned = create_cleaned_artifact(
+            session, source_id=source.id, parent_artifact_id=parsed.id,
+            content_hash="e_cleaned", storage_uri="s3://b/silver/e_cleaned.md",
+        )
+        enriched = create_enriched_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=cleaned.id,
+            content_hash="e_enriched",
+            quality_score=0.87,
+        )
+        session.flush()
+
+        assert enriched.artifact_type == "enriched_document"
+        assert enriched.quality_score == 0.87
+        assert enriched.parent_artifact_id == cleaned.id
+        assert enriched.id.startswith("doc_")
+
+    def test_get_llm_spend_returns_zero_for_unseen_scope(self, session) -> None:
+        from knowledge_lake.registry.repo import get_llm_spend
+
+        assert get_llm_spend(session, scope="never-used-scope") == 0.0
+
+    def test_record_llm_spend_accumulates(self, session) -> None:
+        from knowledge_lake.registry.repo import get_llm_spend, record_llm_spend
+
+        record_llm_spend(session, "test-scope", 1.5)
+        session.flush()
+        record_llm_spend(session, "test-scope", 2.25)
+        session.flush()
+
+        assert get_llm_spend(session, scope="test-scope") == pytest.approx(3.75)
+
+    def test_register_vector_collection_flips_current(self, session) -> None:
+        from knowledge_lake.registry.repo import (
+            get_current_vector_collection,
+            register_vector_collection,
+        )
+
+        first = register_vector_collection(
+            session, alias_name="klake_chunks_test", physical_collection="klake_chunks_test_v1", dim=384,
+        )
+        session.flush()
+        second = register_vector_collection(
+            session, alias_name="klake_chunks_test", physical_collection="klake_chunks_test_v2", dim=384,
+        )
+        session.flush()
+
+        assert first.is_current is False
+        assert second.is_current is True
+
+        current = get_current_vector_collection(session, "klake_chunks_test")
+        assert current is not None
+        assert current.physical_collection == "klake_chunks_test_v2"
+
+    def test_get_enriched_artifact_for_parsed_resolves_chain(self, session, source) -> None:
+        from knowledge_lake.registry.repo import (
+            create_cleaned_artifact,
+            create_enriched_artifact,
+            create_parsed_artifact,
+            create_raw_artifact,
+            get_enriched_artifact_for_parsed,
+        )
+
+        raw = create_raw_artifact(
+            session, source_id=source.id, content_hash="chain_raw",
+            storage_uri="s3://b/raw/chain_raw.pdf",
+        )
+        parsed = create_parsed_artifact(
+            session, source_id=source.id, parent_artifact_id=raw.id,
+            content_hash="chain_parsed", storage_uri="s3://b/silver/chain_parsed.json",
+        )
+        cleaned = create_cleaned_artifact(
+            session, source_id=source.id, parent_artifact_id=parsed.id,
+            content_hash="chain_cleaned", storage_uri="s3://b/silver/chain_cleaned.md",
+        )
+        enriched = create_enriched_artifact(
+            session, source_id=source.id, parent_artifact_id=cleaned.id,
+            content_hash="chain_enriched",
+        )
+        session.flush()
+
+        found = get_enriched_artifact_for_parsed(session, parsed.id)
+        assert found is not None
+        assert found.id == enriched.id
+
+    def test_get_enriched_artifact_for_parsed_returns_none_without_descendants(
+        self, session, source
+    ) -> None:
+        from knowledge_lake.registry.repo import (
+            create_raw_artifact,
+            create_parsed_artifact,
+            get_enriched_artifact_for_parsed,
+        )
+
+        raw = create_raw_artifact(
+            session, source_id=source.id, content_hash="lonely_raw",
+            storage_uri="s3://b/raw/lonely_raw.pdf",
+        )
+        parsed = create_parsed_artifact(
+            session, source_id=source.id, parent_artifact_id=raw.id,
+            content_hash="lonely_parsed", storage_uri="s3://b/silver/lonely_parsed.json",
+        )
+        session.flush()
+
+        assert get_enriched_artifact_for_parsed(session, parsed.id) is None
+
+    def test_get_domain_for_source_returns_domain(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, get_domain_for_source
+
+        source = create_source(
+            session, name="Domain Source", source_type="web",
+            config={"domain": "healthcare"},
+        )
+        session.flush()
+
+        assert get_domain_for_source(session, source.id) == "healthcare"
+
+    def test_get_domain_for_source_returns_none_without_config(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, get_domain_for_source
+
+        source = create_source(session, name="No Config Source", source_type="web")
+        session.flush()
+
+        assert get_domain_for_source(session, source.id) is None

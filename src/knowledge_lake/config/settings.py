@@ -130,6 +130,74 @@ class ChunkSettings(BaseModel):
     """Maximum heading levels to prepend as context prefix for retrieval."""
 
 
+class EnrichSettings(BaseModel):
+    """LLM-based metadata enrichment configuration (ENRICH-01..05).
+
+    Nested under Settings as settings.enrich. Environment variable pattern:
+    KLAKE_ENRICH__BUDGET_USD, KLAKE_ENRICH__PROMPT_VERSION, etc.
+    """
+
+    budget_usd: float = 5.0
+    """Global spend cap in USD before the enrichment job halts gracefully
+    (ENRICH-05, D-05)."""
+
+    prompt_version: str = "v1"
+    """Bumping this invalidates the enrichment cache (ENRICH-04, D-04)."""
+
+    cache_enabled: bool = True
+    """Enable or disable enrichment result caching keyed by prompt_version."""
+
+    excerpt_chars: int = 4000
+    """Bounds the cleaned-document excerpt sent to the LLM — cost and
+    prompt-injection surface control (AI-SPEC Section 4)."""
+
+    cheap_model_bedrock_id: str = "bedrock/anthropic.claude-haiku-4-5-20260925-v1:0"
+    """Used ONLY by llm.pricing.bootstrap_llm_pricing()'s
+    litellm.register_model() call so completion_cost() does not raise for
+    this project's configured model IDs (RESEARCH.md Pitfall 1). NEVER
+    passed as the `model=` argument to litellm.completion(), which always
+    uses the "cheap_model" task alias — mirrors this default against
+    infra/litellm/config.yaml's current cheap_model mapping."""
+
+    strong_model_bedrock_id: str = "bedrock/anthropic.claude-sonnet-4-5-20260925-v1:0"
+    """Same rationale as cheap_model_bedrock_id, registered for
+    forward-compatibility with Phase 5's strong_model/eval_model usage."""
+
+    cheap_model_input_cost_per_token: float = 0.0000008
+    """USD cost per input token for the cheap_model alias's registered price."""
+
+    cheap_model_output_cost_per_token: float = 0.000004
+    """USD cost per output token for the cheap_model alias's registered price."""
+
+    strong_model_input_cost_per_token: float = 0.000003
+    """USD cost per input token for the strong_model alias's registered price."""
+
+    strong_model_output_cost_per_token: float = 0.000015
+    """USD cost per output token for the strong_model alias's registered price."""
+
+    fallback_cost_per_1k_input: float = 0.0005
+    """Used only if completion_cost() itself raises even after registration."""
+
+    fallback_cost_per_1k_output: float = 0.0015
+    """Used only if completion_cost() itself raises even after registration."""
+
+
+class IndexSettings(BaseModel):
+    """Vector index / alias configuration (INDEX-02, D-06).
+
+    Nested under Settings as settings.index. Environment variable pattern:
+    KLAKE_INDEX__COLLECTION_ALIAS, etc.
+    """
+
+    collection_alias: str = "klake_chunks"
+    """The stable alias name; matches the existing collection: str =
+    "klake_chunks" parameter already threaded through embed()/index()/search()."""
+
+    keep_old_collections: bool = True
+    """If True, reindex() never auto-drops the prior physical collection —
+    an operator/CLI step drops it after confirming the swap (D-06)."""
+
+
 # Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
 _SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
@@ -212,6 +280,12 @@ class Settings(BaseSettings):
 
     chunk: ChunkSettings = Field(default_factory=ChunkSettings)
     """Token-aware chunking configuration (CHUNK-01..04)."""
+
+    enrich: EnrichSettings = Field(default_factory=EnrichSettings)
+    """LLM-based metadata enrichment configuration (ENRICH-01..05)."""
+
+    index: IndexSettings = Field(default_factory=IndexSettings)
+    """Vector index / alias configuration (INDEX-02)."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 

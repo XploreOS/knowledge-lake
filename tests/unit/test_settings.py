@@ -141,6 +141,36 @@ class TestEnvPrecedence:
         assert s.parser == "unstructured"
 
 
+class TestEnrichAndIndexSettings:
+    """EnrichSettings/IndexSettings load with correct defaults and env overrides."""
+
+    def test_default_enrich_budget_usd(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.enrich.budget_usd == 5.0
+
+    def test_default_enrich_prompt_version(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.enrich.prompt_version == "v1"
+
+    def test_default_index_collection_alias(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.index.collection_alias == "klake_chunks"
+
+    def test_enrich_budget_usd_env_override(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        env = {"KLAKE_ENRICH__BUDGET_USD": "10.5"}
+        with patch.dict(os.environ, env, clear=False):
+            s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.enrich.budget_usd == 10.5
+
+
 class TestGetSettings:
     """get_settings() returns a validated Settings instance (cached singleton)."""
 

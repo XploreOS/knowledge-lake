@@ -6,15 +6,22 @@ are used — every query is expressed via the SQLAlchemy ORM to satisfy
 threat T-01-03 (injection prevention).
 
 Functions:
-    create_source             — register a new source
-    create_raw_artifact       — persist a raw document node
-    create_parsed_artifact    — persist a parsed document node
-    create_cleaned_artifact   — persist a cleaned document node (CLEAN-01..03)
-    create_chunk_artifact     — persist a chunk node
-    get_artifact_by_hash      — dedup lookup used by storage.put_raw (FOUND-04)
-    get_artifact              — fetch by primary key
-    list_children             — list direct children of an artifact
-    list_cleaned_artifacts    — list all cleaned_document artifacts (near-dup scan)
+    create_source                   — register a new source
+    create_raw_artifact             — persist a raw document node
+    create_parsed_artifact          — persist a parsed document node
+    create_cleaned_artifact         — persist a cleaned document node (CLEAN-01..03)
+    create_chunk_artifact           — persist a chunk node
+    get_artifact_by_hash            — dedup lookup used by storage.put_raw (FOUND-04)
+    get_artifact                    — fetch by primary key
+    list_children                   — list direct children of an artifact
+    list_cleaned_artifacts          — list all cleaned_document artifacts (near-dup scan)
+    create_enriched_artifact        — persist an enriched document node (ENRICH-01..05)
+    get_llm_spend                   — read accumulated LLM spend for a scope (ENRICH-05)
+    record_llm_spend                — accumulate LLM spend for a scope (ENRICH-05)
+    get_enriched_artifact_for_parsed — resolve parsed -> cleaned -> enriched (D-01)
+    get_domain_for_source           — read domain from Source.config JSON
+    register_vector_collection      — register/flip current physical collection for an alias (INDEX-02)
+    get_current_vector_collection   — read the current physical collection for an alias (INDEX-02)
 """
 
 from __future__ import annotations
@@ -27,7 +34,15 @@ from sqlalchemy import select
 
 from knowledge_lake.ids import new_id
 from knowledge_lake.version import pipeline_version
-from knowledge_lake.registry.models import Artifact, CrawlState, Job, LineageEvent, Source
+from knowledge_lake.registry.models import (
+    Artifact,
+    CrawlState,
+    Job,
+    LineageEvent,
+    LlmSpend,
+    Source,
+    VectorCollection,
+)
 
 
 # ── Source ────────────────────────────────────────────────────────────────────
@@ -594,3 +609,189 @@ def list_cleaned_artifacts(session: Session) -> list[Artifact]:
         .order_by(Artifact.created_at)
     )
     return list(session.execute(stmt).scalars())
+
+
+# ── Enriched document (ENRICH-01..05) ────────────────────────────────────────
+
+
+def create_enriched_artifact(
+    session: Session,
+    *,
+    source_id: str,
+    parent_artifact_id: str,
+    content_hash: str,
+    metadata: Optional[Any] = None,
+    quality_score: Optional[float] = None,
+) -> Artifact:
+    """Persist an enriched document artifact node (ENRICH-01..05).
+
+    ``parent_artifact_id`` MUST point to the cleaned_document artifact
+    (D-01), never parsed_document — enrichment always parents off the
+    cleaned text, not the raw parsed output.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_id:
+        FK to the source this document belongs to.
+    parent_artifact_id:
+        ID of the cleaned_document artifact this was enriched from (required).
+    content_hash:
+        SHA256 of the enriched content/metadata bytes.
+    metadata:
+        JSON dict carrying the LLM-generated enrichment metadata.
+    quality_score:
+        LLM-judged quality score for this enriched document (Phase 4).
+
+    Returns
+    -------
+    Artifact
+        The newly created (unsaved) Artifact instance.
+    """
+    art = _make_artifact(
+        kind="enriched_document",
+        source_id=source_id,
+        artifact_type="enriched_document",
+        content_hash=content_hash,
+        storage_uri=None,
+        parent_artifact_id=parent_artifact_id,
+        metadata=metadata,
+    )
+    art.quality_score = quality_score
+    session.add(art)
+    return art
+
+
+# ── LLM spend accounting (ENRICH-05) ─────────────────────────────────────────
+
+
+def get_llm_spend(session: Session, scope: str = "global") -> float:
+    """Return accumulated LLM spend in USD for the given scope.
+
+    Returns 0.0 if no spend has been recorded yet for this scope (ENRICH-05).
+    """
+    stmt = select(LlmSpend).where(LlmSpend.scope == scope).limit(1)
+    row = session.execute(stmt).scalar_one_or_none()
+    return row.total_cost_usd if row is not None else 0.0
+
+
+def record_llm_spend(session: Session, scope: str, cost_usd: float) -> LlmSpend:
+    """Accumulate LLM call cost in USD for the given scope (ENRICH-05).
+
+    Get-or-create pattern mirroring ``upsert_crawl_state``: if a row for
+    ``scope`` already exists, its ``total_cost_usd`` is incremented in place;
+    otherwise a new row is created. The UNIQUE(scope) constraint on
+    ``llm_spend`` prevents duplicate scope rows from ever being created.
+    """
+    stmt = select(LlmSpend).where(LlmSpend.scope == scope).limit(1)
+    existing = session.execute(stmt).scalar_one_or_none()
+
+    if existing is not None:
+        existing.total_cost_usd += cost_usd
+        return existing
+
+    spend = LlmSpend(
+        id=new_id("artifact"),
+        scope=scope,
+        total_cost_usd=cost_usd,
+        updated_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session.add(spend)
+    return spend
+
+
+def get_enriched_artifact_for_parsed(
+    session: Session,
+    parsed_artifact_id: str,
+) -> Optional[Artifact]:
+    """Resolve the enriched_document artifact two hops below a parsed_document.
+
+    Walks parsed_document -> cleaned_document -> enriched_document, bridging
+    parsed_artifact_id-keyed index() calls to enrichment, which parents off
+    cleaned_document per D-01. Returns None if no cleaned_document child
+    exists yet, or if the cleaned_document has no enriched_document child yet.
+    """
+    cleaned = next(
+        (
+            child
+            for child in list_children(session, parsed_artifact_id)
+            if child.artifact_type == "cleaned_document"
+        ),
+        None,
+    )
+    if cleaned is None:
+        return None
+
+    enriched = next(
+        (
+            child
+            for child in list_children(session, cleaned.id)
+            if child.artifact_type == "enriched_document"
+        ),
+        None,
+    )
+    return enriched
+
+
+def get_domain_for_source(session: Session, source_id: str) -> Optional[str]:
+    """Return the domain classification stored in Source.config, or None.
+
+    RESEARCH.md Pitfall 4: domain is never a dedicated column, always stored
+    under Source.config["domain"] (see pipeline/ingest.py's register_source).
+    Returns None if the source is missing or has no config.
+    """
+    source = session.get(Source, source_id)
+    if source is None or not source.config:
+        return None
+    return source.config.get("domain")
+
+
+# ── Vector collection alias registry (INDEX-02, D-06) ───────────────────────
+
+
+def register_vector_collection(
+    session: Session,
+    *,
+    alias_name: str,
+    physical_collection: str,
+    dim: int,
+) -> VectorCollection:
+    """Register a physical collection as the new current target for an alias.
+
+    Any existing rows for ``alias_name`` with ``is_current=True`` are flipped
+    to ``is_current=False`` before the new row is inserted, so only one row
+    per alias_name is ever current at a time (D-06 zero-downtime reindex).
+    """
+    stmt = (
+        select(VectorCollection)
+        .where(VectorCollection.alias_name == alias_name)
+        .where(VectorCollection.is_current == True)  # noqa: E712
+    )
+    for existing in session.execute(stmt).scalars():
+        existing.is_current = False
+
+    collection = VectorCollection(
+        id=new_id("artifact"),
+        alias_name=alias_name,
+        physical_collection=physical_collection,
+        dim=dim,
+        is_current=True,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session.add(collection)
+    return collection
+
+
+def get_current_vector_collection(
+    session: Session,
+    alias_name: str,
+) -> Optional[VectorCollection]:
+    """Return the current physical collection row for the given alias, or None."""
+    stmt = (
+        select(VectorCollection)
+        .where(VectorCollection.alias_name == alias_name)
+        .where(VectorCollection.is_current == True)  # noqa: E712
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
