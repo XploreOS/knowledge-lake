@@ -48,9 +48,10 @@ def test_short_text_single_chunk() -> None:
 
 def test_long_text_splits_into_multiple_chunks() -> None:
     """Text exceeding max_tokens is split into multiple chunks each <= max_tokens."""
-    # 200 words repeated 5 times ≈ 1000 tokens
-    base = " ".join(["The patient was admitted"] * 50)
-    long_text = (base + " ") * 4  # ~800-1000 tokens
+    # Build ~1200 tokens of properly punctuated sentences that _split_sentences() can split
+    sentence = "The patient was admitted with a diagnosis of hypertension and reviewed by a specialist."
+    sentences_list = [sentence] * 80  # 80 sentences × ~15 tokens ≈ 1200 tokens
+    long_text = " ".join(sentences_list)
     section = Section(heading="Clinical Notes", section_path="§2", page=3, text=long_text)
     doc = ParsedDoc(text=long_text, sections=[section])
     chunks = _build_token_chunks(doc, max_tokens=512, overlap_tokens=64, breadcrumb_depth=2)
@@ -128,9 +129,9 @@ def test_chunk_carries_page_ref() -> None:
 
 def test_overlap_produces_shared_content() -> None:
     """With overlap_tokens=64 the second chunk shares at least one sentence with the first."""
-    # Build text that will split into exactly 2 chunks with overlap
-    # Each sentence is ~10 words. 60 sentences * 10 words ≈ 600+ tokens
-    sentences = [f"Sentence {i:03d} about healthcare policy requirements." for i in range(60)]
+    # Build text that will split into exactly 2 chunks with overlap.
+    # Each sentence is ~10 words. 100 sentences * ~10 tokens ≈ 1000+ tokens > 512.
+    sentences = [f"Sentence {i:03d} about healthcare policy requirements and compliance details." for i in range(100)]
     text = " ".join(sentences)
     section = Section(heading="Policy", section_path="§2", page=1, text=text)
     doc = ParsedDoc(text=text, sections=[section])

@@ -52,6 +52,14 @@ class Section:
     text: str = ""
     """Text content of the section (may be empty if not extracted)."""
 
+    is_table: bool = False
+    """True when this section is a table that must be chunked atomically (CHUNK-03).
+
+    Tables are never split even if they exceed max_tokens — an oversized table emits
+    as a single chunk with ``oversized=True`` in its metadata.  Default False so all
+    existing code constructing Section without this field continues to work.
+    """
+
 
 @dataclass
 class ParsedDoc:
