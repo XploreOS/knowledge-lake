@@ -238,26 +238,8 @@ def clean(
     cleaned_bytes = cleaned_text.encode("utf-8")
     content_hash = hashlib.sha256(cleaned_bytes).hexdigest()
 
-    # Step 5: Exact dedup check — same pattern as parse stage (FOUND-04)
-    with get_session() as session:
-        existing = registry_repo.get_artifact_by_hash(session, content_hash, "cleaned_document")
-        if existing is not None:
-            log.info(
-                "clean.exact_dup",
-                content_hash=content_hash,
-                existing_artifact_id=existing.id,
-            )
-            return {
-                "artifact_id": existing.id,
-                "content_hash": content_hash,
-                "language": existing.metadata_.get("language", "unknown")
-                if existing.metadata_
-                else "unknown",
-                "dedup_status": "exact_dup",
-                "storage_uri": existing.storage_uri,
-            }
-
     # Step 6: Language detection (CLEAN-02 — annotate only)
+    # Done before the session block so no I/O happens inside the critical section.
     language = detect_language(cleaned_text)
 
     # Step 7: Compute MinHash signature for near-dup detection (CLEAN-03)
@@ -267,8 +249,8 @@ def clean(
         shingle_size=s.clean.minhash_shingle_size,
     )
 
-    # Step 8: Transient LSH near-dup check
-    # Build corpus-wide LSH from all existing cleaned artifacts.
+    # Step 8: Transient LSH near-dup check (read-only; separate session is safe here
+    # because this result is advisory — near_dup is metadata only, not a gate).
     # O(n) per call — acceptable for Phase 3 MVP (T-03-06 accepted).
     dedup_status = "unique"
     with get_session() as session:
@@ -308,14 +290,39 @@ def clean(
                     matches=matches,
                 )
 
-    # Step 9: Write cleaned text to silver zone
+    # Steps 5 + 9 + 10: Exact-dedup check, S3 write, and artifact creation in a
+    # single session block — mirroring parse.py's session discipline (WR-01).
+    # Both the read (dedup check) and the write (artifact insert) happen within the
+    # same session, making the dedup + insert effectively atomic and preventing two
+    # concurrent clean() calls for the same content from both creating an artifact
+    # and hitting the unique constraint with an unhandled IntegrityError.
+    # The S3 put_object call is idempotent for the same key, so it is safe here.
     cleaned_key = f"{_SILVER_PREFIX}/{source_id}/cleaned/{content_hash}.md"
-    storage.put_object(cleaned_key, cleaned_bytes)
-    cleaned_uri = storage.object_uri(cleaned_key)
-    log.info("clean.stored_silver", cleaned_uri=cleaned_uri)
-
-    # Step 10: Create cleaned_document artifact in registry
     with get_session() as session:
+        # Step 5: Exact dedup check — same pattern as parse stage (FOUND-04)
+        existing = registry_repo.get_artifact_by_hash(session, content_hash, "cleaned_document")
+        if existing is not None:
+            log.info(
+                "clean.exact_dup",
+                content_hash=content_hash,
+                existing_artifact_id=existing.id,
+            )
+            return {
+                "artifact_id": existing.id,
+                "content_hash": content_hash,
+                "language": existing.metadata_.get("language", "unknown")
+                if existing.metadata_
+                else "unknown",
+                "dedup_status": "exact_dup",
+                "storage_uri": existing.storage_uri,
+            }
+
+        # Step 9: Write cleaned text to silver zone (idempotent for same key)
+        storage.put_object(cleaned_key, cleaned_bytes)
+        cleaned_uri = storage.object_uri(cleaned_key)
+        log.info("clean.stored_silver", cleaned_uri=cleaned_uri)
+
+        # Step 10: Create cleaned_document artifact in registry
         artifact = registry_repo.create_cleaned_artifact(
             session,
             source_id=source_id,
