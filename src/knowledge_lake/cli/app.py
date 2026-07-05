@@ -262,10 +262,10 @@ def cmd_chunk(
                     f"Parsed artifact {parsed_artifact_id!r} has no storage_uri"
                 )
 
-        # Extract S3 key from URI
-        if not storage_uri.startswith("s3://"):
-            raise ValueError(f"Expected s3:// URI, got: {storage_uri!r}")
-        key = storage_uri.split("/", 3)[3]
+        # Extract S3 key from URI — use shared helper to raise a descriptive
+        # ValueError on malformed URIs instead of an unhandled IndexError.
+        from knowledge_lake.pipeline.utils import uri_to_key
+        key = uri_to_key(storage_uri)
         raw_bytes = storage.get_object(key)
         parsed_text = raw_bytes.decode("utf-8")
 

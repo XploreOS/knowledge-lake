@@ -563,10 +563,10 @@ def chunk_endpoint(body: ChunkRequest) -> ChunkResponse:
                     f"Parsed artifact {body.parsed_artifact_id!r} has no storage_uri"
                 )
 
-        # Extract S3 key from s3://bucket/key URI
-        if not storage_uri.startswith("s3://"):
-            raise ValueError(f"Expected s3:// URI, got: {storage_uri!r}")
-        key = storage_uri.split("/", 3)[3]
+        # Extract S3 key from s3://bucket/key URI — use shared helper to
+        # raise a descriptive ValueError on malformed URIs instead of IndexError.
+        from knowledge_lake.pipeline.utils import uri_to_key
+        key = uri_to_key(storage_uri)
         raw_bytes = storage.get_object(key)
         parsed_text = raw_bytes.decode("utf-8")
 
