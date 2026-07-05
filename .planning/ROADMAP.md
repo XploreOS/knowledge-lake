@@ -98,7 +98,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Cleaned documents have boilerplate removed and whitespace normalized (citations preserved), language detected and recorded, and exact (hash) plus near-duplicates (MinHash) flagged across the corpus
   5. Chunks respect heading hierarchy and configurable token size/overlap, never split tables mid-table, and each records parent document, section path, and page reference
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -107,7 +107,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — Boilerplate removal, language detection, MinHash near-dup flagging, cleaned_document artifact (CLEAN-01..03)
+- [x] 03-02-PLAN.md — Boilerplate removal, language detection, MinHash near-dup flagging, cleaned_document artifact (CLEAN-01..03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -169,7 +169,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
-| 3. Parse, Clean & Chunk | 1/3 | In Progress|  |
+| 3. Parse, Clean & Chunk | 2/3 | In Progress|  |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |

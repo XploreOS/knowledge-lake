@@ -41,9 +41,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Cleaning
 
-- [ ] **CLEAN-01**: Cleaning removes boilerplate and normalizes whitespace while preserving citations and provenance
-- [ ] **CLEAN-02**: Documents get language detection recorded in the registry
-- [ ] **CLEAN-03**: Exact duplicates (hash) and near-duplicates (MinHash) are detected and flagged across the corpus
+- [x] **CLEAN-01**: Cleaning removes boilerplate and normalizes whitespace while preserving citations and provenance
+- [x] **CLEAN-02**: Documents get language detection recorded in the registry
+- [x] **CLEAN-03**: Exact duplicates (hash) and near-duplicates (MinHash) are detected and flagged across the corpus
 
 ### Chunking
 
@@ -162,9 +162,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PARSE-03 | Phase 3 | Complete |
 | PARSE-04 | Phase 3 | Complete |
 | PARSE-05 | Phase 3 | Complete |
-| CLEAN-01 | Phase 3 | Pending |
-| CLEAN-02 | Phase 3 | Pending |
-| CLEAN-03 | Phase 3 | Pending |
+| CLEAN-01 | Phase 3 | Complete |
+| CLEAN-02 | Phase 3 | Complete |
+| CLEAN-03 | Phase 3 | Complete |
 | CHUNK-01 | Phase 3 | Pending |
 | CHUNK-02 | Phase 3 | Pending |
 | CHUNK-03 | Phase 3 | Pending |
