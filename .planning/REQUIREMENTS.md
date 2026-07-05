@@ -47,10 +47,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Chunking
 
-- [ ] **CHUNK-01**: User can chunk documents with section-aware strategy that respects heading hierarchy
-- [ ] **CHUNK-02**: Chunking is token-aware with configurable size/overlap per domain pack
-- [ ] **CHUNK-03**: Tables are chunked atomically — never split mid-table
-- [ ] **CHUNK-04**: Every chunk records parent document, section path, and page reference for citation traceability
+- [x] **CHUNK-01**: User can chunk documents with section-aware strategy that respects heading hierarchy
+- [x] **CHUNK-02**: Chunking is token-aware with configurable size/overlap per domain pack
+- [x] **CHUNK-03**: Tables are chunked atomically — never split mid-table
+- [x] **CHUNK-04**: Every chunk records parent document, section path, and page reference for citation traceability
 
 ### Enrichment
 
@@ -165,10 +165,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLEAN-01 | Phase 3 | Complete |
 | CLEAN-02 | Phase 3 | Complete |
 | CLEAN-03 | Phase 3 | Complete |
-| CHUNK-01 | Phase 3 | Pending |
-| CHUNK-02 | Phase 3 | Pending |
-| CHUNK-03 | Phase 3 | Pending |
-| CHUNK-04 | Phase 3 | Pending |
+| CHUNK-01 | Phase 3 | Complete |
+| CHUNK-02 | Phase 3 | Complete |
+| CHUNK-03 | Phase 3 | Complete |
+| CHUNK-04 | Phase 3 | Complete |
 | ENRICH-01 | Phase 4 | Pending |
 | ENRICH-02 | Phase 4 | Pending |
 | ENRICH-03 | Phase 4 | Pending |

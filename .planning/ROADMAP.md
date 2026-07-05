@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & End-to-End Spike** - Registries, immutable storage, plugin interfaces, and one document flowing through the full pipe on a one-command dev stack (completed 2026-07-03)
 - [x] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling (completed 2026-07-04)
-- [ ] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking
+- [x] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking (completed 2026-07-05)
 - [ ] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations
 - [ ] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports
 - [ ] **Phase 6: Healthcare Domain Pack & Full-Surface Validation** - Healthcare pack with seed sources, complete CLI/API/Dagster surface, and 5-10 real sources verified end-to-end
@@ -98,7 +98,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Cleaned documents have boilerplate removed and whitespace normalized (citations preserved), language detected and recorded, and exact (hash) plus near-duplicates (MinHash) flagged across the corpus
   5. Chunks respect heading hierarchy and configurable token size/overlap, never split tables mid-table, and each records parent document, section path, and page reference
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -111,7 +111,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — Token-aware chunking with table atomicity, Dagster clean/chunk assets, CLI/API parse-clean-chunk commands (CHUNK-01..04)
+- [x] 03-03-PLAN.md — Token-aware chunking with table atomicity, Dagster clean/chunk assets, CLI/API parse-clean-chunk commands (CHUNK-01..04)
 
 ### Phase 4: Enrichment, Embedding & Search
 
@@ -169,7 +169,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
-| 3. Parse, Clean & Chunk | 2/3 | In Progress|  |
+| 3. Parse, Clean & Chunk | 3/3 | Complete   | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 0/TBD | Not started | - |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
