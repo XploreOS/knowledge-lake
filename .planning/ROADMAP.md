@@ -101,8 +101,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 03-01-PLAN.md — Multi-format parser chain, quality scorer, Alembic 0006 migration, torture corpus fixtures and test suite (PARSE-01..05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — Boilerplate removal, language detection, MinHash near-dup flagging, cleaned_document artifact (CLEAN-01..03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-03-PLAN.md — Token-aware chunking with table atomicity, Dagster clean/chunk assets, CLI/API parse-clean-chunk commands (CHUNK-01..04)
 
 ### Phase 4: Enrichment, Embedding & Search

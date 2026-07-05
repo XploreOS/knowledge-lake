@@ -525,22 +525,22 @@ def remove_boilerplate(text: str) -> str:
 | A6 | Boilerplate regex patterns cover healthcare document headers/footers | Code Examples | Medium -- may need expansion based on torture-test results |
 | A7 | Quality gray zone 0.3-0.6 is narrow enough to avoid excessive LLM calls | Pitfall 4 | Medium -- depends on score distribution; tune on torture-test |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **JSON/XML format handling without native Docling support**
    - What we know: Docling supports specific XML schemas (USPTO, JATS, XBRL) but not generic XML. Generic JSON is only supported as Docling's own format.
    - What's unclear: Whether to write simple built-in parsers (json.loads + recursive text extraction) or rely on Unstructured for these formats.
-   - Recommendation: Write minimal JSON/XML parsers as built-in plugins since the parsing logic is trivial (extract text fields, preserve structure as markdown). This avoids requiring heavy optional deps for simple formats.
+   - RESOLVED: Write minimal JSON/XML parsers as built-in plugins (`JsonXmlParser`) since the parsing logic is trivial (extract text fields, preserve structure as markdown). This avoids requiring heavy optional deps for simple formats. Plans: 03-01 Task 2.
 
 2. **Table atomicity when table exceeds max_tokens**
    - What we know: Tables must never be split (CHUNK-03). But healthcare tables (ICD-10 code lists, drug formularies) can be very large.
    - What's unclear: Best handling for oversized tables -- keep as single oversized chunk, or truncate with continuation metadata?
-   - Recommendation: Keep as single oversized chunk (flag in metadata: `oversized=True`). Downstream consumers (embedding, retrieval) handle truncation at their layer. This preserves atomicity per the requirement.
+   - RESOLVED: Keep as single oversized chunk (flag in metadata: `oversized=True`). Downstream consumers (embedding, retrieval) handle truncation at their layer. This preserves atomicity per the requirement. Plans: 03-03 Task 1.
 
 3. **Torture-test corpus: source of healthcare documents**
    - What we know: Need at least 1 PDF (complex layout), 1 HTML, 1 DOCX, 1 CSV/XLSX, 1 JSON/XML.
    - What's unclear: Whether to use real public healthcare docs (licensing) or synthetic test fixtures.
-   - Recommendation: Use real public domain healthcare documents (HHS PDFs, CDC HTML pages, CMS CSV files) as fixtures checked into `tests/fixtures/torture_test/`. All sources are US government = public domain.
+   - RESOLVED: Use real public domain healthcare documents (HHS PDFs, CDC HTML pages, CMS CSV files) as fixtures checked into `tests/fixtures/torture_test/`. All sources are US government = public domain. Plans: 03-01 Task 3.
 
 ## Environment Availability
 
