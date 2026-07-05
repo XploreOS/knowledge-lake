@@ -158,6 +158,9 @@ def ingest_raw_document(
     # Normalize key: ingest_file/ingest_url return "artifact_id"; alias as "raw_artifact_id"
     # for downstream assets to use a more descriptive key.
     result["raw_artifact_id"] = result["artifact_id"]
+    # Pass mime_type so parsed_document uses the correct type instead of defaulting
+    # to "application/pdf" for HTML, DOCX, Markdown, CSV, and XLSX documents (CR-02).
+    result["mime_type"] = config.mime_type
 
     log.info(
         "dagster.ingest_raw_document.complete",
