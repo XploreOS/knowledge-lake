@@ -1,0 +1,11 @@
+code,description,category,effective_date
+A00.0,Cholera due to Vibrio cholerae 01 biovar cholerae,Intestinal infectious diseases,2023-10-01
+A00.1,Cholera due to Vibrio cholerae 01 biovar eltor,Intestinal infectious diseases,2023-10-01
+A01.0,Typhoid fever,Intestinal infectious diseases,2023-10-01
+A01.1,Paratyphoid fever A,Intestinal infectious diseases,2023-10-01
+A02.0,Salmonella enteritis,Intestinal infectious diseases,2023-10-01
+A02.1,Salmonella sepsis,Intestinal infectious diseases,2023-10-01
+A03.0,Shigellosis due to Shigella dysenteriae,Intestinal infectious diseases,2023-10-01
+A04.0,Enteropathogenic Escherichia coli infection,Intestinal infectious diseases,2023-10-01
+A04.1,Enterotoxigenic Escherichia coli infection,Intestinal infectious diseases,2023-10-01
+A09.9,Gastroenteritis and colitis of unspecified origin,Intestinal infectious diseases,2023-10-01

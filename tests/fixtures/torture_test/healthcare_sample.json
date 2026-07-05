@@ -1,0 +1,27 @@
+{
+  "resourceType": "Patient",
+  "id": "example-001",
+  "name": [
+    {
+      "family": "Smith",
+      "given": ["John"]
+    }
+  ],
+  "gender": "male",
+  "birthDate": "1970-01-01",
+  "address": [
+    {
+      "line": ["123 Main St"],
+      "city": "Anytown",
+      "state": "CA",
+      "postalCode": "90210",
+      "country": "US"
+    }
+  ],
+  "extension": [
+    {
+      "url": "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName",
+      "valueString": "Jones"
+    }
+  ]
+}
