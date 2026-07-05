@@ -227,6 +227,93 @@ class CrawlJobOut(BaseModel):
     )
 
 
+# ── Parse / Clean / Chunk pipeline schemas (03-03) ───────────────────────────
+
+
+class ParseRequest(BaseModel):
+    """Request body for POST /parse — run the parse pipeline stage.
+
+    Pydantic validates at the API boundary (ASVS V5, T-03-11).
+    artifact_id is looked up via parameterised ORM query (no raw SQL injection).
+    """
+
+    raw_artifact_id: str = Field(
+        ...,
+        description="ID of the raw_document artifact to parse.",
+        min_length=1,
+    )
+    source_id: str = Field(
+        ...,
+        description="Source registry ID that owns the raw artifact.",
+        min_length=1,
+    )
+    mime_type: str = Field(
+        default="application/pdf",
+        description="MIME type of the raw document.",
+    )
+
+
+class ParseResponse(BaseModel):
+    """Response body for POST /parse."""
+
+    artifact_id: str = Field(description="Parsed document artifact ID (art_...).")
+    quality_score: float = Field(description="Heuristic quality score in [0, 1].")
+    parser_used: str = Field(description="Name of the parser that succeeded (e.g. 'docling').")
+    content_hash: str = Field(description="SHA-256 hash of the parsed document bytes.")
+
+
+class CleanRequest(BaseModel):
+    """Request body for POST /clean — run the clean pipeline stage.
+
+    Pydantic validates at the API boundary (ASVS V5, T-03-11).
+    """
+
+    parsed_artifact_id: str = Field(
+        ...,
+        description="ID of the parsed_document artifact to clean.",
+        min_length=1,
+    )
+    source_id: str = Field(
+        ...,
+        description="Source registry ID that owns the parsed artifact.",
+        min_length=1,
+    )
+
+
+class CleanResponse(BaseModel):
+    """Response body for POST /clean."""
+
+    artifact_id: str = Field(description="Cleaned document artifact ID (art_...).")
+    language: str = Field(description="Detected language ISO 639-1 code (e.g. 'en').")
+    dedup_status: str = Field(description="Near-duplicate status: 'unique', 'exact_dup', or 'near_dup'.")
+    content_hash: str = Field(description="SHA-256 hash of the cleaned document bytes.")
+
+
+class ChunkRequest(BaseModel):
+    """Request body for POST /chunk — run the chunk pipeline stage.
+
+    Pydantic validates at the API boundary (ASVS V5, T-03-11).
+    """
+
+    parsed_artifact_id: str = Field(
+        ...,
+        description="ID of the parsed_document artifact to chunk.",
+        min_length=1,
+    )
+    source_id: str = Field(
+        ...,
+        description="Source registry ID that owns the parsed artifact.",
+        min_length=1,
+    )
+
+
+class ChunkResponse(BaseModel):
+    """Response body for POST /chunk."""
+
+    chunk_count: int = Field(description="Number of chunk artifacts created.")
+    chunk_ids: list[str] = Field(description="List of chunk artifact IDs (chk_...).")
+
+
 class DiscoverRequest(BaseModel):
     """Request body for POST /discover — run a discovery query.
 

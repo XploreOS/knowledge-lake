@@ -49,9 +49,9 @@ class TestDefinitionsLoad:
         assert isinstance(defs, Definitions)
         # defs.assets is the list of AssetsDefinitions passed to Definitions()
         asset_list = list(defs.assets or [])
-        assert len(asset_list) >= 5, (
-            f"Expected ≥5 asset defs (raw_document, parsed_document, chunks, "
-            f"embeddings, index), got {len(asset_list)}"
+        assert len(asset_list) >= 6, (
+            f"Expected ≥6 asset defs (raw_document, parsed_document, clean_document, "
+            f"chunk_document, embed_chunks, index_chunks), got {len(asset_list)}"
         )
 
     def test_definitions_has_resources(self) -> None:
@@ -123,6 +123,7 @@ class TestAssetsModule:
     def test_assets_module_importable(self) -> None:
         from knowledge_lake.dagster_defs.assets import (  # noqa: F401
             chunk_document,
+            clean_document,
             embed_chunks,
             index_chunks,
             ingest_raw_document,
@@ -179,6 +180,7 @@ class TestAssetMaterialization:
 
         from knowledge_lake.dagster_defs.assets import (
             chunk_document,
+            clean_document,
             embed_chunks,
             index_chunks,
             ingest_raw_document,
@@ -215,7 +217,14 @@ class TestAssetMaterialization:
         }
 
         result = materialize(
-            [ingest_raw_document, parsed_document, chunk_document, embed_chunks, index_chunks],
+            [
+                ingest_raw_document,
+                parsed_document,
+                clean_document,
+                chunk_document,
+                embed_chunks,
+                index_chunks,
+            ],
             resources=resources,
             run_config={
                 "ops": {
@@ -240,6 +249,7 @@ class TestAssetMaterialization:
 
         from knowledge_lake.dagster_defs.assets import (
             chunk_document,
+            clean_document,
             embed_chunks,
             index_chunks,
             ingest_raw_document,
@@ -275,7 +285,14 @@ class TestAssetMaterialization:
         }
 
         result = materialize(
-            [ingest_raw_document, parsed_document, chunk_document, embed_chunks, index_chunks],
+            [
+                ingest_raw_document,
+                parsed_document,
+                clean_document,
+                chunk_document,
+                embed_chunks,
+                index_chunks,
+            ],
             resources=resources,
             run_config={
                 "ops": {

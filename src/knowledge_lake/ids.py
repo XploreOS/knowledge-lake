@@ -32,6 +32,7 @@ _PREFIX: dict[str, str] = {
     "source": "src",
     "raw_document": "doc",
     "parsed_document": "doc",
+    "cleaned_document": "doc",
     "chunk": "chk",
     "artifact": "art",
     "crawl_job": "job",

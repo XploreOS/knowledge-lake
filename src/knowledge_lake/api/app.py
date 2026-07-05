@@ -30,6 +30,10 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from knowledge_lake.api.schemas import (
+    ChunkRequest,
+    ChunkResponse,
+    CleanRequest,
+    CleanResponse,
     CrawlJobCreate,
     CrawlJobOut,
     CrawlStateOut,
@@ -38,6 +42,8 @@ from knowledge_lake.api.schemas import (
     DiscoverResultItem,
     LineageGraph,
     LineageNode,
+    ParseRequest,
+    ParseResponse,
     SearchHit,
     SearchParams,
     SourceCreate,
@@ -428,6 +434,153 @@ def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
         status=job.status or "unknown",
         states=states,
     )
+
+
+@app.post(
+    "/parse",
+    response_model=ParseResponse,
+    tags=["pipeline"],
+    summary="Parse a raw document artifact into a parsed document",
+    status_code=200,
+)
+def parse_endpoint(body: ParseRequest) -> ParseResponse:
+    """Run the parse pipeline stage on an already-ingested raw_document artifact.
+
+    Uses the configured parser fallback chain (Docling → JSON/XML → Unstructured → Tika).
+    Returns the parsed artifact ID, quality score, parser used, and content hash.
+
+    Security (T-03-11 / ASVS V5):
+        - artifact_id is validated by Pydantic (min_length=1).
+        - Artifact lookup uses parameterised ORM query (no SQL injection).
+        - Invalid IDs return 422 with a clear error body.
+    """
+    from knowledge_lake.pipeline.parse import parse
+
+    logger.info("api.parse", raw_artifact_id=body.raw_artifact_id, mime_type=body.mime_type)
+
+    try:
+        result, _parsed_doc = parse(
+            body.raw_artifact_id,
+            body.source_id,
+            mime_type=body.mime_type,
+        )
+    except (ValueError, LookupError) as exc:
+        logger.warning("api.parse.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.parse.complete", artifact_id=result["artifact_id"])
+    return ParseResponse(
+        artifact_id=result["artifact_id"],
+        quality_score=result.get("quality_score", 0.0),
+        parser_used=result.get("parser_used", "unknown"),
+        content_hash=result.get("content_hash", ""),
+    )
+
+
+@app.post(
+    "/clean",
+    response_model=CleanResponse,
+    tags=["pipeline"],
+    summary="Clean a parsed document artifact",
+    status_code=200,
+)
+def clean_endpoint(body: CleanRequest) -> CleanResponse:
+    """Run the clean pipeline stage on a parsed_document artifact.
+
+    Removes boilerplate, normalises whitespace, detects language, and flags
+    near-duplicate documents.  Returns the cleaned artifact ID, language, and
+    dedup status.
+
+    Security (T-03-11 / ASVS V5):
+        - artifact_id is validated by Pydantic (min_length=1).
+        - Artifact lookup uses parameterised ORM query (no SQL injection).
+        - Invalid IDs return 422 with a clear error body.
+    """
+    from knowledge_lake.pipeline.clean import clean
+
+    logger.info("api.clean", parsed_artifact_id=body.parsed_artifact_id)
+
+    try:
+        result = clean(body.parsed_artifact_id, body.source_id)
+    except ValueError as exc:
+        logger.warning("api.clean.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.clean.complete", artifact_id=result["artifact_id"])
+    return CleanResponse(
+        artifact_id=result["artifact_id"],
+        language=result["language"],
+        dedup_status=result["dedup_status"],
+        content_hash=result["content_hash"],
+    )
+
+
+@app.post(
+    "/chunk",
+    response_model=ChunkResponse,
+    tags=["pipeline"],
+    summary="Chunk a parsed document artifact into token-aware chunks",
+    status_code=200,
+)
+def chunk_endpoint(body: ChunkRequest) -> ChunkResponse:
+    """Run the chunk pipeline stage on a parsed_document artifact.
+
+    Fetches the parsed text from the silver zone, reconstructs a minimal ParsedDoc,
+    and runs the token-aware chunker.  Returns the chunk count and all chunk artifact IDs.
+
+    Note: In production usage the Dagster pipeline passes ParsedDoc in-memory between
+    clean and chunk stages.  This endpoint reconstructs a ParsedDoc from the stored text
+    (no section structure) — suitable for testing and ad-hoc chunking.
+
+    Security (T-03-11 / ASVS V5):
+        - artifact_id is validated by Pydantic (min_length=1).
+        - Artifact lookup uses parameterised ORM query (no SQL injection).
+        - Invalid IDs return 422 with a clear error body.
+    """
+    from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.plugins.protocols import ParsedDoc
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.storage.s3 import StorageBackend
+
+    logger.info("api.chunk", parsed_artifact_id=body.parsed_artifact_id)
+
+    s = get_settings()
+    storage = StorageBackend(s.storage)
+
+    try:
+        # Fetch parsed artifact metadata to get storage URI
+        with get_session() as session:
+            parsed_artifact = registry_repo.get_artifact(session, body.parsed_artifact_id)
+            if parsed_artifact is None:
+                raise ValueError(
+                    f"Parsed artifact {body.parsed_artifact_id!r} not found in registry"
+                )
+            storage_uri = parsed_artifact.storage_uri
+            if not storage_uri:
+                raise ValueError(
+                    f"Parsed artifact {body.parsed_artifact_id!r} has no storage_uri"
+                )
+
+        # Extract S3 key from s3://bucket/key URI
+        if not storage_uri.startswith("s3://"):
+            raise ValueError(f"Expected s3:// URI, got: {storage_uri!r}")
+        key = storage_uri.split("/", 3)[3]
+        raw_bytes = storage.get_object(key)
+        parsed_text = raw_bytes.decode("utf-8")
+
+        # Reconstruct minimal ParsedDoc with no section structure
+        doc = ParsedDoc(text=parsed_text, sections=[])
+        chunks = chunk(body.parsed_artifact_id, body.source_id, doc)
+
+    except ValueError as exc:
+        logger.warning("api.chunk.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    chunk_ids = [c["artifact_id"] for c in chunks]
+    logger.info("api.chunk.complete", chunk_count=len(chunks))
+    return ChunkResponse(chunk_count=len(chunks), chunk_ids=chunk_ids)
 
 
 @app.get(

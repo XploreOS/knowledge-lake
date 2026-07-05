@@ -9,12 +9,13 @@ re-implement logic (D-02). The Dagster layer adds:
 Pipeline stages wrapped as assets:
   ingest_raw_document   — ingest_file/ingest_url → raw_document artifact
   parsed_document       — parse()                → parsed_document artifact
+  clean_document        — clean()                → cleaned_document artifact
   chunk_document        — chunk()                → chunk artifact IDs
   embed_chunks          — embed()                → vectors + dim
   index_chunks          — index()                → indexed chunk IDs in Qdrant
 
 Asset ordering (deps chain):
-  ingest_raw_document → parsed_document → chunk_document → embed_chunks → index_chunks
+  ingest_raw_document → parsed_document → clean_document → chunk_document → embed_chunks → index_chunks
 
 NO IO managers for object bytes — each asset stores its output in the registry/S3/Qdrant
 and passes only the minimal metadata (artifact IDs, vectors) to the next stage via the
@@ -232,27 +233,98 @@ def parsed_document(
 
 @asset(
     description=(
+        "Clean a parsed document: remove boilerplate, detect language, near-dup flag. "
+        "Calls pipeline.clean.clean — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def clean_document(
+    parsed_document: dict[str, Any],
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Clean stage: parsed_document artifact → cleaned_document artifact.
+
+    Receives the parsed_document output dict and returns a dict with:
+      artifact_id (cleaned), source_id, collection, parsed_artifact_id,
+      parsed_doc (forwarded in-memory for chunk stage), language, dedup_status.
+
+    The parsed_doc object is forwarded in-memory (not via S3 / IO manager) to avoid
+    re-parsing in chunk_document (Pitfall 7: no IO managers for bytes).
+
+    Args:
+        parsed_document: Output dict from the parsed_document asset.
+        postgres:        PostgreSQL resource.
+        minio:           MinIO/S3 resource.
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.clean import clean
+
+    parsed_artifact_id = parsed_document["artifact_id"]
+    source_id = parsed_document["source_id"]
+    collection = parsed_document.get("collection", DEFAULT_COLLECTION)
+    parsed_doc = parsed_document["parsed_doc"]
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.clean_document.start", parsed_artifact_id=parsed_artifact_id)
+
+    clean_result = clean(parsed_artifact_id, source_id, settings=settings)
+
+    result = {
+        "artifact_id": clean_result["artifact_id"],
+        "source_id": source_id,
+        "collection": collection,
+        "parsed_artifact_id": parsed_artifact_id,
+        "parsed_doc": parsed_doc,  # forwarded in-memory to chunk_document (Pitfall 7)
+        "language": clean_result["language"],
+        "dedup_status": clean_result["dedup_status"],
+    }
+
+    log.info(
+        "dagster.clean_document.complete",
+        artifact_id=result["artifact_id"],
+        dedup_status=clean_result["dedup_status"],
+    )
+    return result
+
+
+@asset(
+    description=(
         "Split ParsedDoc into section-aware chunk artifacts. "
         "Calls pipeline.chunk.chunk — no logic duplicated."
     ),
     group_name="pipeline",
 )
 def chunk_document(
-    parsed_document: dict[str, Any],
+    clean_document: dict[str, Any],
     postgres: PostgresResource,
 ) -> dict[str, Any]:
-    """Chunk stage: parsed_document → list of chunk dicts.
+    """Chunk stage: cleaned_document → list of chunk dicts.
 
-    Receives the parsed_document output and returns a dict with:
+    Receives the clean_document output dict and returns a dict with:
       chunks (list of chunk dicts), parsed_artifact_id, source_id, collection.
+
+    Uses the in-memory ParsedDoc forwarded through clean_document to avoid re-parsing.
     """
     from knowledge_lake.config.settings import Settings
     from knowledge_lake.pipeline.chunk import chunk
 
-    parsed_artifact_id = parsed_document["artifact_id"]
-    source_id = parsed_document["source_id"]
-    doc = parsed_document["parsed_doc"]
-    collection = parsed_document.get("collection", DEFAULT_COLLECTION)
+    parsed_artifact_id = clean_document["parsed_artifact_id"]
+    source_id = clean_document["source_id"]
+    doc = clean_document["parsed_doc"]
+    collection = clean_document.get("collection", DEFAULT_COLLECTION)
 
     settings = Settings(
         database_url=postgres.database_url,

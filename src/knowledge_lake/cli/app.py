@@ -5,6 +5,9 @@ Entry point: klake = "knowledge_lake.cli.app:app"
 Commands:
   version     — print package version
   ingest-url  — download a URL and ingest as a raw_document artifact
+  parse       — parse a raw_document artifact into a parsed_document artifact
+  clean       — clean a parsed_document artifact (boilerplate removal, dedup)
+  chunk       — chunk a parsed_document artifact into chunk artifacts
   search      — embed a query and return cited search results
   lineage     — print ancestry tree (or JSON) for a given artifact ID
   demo        — run the full spike end-to-end (ingest → search → lineage)
@@ -163,6 +166,121 @@ def cmd_discover(
         }.get(r["status"], "?")
         sid = r["source_id"] or "n/a"
         typer.echo(f"  [{status_marker}] {sid} {r['url']}")
+
+
+@app.command(name="parse")
+def cmd_parse(
+    raw_artifact_id: str = typer.Argument(..., help="ID of the raw_document artifact to parse."),
+    source_id: str = typer.Argument(..., help="Source ID that owns the raw artifact."),
+    mime_type: str = typer.Option(
+        "application/pdf", "--mime", "-m", help="MIME type of the raw document."
+    ),
+) -> None:
+    """Parse a raw_document artifact into a parsed_document artifact.
+
+    Runs the parser fallback chain (Docling → JSON/XML → Unstructured → Tika) and
+    records the quality score and parser used in the registry.  Prints artifact_id,
+    quality_score, and parser_used on success.
+    """
+    from knowledge_lake.pipeline.parse import parse
+
+    try:
+        result, _parsed_doc = parse(raw_artifact_id, source_id, mime_type=mime_type)
+        typer.echo(f"Parsed:")
+        typer.echo(f"  artifact_id:   {result['artifact_id']}")
+        typer.echo(f"  quality_score: {result.get('quality_score', 'n/a')}")
+        typer.echo(f"  parser_used:   {result.get('parser_used', 'n/a')}")
+        typer.echo(f"  content_hash:  {result.get('content_hash', 'n/a')}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="clean")
+def cmd_clean(
+    parsed_artifact_id: str = typer.Argument(
+        ..., help="ID of the parsed_document artifact to clean."
+    ),
+    source_id: str = typer.Argument(..., help="Source ID that owns the parsed artifact."),
+) -> None:
+    """Clean a parsed_document artifact: remove boilerplate, detect language, near-dup flag.
+
+    Writes a cleaned_document artifact to the registry and silver zone.
+    Prints artifact_id, language, and dedup_status on success.
+    """
+    from knowledge_lake.pipeline.clean import clean
+
+    try:
+        result = clean(parsed_artifact_id, source_id)
+        typer.echo(f"Cleaned:")
+        typer.echo(f"  artifact_id:   {result['artifact_id']}")
+        typer.echo(f"  language:      {result['language']}")
+        typer.echo(f"  dedup_status:  {result['dedup_status']}")
+        typer.echo(f"  content_hash:  {result['content_hash']}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="chunk")
+def cmd_chunk(
+    parsed_artifact_id: str = typer.Argument(
+        ..., help="ID of the parsed_document artifact to chunk."
+    ),
+    source_id: str = typer.Argument(..., help="Source ID that owns the parsed artifact."),
+) -> None:
+    """Chunk a parsed_document artifact into token-aware chunk artifacts.
+
+    Note: In production usage the full pipeline (parse → clean → chunk) is orchestrated
+    by Dagster assets which pass ParsedDoc in-memory across stages.  This CLI command
+    is a convenience wrapper for manual testing and debugging — it fetches the parsed
+    text from the silver zone and reconstructs a minimal ParsedDoc with no section
+    structure (full text as one section).
+
+    For structured, section-aware chunking use the Dagster pipeline or klake ingest-url.
+    Prints chunk_count and first chunk_id on success.
+    """
+    from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.plugins.protocols import ParsedDoc
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.storage.s3 import StorageBackend
+
+    s = get_settings()
+    storage = StorageBackend(s.storage)
+
+    try:
+        # Fetch the parsed artifact metadata to get the storage URI
+        with get_session() as session:
+            parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
+            if parsed_artifact is None:
+                raise ValueError(f"Parsed artifact {parsed_artifact_id!r} not found in registry")
+            storage_uri = parsed_artifact.storage_uri
+            if not storage_uri:
+                raise ValueError(
+                    f"Parsed artifact {parsed_artifact_id!r} has no storage_uri"
+                )
+
+        # Extract S3 key from URI
+        if not storage_uri.startswith("s3://"):
+            raise ValueError(f"Expected s3:// URI, got: {storage_uri!r}")
+        key = storage_uri.split("/", 3)[3]
+        raw_bytes = storage.get_object(key)
+        parsed_text = raw_bytes.decode("utf-8")
+
+        # Reconstruct a minimal ParsedDoc with no section structure
+        # Full text treated as one section — production Dagster pipeline passes ParsedDoc in-memory
+        doc = ParsedDoc(text=parsed_text, sections=[])
+
+        result = chunk(parsed_artifact_id, source_id, doc)
+        typer.echo(f"Chunked:")
+        typer.echo(f"  chunk_count:  {len(result)}")
+        if result:
+            typer.echo(f"  first_chunk:  {result[0]['artifact_id']}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command(name="crawl")
