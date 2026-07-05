@@ -58,13 +58,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ENRICH-02**: Deterministic extraction (title, dates, headings) runs before any LLM enrichment
 - [ ] **ENRICH-03**: LLM enrichment produces title, summary, document type, organization, jurisdiction, keywords, entities, and quality score per document
 - [ ] **ENRICH-04**: Enrichment results are cached by prompt version + input hash — re-running is a no-op unless prompts change
-- [ ] **ENRICH-05**: LLM spend is capped by configurable budget limits; jobs halt gracefully when exceeded
+- [x] **ENRICH-05**: LLM spend is capped by configurable budget limits; jobs halt gracefully when exceeded
 - [ ] **ENRICH-06**: Embeddings are generated via configurable provider (local sentence-transformers or LiteLLM API)
 
 ### Indexing & Search
 
 - [ ] **INDEX-01**: Chunks with embeddings are indexed into Qdrant with payload metadata (domain, document, section, tags)
-- [ ] **INDEX-02**: Qdrant collections are managed via aliases and tracked in the registry, enabling reindexing without downtime
+- [x] **INDEX-02**: Qdrant collections are managed via aliases and tracked in the registry, enabling reindexing without downtime
 - [ ] **INDEX-03**: User can run semantic search via CLI and API returning chunks with scores and source citations
 
 ### Curation & Datasets
@@ -173,10 +173,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENRICH-02 | Phase 4 | Pending |
 | ENRICH-03 | Phase 4 | Pending |
 | ENRICH-04 | Phase 4 | Pending |
-| ENRICH-05 | Phase 4 | Pending |
+| ENRICH-05 | Phase 4 | Complete |
 | ENRICH-06 | Phase 4 | Pending |
 | INDEX-01 | Phase 4 | Pending |
-| INDEX-02 | Phase 4 | Pending |
+| INDEX-02 | Phase 4 | Complete |
 | INDEX-03 | Phase 4 | Pending |
 | CURATE-01 | Phase 5 | Pending |
 | CURATE-02 | Phase 5 | Pending |

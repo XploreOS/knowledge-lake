@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
+current_phase: 04
 current_phase_name: Enrichment, Embedding & Search
 status: executing
-stopped_at: Phase 04 context gathered
-last_updated: "2026-07-05T17:13:09.906Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-07-05T17:28:05.951Z"
 last_activity: 2026-07-05
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 18
+  completed_plans: 16
   percent: 50
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 03 — parse-clean-chunk
+**Current focus:** Phase 04 — Enrichment, Embedding & Search
 
 ## Current Position
 
-Phase: 4 — Enrichment, Embedding & Search
-Plan: Not started
+Phase: 04 (Enrichment, Embedding & Search) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-05 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-07-05 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P04 | 6m | 3 tasks | 6 files |
 | Phase 02 P05 | 25m | 3 tasks | 6 files |
 | Phase 03 P02 | 8m | 2 tasks | 4 files |
+| Phase 04 P01 | 8min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase ?]: ESCALATION_THRESHOLD_CHARS=200 tunable near-empty markdown escalation boundary (A2, D-04)
 - [Phase 03]: Boilerplate removal runs before MinHash computation to prevent false near-dup matches from shared headers/footers (Pitfall 3, T-03-07)
 - [Phase 03]: Transient LSH per clean() call (O(n)) accepted for Phase 3 MVP — Phase 5 DataTrove batch dedup replaces this (T-03-06)
+- [Phase ?]: Artifact.quality_score mapped as a real ORM column (0006 already added the physical column); language/dedup_status remain metadata_-JSON-only, out of scope for Phase 4 Plan 1
+- [Phase ?]: Single global llm_spend scope accepted for Phase 4 MVP; scope is a plain string key so finer-grained scopes can be added later without a schema change
+- [Phase ?]: vector_collections uses an is_current boolean flip (not a separate active-alias pointer table) so reindex history is preserved and auditable via created_at
 
 ### Pending Todos
 
@@ -114,7 +118,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Phase 04 context gathered
+**Stopped at:** Completed 04-01-PLAN.md
 
-Last session: 2026-07-05T12:39:08.150Z
-Resume file: .planning/phases/04-enrichment-embedding-search/04-CONTEXT.md
+Last session: 2026-07-05T17:26:51.357Z
+Resume file: None

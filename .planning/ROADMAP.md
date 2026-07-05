@@ -127,12 +127,12 @@ Plans:
   4. User can run semantic search via CLI and API returning chunks with scores and source citations that trace back to document, section, and page
   5. Qdrant collections are managed via aliases tracked in the registry, and a full reindex completes without search downtime
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Registry schema (llm_spend, vector_collections, quality_score mapping), EnrichSettings/IndexSettings, repo.py foundation (ENRICH-05, INDEX-02) [Wave 1]
+- [x] 04-01-PLAN.md — Registry schema (llm_spend, vector_collections, quality_score mapping), EnrichSettings/IndexSettings, repo.py foundation (ENRICH-05, INDEX-02) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -183,7 +183,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
-| 4. Enrichment, Embedding & Search | 0/3 | Not started | - |
+| 4. Enrichment, Embedding & Search | 1/3 | In Progress|  |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
 
