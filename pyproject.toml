@@ -35,6 +35,8 @@ dependencies = [
     "crawl4ai==0.9.0",
     "scrapy==2.16.0",
     "playwright==1.49.0",
+    "datasketch==1.10.0",
+    "lingua-language-detector==2.2.0",
 ]
 
 [project.scripts]
@@ -42,6 +44,9 @@ klake = "knowledge_lake.cli.app:app"
 
 [project.entry-points."knowledge_lake.parsers"]
 docling = "knowledge_lake.plugins.builtin.docling_parser:DoclingParser"
+json_xml = "knowledge_lake.plugins.builtin.json_xml_parser:JsonXmlParser"
+unstructured = "knowledge_lake.plugins.builtin.unstructured_parser:UnstructuredParser"
+tika = "knowledge_lake.plugins.builtin.tika_parser:TikaParser"
 
 [project.entry-points."knowledge_lake.embedders"]
 local = "knowledge_lake.plugins.builtin.st_embedder:SentenceTransformerEmbedder"

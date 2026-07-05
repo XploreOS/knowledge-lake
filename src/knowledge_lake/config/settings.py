@@ -70,6 +70,66 @@ class CrawlSettings(BaseModel):
     """If True, only follow links on the same registrable domain as the seed."""
 
 
+class ParseSettings(BaseModel):
+    """Parser chain and quality-scoring configuration (PARSE-01..05, D-01, D-02, D-04).
+
+    Nested under Settings as settings.parse. Environment variable pattern:
+    KLAKE_PARSE__CHAIN, KLAKE_PARSE__QUALITY_THRESHOLD, etc.
+    """
+
+    chain: list[str] = ["docling", "json_xml", "unstructured", "tika"]
+    """Ordered parser names for the fallback chain (D-01, D-02)."""
+
+    quality_threshold: float = 0.4
+    """Minimum acceptable quality score before trying the next parser (D-01 gate)."""
+
+    quality_gray_zone: tuple[float, float] = (0.3, 0.6)
+    """Score band that triggers an optional LLM coherence spot-check (D-04)."""
+
+    llm_spot_check: bool = True
+    """Enable or disable the optional LLM quality spot-check in the gray zone."""
+
+    max_file_bytes: int = 104857600
+    """Hard file-size limit (100 MiB) before parsing — DoS guard (T-03-02)."""
+
+
+class CleanSettings(BaseModel):
+    """Cleaning and near-duplicate detection configuration (CLEAN-01..03).
+
+    Nested under Settings as settings.clean. Environment variable pattern:
+    KLAKE_CLEAN__MINHASH_NUM_PERM, etc.
+    """
+
+    minhash_num_perm: int = 128
+    """MinHash permutations — DataTrove production default (CLEAN-03)."""
+
+    minhash_threshold: float = 0.8
+    """Jaccard similarity threshold for near-duplicate flagging (CLEAN-03)."""
+
+    minhash_shingle_size: int = 5
+    """Word-level shingle size for MinHash signatures (5-word shingles per research)."""
+
+
+class ChunkSettings(BaseModel):
+    """Token-aware chunking configuration (CHUNK-01..04, D-03).
+
+    Nested under Settings as settings.chunk. Environment variable pattern:
+    KLAKE_CHUNK__MAX_TOKENS, etc.
+    """
+
+    max_tokens: int = 512
+    """Maximum tokens per chunk using cl100k_base encoding (D-03)."""
+
+    overlap_tokens: int = 64
+    """Token overlap between adjacent chunks from the same section."""
+
+    tokenizer: str = "cl100k_base"
+    """tiktoken encoding name (D-03 — not configurable per-model)."""
+
+    heading_breadcrumb_depth: int = 2
+    """Maximum heading levels to prepend as context prefix for retrieval."""
+
+
 # Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
 _SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
@@ -138,6 +198,15 @@ class Settings(BaseSettings):
 
     crawl: CrawlSettings = Field(default_factory=CrawlSettings)
     """Crawl-related configuration (depth, rate limiting, scope)."""
+
+    parse: ParseSettings = Field(default_factory=ParseSettings)
+    """Parser chain and quality-scoring configuration (PARSE-01..05)."""
+
+    clean: CleanSettings = Field(default_factory=CleanSettings)
+    """Cleaning and near-duplicate detection configuration (CLEAN-01..03)."""
+
+    chunk: ChunkSettings = Field(default_factory=ChunkSettings)
+    """Token-aware chunking configuration (CHUNK-01..04)."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 
