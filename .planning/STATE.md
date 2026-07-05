@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 04
 current_phase_name: Enrichment, Embedding & Search
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-07-05T17:28:05.951Z"
+stopped_at: "Paused at 04-02-PLAN.md Task 4 (checkpoint:human-verify, blocking) — awaiting human Bedrock smoke-test approval"
+last_updated: "2026-07-05T17:44:23.043Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 50
 ---
 
@@ -107,6 +107,7 @@ None yet.
 - [Phase 3]: Parser quality on real healthcare PDFs unvalidated — torture-test corpus (PARSE-05) gates bulk ingestion; needs deeper research at planning time
 - [Phase 4]: LiteLLM budget enforcement behavior under burst load unverified; Qdrant collection aliasing patterns need research
 - [Phase 5]: No documented pattern for running DataTrove pipeline blocks inside Dagster assets — needs experimentation
+- [Phase 4 Plan 2]: Paused at Task 4 checkpoint:human-verify (blocking) — live Bedrock enrichment smoke test requires AWS_BEDROCK_API_KEY + running LiteLLM proxy + human sign-off (RESEARCH.md Open Question #2). Tasks 1-3 complete and committed (a542e49, 687d246, 1e57025).
 
 ## Deferred Items
 
@@ -118,7 +119,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-01-PLAN.md
+**Stopped at:** Paused at 04-02-PLAN.md Task 4 (checkpoint:human-verify, blocking) — awaiting human Bedrock smoke-test approval
 
-Last session: 2026-07-05T17:26:51.357Z
-Resume file: None
+Last session: 2026-07-05T17:44:23.035Z
+Resume file: 04-02-PLAN.md
