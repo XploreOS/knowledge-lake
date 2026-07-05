@@ -256,7 +256,7 @@ class ParseRequest(BaseModel):
 class ParseResponse(BaseModel):
     """Response body for POST /parse."""
 
-    artifact_id: str = Field(description="Parsed document artifact ID (art_...).")
+    artifact_id: str = Field(description="Parsed document artifact ID (doc_...).")
     quality_score: float = Field(description="Heuristic quality score in [0, 1].")
     parser_used: str = Field(description="Name of the parser that succeeded (e.g. 'docling').")
     content_hash: str = Field(description="SHA-256 hash of the parsed document bytes.")
@@ -283,7 +283,7 @@ class CleanRequest(BaseModel):
 class CleanResponse(BaseModel):
     """Response body for POST /clean."""
 
-    artifact_id: str = Field(description="Cleaned document artifact ID (art_...).")
+    artifact_id: str = Field(description="Cleaned document artifact ID (doc_...).")
     language: str = Field(description="Detected language ISO 639-1 code (e.g. 'en').")
     dedup_status: str = Field(description="Near-duplicate status: 'unique', 'exact_dup', or 'near_dup'.")
     content_hash: str = Field(description="SHA-256 hash of the cleaned document bytes.")
