@@ -190,6 +190,36 @@ def get_parser(settings: "Settings") -> Any:
     return resolve(GROUP_PARSERS, settings.parser)
 
 
+def _resolve_with_kwargs(group: str, name: str, **kwargs: Any) -> Any:
+    """Load and instantiate a plugin, injecting constructor kwargs.
+
+    Extends :func:`resolve` for plugins that require constructor arguments
+    (e.g. ``litellm_url``, ``qdrant_url``, ``tika_server_url``) without
+    duplicating the entry-point iteration loop. Any future change to the
+    lookup semantics need only be applied here and in :func:`resolve` (WR-06).
+
+    Args:
+        group:   Entry-point group (e.g. 'knowledge_lake.embedders').
+        name:    Entry-point name within the group (e.g. 'litellm').
+        **kwargs: Constructor keyword arguments forwarded to the plugin factory.
+
+    Returns:
+        An instantiated plugin satisfying the relevant Protocol.
+
+    Raises:
+        LookupError: If no entry point named *name* is registered in *group*.
+    """
+    for ep in entry_points(group=group):
+        if ep.name == name:
+            factory = ep.load()
+            return factory(**kwargs)
+    raise LookupError(
+        f"No plugin {name!r} registered in entry-point group {group!r}. "
+        f"Check that the package declaring this plugin is installed and that "
+        f"the name is spelled correctly in your settings."
+    )
+
+
 def get_embedder(settings: "Settings") -> Any:
     """Return the EmbedderPlugin named by settings.embedder.
 
@@ -209,17 +239,8 @@ def get_embedder(settings: "Settings") -> Any:
         An instantiated EmbedderPlugin (satisfies EmbedderPlugin Protocol).
     """
     name = settings.embedder
-    for ep in entry_points(group=GROUP_EMBEDDERS):
-        if ep.name == name:
-            factory = ep.load()
-            if name == "litellm":
-                return factory(litellm_url=settings.litellm_url)
-            return factory()
-    raise LookupError(
-        f"No plugin {name!r} registered in entry-point group {GROUP_EMBEDDERS!r}. "
-        f"Check that the package declaring this plugin is installed and that "
-        f"the name is spelled correctly in your settings."
-    )
+    kwargs = {"litellm_url": settings.litellm_url} if name == "litellm" else {}
+    return _resolve_with_kwargs(GROUP_EMBEDDERS, name, **kwargs)
 
 
 def get_vectorstore(settings: "Settings") -> Any:
@@ -238,17 +259,8 @@ def get_vectorstore(settings: "Settings") -> Any:
         An instantiated VectorStorePlugin (satisfies VectorStorePlugin Protocol).
     """
     name = settings.vectorstore
-    for ep in entry_points(group=GROUP_VECTORSTORES):
-        if ep.name == name:
-            factory = ep.load()
-            if name == "qdrant":
-                return factory(qdrant_url=settings.qdrant_url)
-            return factory()
-    raise LookupError(
-        f"No plugin {name!r} registered in entry-point group {GROUP_VECTORSTORES!r}. "
-        f"Check that the package declaring this plugin is installed and that "
-        f"the name is spelled correctly in your settings."
-    )
+    kwargs = {"qdrant_url": settings.qdrant_url} if name == "qdrant" else {}
+    return _resolve_with_kwargs(GROUP_VECTORSTORES, name, **kwargs)
 
 
 def get_discovery(settings: "Settings") -> Any:
@@ -269,17 +281,8 @@ def get_discovery(settings: "Settings") -> Any:
         An instantiated DiscoveryPlugin (satisfies DiscoveryPlugin Protocol).
     """
     name = settings.discovery
-    for ep in entry_points(group=GROUP_DISCOVERY):
-        if ep.name == name:
-            factory = ep.load()
-            if name == "searxng":
-                return factory(searxng_url=settings.searxng_url)
-            return factory()
-    raise LookupError(
-        f"No plugin {name!r} registered in entry-point group {GROUP_DISCOVERY!r}. "
-        f"Check that the package declaring this plugin is installed and that "
-        f"the name is spelled correctly in your settings."
-    )
+    kwargs = {"searxng_url": settings.searxng_url} if name == "searxng" else {}
+    return _resolve_with_kwargs(GROUP_DISCOVERY, name, **kwargs)
 
 
 def get_crawler(settings: "Settings") -> Any:
