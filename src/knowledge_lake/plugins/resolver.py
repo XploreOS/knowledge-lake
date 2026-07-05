@@ -106,9 +106,20 @@ def parse_with_fallback(
     for parser_name in settings.parse.chain:
         tried.append(parser_name)
 
-        # Step 1: Resolve the parser from entry-point registry
+        # Step 1: Resolve the parser from entry-point registry.
+        # Inject constructor args for parsers that require settings values so
+        # no parser reads os.environ directly (CR-03 / WR-03).
         try:
-            parser = resolve(GROUP_PARSERS, parser_name)
+            for ep in entry_points(group=GROUP_PARSERS):
+                if ep.name == parser_name:
+                    factory = ep.load()
+                    if parser_name == "tika":
+                        parser = factory(tika_server_url=settings.tika_server_url)
+                    else:
+                        parser = factory()
+                    break
+            else:
+                raise LookupError(parser_name)
         except LookupError:
             log.warning(
                 "parse_with_fallback.parser_not_available",

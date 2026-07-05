@@ -17,9 +17,6 @@ from knowledge_lake.plugins.protocols import ParsedDoc, Section
 
 log = structlog.get_logger(__name__)
 
-# Default Tika server endpoint (can be overridden via settings)
-_DEFAULT_TIKA_ENDPOINT = "http://localhost:9998"
-
 # 100 MiB hard limit (T-03-02)
 _MAX_FILE_BYTES = 104857600
 
@@ -34,11 +31,18 @@ class TikaParser:
     Requires a running Tika server. If the server is unavailable or returns
     no content, raises RuntimeError to trigger D-01 chain continuation.
 
+    The server URL is injected via constructor so it is configurable through
+    ``settings.tika_server_url`` without modifying source code (WR-03).
+
     Usage:
-        parser = TikaParser()
+        parser = TikaParser()  # uses default http://localhost:9998
+        parser = TikaParser(tika_server_url=settings.tika_server_url)
         if parser.can_parse("application/pdf"):
             doc = parser.parse(pdf_bytes, "application/pdf")
     """
+
+    def __init__(self, tika_server_url: str = "http://localhost:9998") -> None:
+        self._endpoint = tika_server_url
 
     def can_parse(self, mime_type: str) -> bool:
         """Return True for any MIME type when the tika package is installed.
@@ -85,7 +89,7 @@ class TikaParser:
             ) from exc
 
         try:
-            result = tika_parser.from_buffer(raw, serverEndpoint=_DEFAULT_TIKA_ENDPOINT)
+            result = tika_parser.from_buffer(raw, serverEndpoint=self._endpoint)
         except Exception as exc:
             raise RuntimeError(
                 f"TikaParser: Tika server call failed for mime_type={mime_type!r}: {exc}"
@@ -94,7 +98,7 @@ class TikaParser:
         if not isinstance(result, dict) or not result.get("content"):
             raise RuntimeError(
                 "TikaParser returned no content — server may be unavailable "
-                f"at {_DEFAULT_TIKA_ENDPOINT}"
+                f"at {self._endpoint}"
             )
 
         full_text = (result["content"] or "").strip()

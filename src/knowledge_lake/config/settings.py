@@ -167,6 +167,11 @@ class Settings(BaseSettings):
     searxng_url: str = "http://localhost:8888"
     """SearXNG meta-search engine URL for source discovery (INGEST-07)."""
 
+    tika_server_url: str = "http://localhost:9998"
+    """Apache Tika server URL for last-resort document parsing (PARSE-02).
+    Override via KLAKE_TIKA_SERVER_URL env var. Mirrors the pattern used by
+    qdrant_url, litellm_url, and searxng_url (WR-03)."""
+
     # ── Plugin swap keys ──────────────────────────────────────────────────────
     embedder: str = "local"
     """Embedder plugin name. 'local' = sentence-transformers; 'litellm' = gateway."""
