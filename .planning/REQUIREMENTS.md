@@ -33,11 +33,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Parsing
 
-- [ ] **PARSE-01**: User can parse PDF, HTML, DOCX, Markdown, CSV, XLSX, JSON, and XML documents to structured Markdown/tables via Docling
-- [ ] **PARSE-02**: Parsing falls back through a chain (Docling → Unstructured → Tika) when the primary parser fails or scores low
-- [ ] **PARSE-03**: Parsed output preserves page numbers, headings, sections, and table boundaries where the format allows
-- [ ] **PARSE-04**: Each parse result gets a quality score recorded in the registry; low scores flag documents for review
-- [ ] **PARSE-05**: A torture-test corpus of representative healthcare documents validates parser behavior before bulk ingestion
+- [x] **PARSE-01**: User can parse PDF, HTML, DOCX, Markdown, CSV, XLSX, JSON, and XML documents to structured Markdown/tables via Docling
+- [x] **PARSE-02**: Parsing falls back through a chain (Docling → Unstructured → Tika) when the primary parser fails or scores low
+- [x] **PARSE-03**: Parsed output preserves page numbers, headings, sections, and table boundaries where the format allows
+- [x] **PARSE-04**: Each parse result gets a quality score recorded in the registry; low scores flag documents for review
+- [x] **PARSE-05**: A torture-test corpus of representative healthcare documents validates parser behavior before bulk ingestion
 
 ### Cleaning
 
@@ -157,11 +157,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INGEST-07 | Phase 2 | Complete |
 | INGEST-08 | Phase 2 | Complete |
 | INGEST-09 | Phase 2 | Complete |
-| PARSE-01 | Phase 3 | Pending |
-| PARSE-02 | Phase 3 | Pending |
-| PARSE-03 | Phase 3 | Pending |
-| PARSE-04 | Phase 3 | Pending |
-| PARSE-05 | Phase 3 | Pending |
+| PARSE-01 | Phase 3 | Complete |
+| PARSE-02 | Phase 3 | Complete |
+| PARSE-03 | Phase 3 | Complete |
+| PARSE-04 | Phase 3 | Complete |
+| PARSE-05 | Phase 3 | Complete |
 | CLEAN-01 | Phase 3 | Pending |
 | CLEAN-02 | Phase 3 | Pending |
 | CLEAN-03 | Phase 3 | Pending |
