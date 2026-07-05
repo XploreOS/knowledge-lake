@@ -2,11 +2,14 @@
 SQLAlchemy 2.0 declarative ORM models for the Knowledge Lake registry.
 
 This module defines the core schema:
-- Source          — origin of a document (URL, upload, crawler run)
-- Artifact        — unified self-referencing lineage node (raw/parsed/chunk)
-- LineageEvent    — explicit edge log for lineage tracing (FOUND-07)
-- Job             — pipeline job placeholder (created empty in migration #1)
-- Dataset         — curated dataset placeholder (created empty in migration #1)
+- Source            — origin of a document (URL, upload, crawler run)
+- Artifact          — unified self-referencing lineage node (raw/parsed/chunk/enriched)
+- LineageEvent      — explicit edge log for lineage tracing (FOUND-07)
+- Job               — pipeline job placeholder (created empty in migration #1)
+- CrawlState        — per-URL crawl state tracking (INGEST-04)
+- LlmSpend          — accumulated LLM call cost per scope (ENRICH-05)
+- VectorCollection  — alias-to-physical-collection registry (INDEX-02)
+- Dataset           — curated dataset placeholder (created empty in migration #1)
 
 Schema is managed EXCLUSIVELY by Alembic migrations.  This module defines the
 Python-side model; ``Base.metadata.create_all()`` is NEVER called in production
@@ -25,6 +28,7 @@ from typing import Any, Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -165,6 +169,17 @@ class Artifact(Base):
 
     section_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     """Heading path within the document (citation, D-07/D-14)."""
+
+    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    """LLM-judged quality score for enriched_document rows (Phase 4, ENRICH-05).
+
+    Distinct per artifact_type — this is NOT the same value as Phase 3's
+    heuristic parse-quality score, which remains stored in metadata_ JSON for
+    parsed_document rows. The column itself was added physically to the
+    artifacts table by migration 0006; this Phase 4 change only maps it as a
+    real ORM attribute so enriched_document rows can be filtered/queried on it
+    directly.
+    """
 
     metadata_: Mapped[Optional[Any]] = mapped_column(
         "metadata",
@@ -373,6 +388,78 @@ class CrawlState(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class LlmSpend(Base):
+    """Accumulated LLM call cost per scope, in USD (ENRICH-05).
+
+    Gives the enrichment pipeline's budget cap (D-05) a concrete accounting
+    mechanism. A single "global" scope row is acceptable for Phase 4 MVP per
+    CONTEXT.md discretion; per-source/per-job scopes can be added later
+    without a schema change since scope is just a string key.
+    """
+
+    __tablename__ = "llm_spend"
+    __table_args__ = (
+        UniqueConstraint("scope", name="uq_llm_spend_scope"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``art_<uuidv7>`` (generic, not a lineage node)."""
+
+    scope: Mapped[str] = mapped_column(String(64), nullable=False)
+    """Budget scope key, e.g. "global" — a single global budget scope is
+    acceptable for Phase 4 MVP per CONTEXT.md discretion (ENRICH-05)."""
+
+    total_cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    """Cumulative LLM call cost in USD for this scope."""
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    """UTC timestamp of the last spend update."""
+
+
+class VectorCollection(Base):
+    """Registry-queryable mapping of a stable alias to its current physical
+    Qdrant collection (INDEX-02, D-06).
+
+    Tracks which physical collection each alias currently resolves to,
+    independent of Qdrant's own alias listing, so reindex/rollback logic can
+    be audited and driven from the registry.
+    """
+
+    __tablename__ = "vector_collections"
+    __table_args__ = (
+        UniqueConstraint("physical_collection", name="uq_vector_collections_physical"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``art_<uuidv7>`` (generic, not a lineage node)."""
+
+    alias_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    """The stable alias every app call site uses, e.g. "klake_chunks" (D-06)."""
+
+    physical_collection: Mapped[str] = mapped_column(String(128), nullable=False)
+    """The versioned collection this alias currently points at, e.g.
+    "klake_chunks_v1"."""
+
+    dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    """Embedding vector dimensionality of the physical collection."""
+
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    """Only one row per alias_name should have is_current=True at a time —
+    reindex flips the old row to False and inserts a new True row."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    """UTC timestamp of registration."""
 
 
 class Dataset(Base):

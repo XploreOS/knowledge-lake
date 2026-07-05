@@ -103,6 +103,8 @@ class TestTablesExist:
         "lineage_events",
         "jobs",
         "datasets",
+        "llm_spend",
+        "vector_collections",
     ]
 
     def test_all_core_tables_exist(self, engine) -> None:
@@ -207,6 +209,28 @@ class TestLineageEventsSchema:
             assert col in cols, f"lineage_events.{col} missing"
 
 
+# ── LLM spend / vector collections table tests (ENRICH-05, INDEX-02) ─────────
+
+
+class TestLlmSpendAndVectorCollectionsSchema:
+    """llm_spend and vector_collections tables have the required columns."""
+
+    def test_llm_spend_columns(self, engine) -> None:
+        insp = inspect(engine)
+        cols = {c["name"] for c in insp.get_columns("llm_spend")}
+        for col in ("id", "scope", "total_cost_usd", "updated_at"):
+            assert col in cols, f"llm_spend.{col} missing"
+
+    def test_vector_collections_columns(self, engine) -> None:
+        insp = inspect(engine)
+        cols = {c["name"] for c in insp.get_columns("vector_collections")}
+        for col in (
+            "id", "alias_name", "physical_collection", "dim",
+            "is_current", "created_at",
+        ):
+            assert col in cols, f"vector_collections.{col} missing"
+
+
 # ── Round-trip tests ──────────────────────────────────────────────────────────
 
 
@@ -234,5 +258,8 @@ class TestMigrationRoundTrip:
         # Verify tables are back
         insp = inspect(engine)
         tables = insp.get_table_names(schema="public")
-        for expected in ("sources", "artifacts", "lineage_events", "jobs", "datasets"):
+        for expected in (
+            "sources", "artifacts", "lineage_events", "jobs", "datasets",
+            "llm_spend", "vector_collections",
+        ):
             assert expected in tables, f"{expected} missing after re-upgrade"

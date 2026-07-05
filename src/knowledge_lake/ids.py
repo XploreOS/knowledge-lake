@@ -14,9 +14,10 @@ Usage::
 
     from knowledge_lake.ids import new_id
 
-    source_id = new_id("source")       # "src_<uuidv7>"
-    doc_id    = new_id("raw_document") # "doc_<uuidv7>"
-    chunk_id  = new_id("chunk")        # "chk_<uuidv7>"
+    source_id = new_id("source")            # "src_<uuidv7>"
+    doc_id    = new_id("raw_document")      # "doc_<uuidv7>"
+    chunk_id  = new_id("chunk")             # "chk_<uuidv7>"
+    enr_id    = new_id("enriched_document") # "doc_<uuidv7>"
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ _PREFIX: dict[str, str] = {
     "raw_document": "doc",
     "parsed_document": "doc",
     "cleaned_document": "doc",
+    "enriched_document": "doc",
     "chunk": "chk",
     "artifact": "art",
     "crawl_job": "job",
@@ -48,7 +50,8 @@ def new_id(kind: str) -> str:
     ----------
     kind:
         One of the supported entity kinds: ``source``, ``raw_document``,
-        ``parsed_document``, ``chunk``, ``artifact``.
+        ``parsed_document``, ``cleaned_document``, ``enriched_document``,
+        ``chunk``, ``artifact``.
 
     Returns
     -------
