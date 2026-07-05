@@ -9,10 +9,12 @@ Functions:
     create_source             — register a new source
     create_raw_artifact       — persist a raw document node
     create_parsed_artifact    — persist a parsed document node
+    create_cleaned_artifact   — persist a cleaned document node (CLEAN-01..03)
     create_chunk_artifact     — persist a chunk node
     get_artifact_by_hash      — dedup lookup used by storage.put_raw (FOUND-04)
     get_artifact              — fetch by primary key
     list_children             — list direct children of an artifact
+    list_cleaned_artifacts    — list all cleaned_document artifacts (near-dup scan)
 """
 
 from __future__ import annotations
@@ -176,6 +178,60 @@ def create_parsed_artifact(
         kind="parsed_document",
         source_id=source_id,
         artifact_type="parsed_document",
+        content_hash=content_hash,
+        storage_uri=storage_uri,
+        parent_artifact_id=parent_artifact_id,
+        mime_type=mime_type,
+        metadata=metadata,
+    )
+    session.add(art)
+    return art
+
+
+# ── Cleaned document ──────────────────────────────────────────────────────────
+
+
+def create_cleaned_artifact(
+    session: Session,
+    *,
+    source_id: str,
+    parent_artifact_id: str,
+    content_hash: str,
+    storage_uri: Optional[str] = None,
+    mime_type: Optional[str] = None,
+    metadata: Optional[Any] = None,
+) -> Artifact:
+    """Persist a cleaned document artifact (CLEAN-01..03).
+
+    Parent is the parsed_document artifact. ``metadata`` carries language,
+    dedup_status, and minhash_num_perm keys.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_id:
+        FK to the source this document belongs to.
+    parent_artifact_id:
+        ID of the parsed_document artifact this was cleaned from (required).
+    content_hash:
+        SHA256 of cleaned text bytes for exact-dedup lookup.
+    storage_uri:
+        S3 URI of the cleaned markdown in the silver zone.
+    mime_type:
+        MIME type of the stored artifact (typically 'text/markdown').
+    metadata:
+        JSON dict with language, dedup_status, minhash_num_perm keys.
+
+    Returns
+    -------
+    Artifact
+        The newly created (unsaved) Artifact instance.
+    """
+    art = _make_artifact(
+        kind="cleaned_document",
+        source_id=source_id,
+        artifact_type="cleaned_document",
         content_hash=content_hash,
         storage_uri=storage_uri,
         parent_artifact_id=parent_artifact_id,
@@ -521,3 +577,20 @@ def get_raw_artifact_for_source(
         .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
+
+
+def list_cleaned_artifacts(session: Session) -> list[Artifact]:
+    """Return all cleaned_document artifacts ordered by created_at.
+
+    Used by clean() to build the transient MinHash LSH for near-duplicate
+    detection (CLEAN-03). This is O(n) per clean() call — acceptable for
+    Phase 3 MVP corpus sizes (< 10,000 documents).
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = (
+        select(Artifact)
+        .where(Artifact.artifact_type == "cleaned_document")
+        .order_by(Artifact.created_at)
+    )
+    return list(session.execute(stmt).scalars())
