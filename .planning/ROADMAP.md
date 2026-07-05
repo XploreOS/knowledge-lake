@@ -130,8 +130,16 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 04-01-PLAN.md — Registry schema (llm_spend, vector_collections, quality_score mapping), EnrichSettings/IndexSettings, repo.py foundation (ENRICH-05, INDEX-02) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-02-PLAN.md — Enrichment vertical slice: deterministic extraction, cached/budget-capped LiteLLM call, CLI/API/Dagster (ENRICH-01..06) [Wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-03-PLAN.md — Index/search vertical slice: Qdrant alias + zero-downtime reindex, payload extension, filtered search (INDEX-01..03) [Wave 3]
 
 ### Phase 5: Curation, Datasets & Export
