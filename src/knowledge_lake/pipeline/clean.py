@@ -20,6 +20,7 @@ import structlog
 from datasketch import MinHash, MinHashLSH
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.storage.s3 import StorageBackend
@@ -153,22 +154,6 @@ def compute_minhash(text: str, num_perm: int = 128, shingle_size: int = 5) -> Mi
             m.update(shingle.encode("utf-8"))
 
     return m
-
-
-# ── Storage URI helper ────────────────────────────────────────────────────────
-
-
-def _uri_to_key(uri: str) -> str:
-    """Extract the S3 key from an s3://bucket/key URI.
-
-    Copied from pipeline/parse.py to avoid circular imports.
-    """
-    if not uri.startswith("s3://"):
-        raise ValueError(f"Expected s3:// URI, got: {uri!r}")
-    parts = uri.split("/", 3)
-    if len(parts) < 4 or not parts[3]:
-        raise ValueError(f"Cannot extract key from URI: {uri!r}")
-    return parts[3]
 
 
 # ── Main clean() function ─────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ from typing import Optional
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.plugins.resolver import get_parser, parse_with_fallback
 from knowledge_lake.registry.db import get_session
@@ -134,15 +135,4 @@ def parse(
     return result, parsed_doc
 
 
-def _uri_to_key(uri: str) -> str:
-    """Extract the S3 key from an s3://bucket/key URI.
-
-    Raises ValueError for non-s3:// URIs to surface misconfigured storage_uri
-    values early with a descriptive error rather than silently producing a wrong key.
-    """
-    if not uri.startswith("s3://"):
-        raise ValueError(f"Expected s3:// URI, got: {uri!r}")
-    parts = uri.split("/", 3)
-    if len(parts) < 4 or not parts[3]:
-        raise ValueError(f"Cannot extract key from URI: {uri!r}")
-    return parts[3]
+# _uri_to_key is re-exported from pipeline.utils as _uri_to_key (imported above)
