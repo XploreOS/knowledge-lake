@@ -11,6 +11,7 @@ Verifies that parse_with_fallback() correctly:
 from __future__ import annotations
 
 import json
+from importlib.metadata import entry_points as real_entry_points
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,21 +68,53 @@ def _make_mock_parser(
     return mock
 
 
+class _FakeEP:
+    """Minimal entry-point stand-in with .name and .load() for parse_with_fallback."""
+
+    def __init__(self, name: str, factory):
+        self.name = name
+        self._factory = factory
+
+    def load(self):
+        return self._factory
+
+
+def _make_entry_points_mock(ep_map: dict):
+    """Return a side_effect callable for patching knowledge_lake.plugins.resolver.entry_points.
+
+    *ep_map* maps entry-point name -> mock parser instance.  For each name a
+    factory wrapper is created so that .load()() returns the mock regardless of
+    whether the caller passes constructor kwargs (e.g. tika_server_url=...).
+    Only the 'knowledge_lake.parsers' group is intercepted; all other groups
+    are forwarded to the real entry_points().
+    """
+    fake_eps = []
+    for name, mock_instance in ep_map.items():
+        def _make_factory(inst):
+            def _factory(**kwargs):
+                return inst
+            return _factory
+        fake_eps.append(_FakeEP(name, _make_factory(mock_instance)))
+
+    def _mock_entry_points(group):
+        if group != "knowledge_lake.parsers":
+            return real_entry_points(group=group)
+        return fake_eps
+
+    return _mock_entry_points
+
+
 def test_fallback_stops_on_first_success() -> None:
     """Chain stops at first parser that succeeds (D-02)."""
     settings = _make_settings(chain=["a", "b"])
     mock_a = _make_mock_parser(parse_raises=RuntimeError("parser a failed"))
     mock_b = _make_mock_parser(parse_result=_good_parseddoc())
 
-    def _side_resolve(group: str, name: str) -> MagicMock:
-        if name == "a":
-            return mock_a
-        if name == "b":
-            return mock_b
-        raise LookupError(name)
-
     raw = json.dumps({"key": "value"}).encode()
-    with patch("knowledge_lake.plugins.resolver.resolve", side_effect=_side_resolve):
+    with patch(
+        "knowledge_lake.plugins.resolver.entry_points",
+        side_effect=_make_entry_points_mock({"a": mock_a, "b": mock_b}),
+    ):
         parsed_doc, parser_name, quality_score = parse_with_fallback(
             raw, "application/json", settings=settings
         )
@@ -98,15 +131,11 @@ def test_fallback_on_low_quality() -> None:
     mock_a = _make_mock_parser(parse_result=_empty_parseddoc())  # scores 0.0
     mock_b = _make_mock_parser(parse_result=_good_parseddoc())   # scores high
 
-    def _side_resolve(group: str, name: str) -> MagicMock:
-        if name == "a":
-            return mock_a
-        if name == "b":
-            return mock_b
-        raise LookupError(name)
-
     raw = b"any bytes"
-    with patch("knowledge_lake.plugins.resolver.resolve", side_effect=_side_resolve):
+    with patch(
+        "knowledge_lake.plugins.resolver.entry_points",
+        side_effect=_make_entry_points_mock({"a": mock_a, "b": mock_b}),
+    ):
         _, parser_name, quality_score = parse_with_fallback(
             raw, "application/json", settings=settings
         )
@@ -120,12 +149,10 @@ def test_all_parsers_exhausted_raises() -> None:
     settings = _make_settings(chain=["a"])
     mock_a = _make_mock_parser(parse_raises=RuntimeError("always fails"))
 
-    def _side_resolve(group: str, name: str) -> MagicMock:
-        if name == "a":
-            return mock_a
-        raise LookupError(name)
-
-    with patch("knowledge_lake.plugins.resolver.resolve", side_effect=_side_resolve):
+    with patch(
+        "knowledge_lake.plugins.resolver.entry_points",
+        side_effect=_make_entry_points_mock({"a": mock_a}),
+    ):
         with pytest.raises(ValueError, match="exhausted"):
             parse_with_fallback(b"data", "application/json", settings=settings)
 
@@ -135,15 +162,14 @@ def test_unavailable_parser_skipped() -> None:
     settings = _make_settings(chain=["missing", "b"])
     mock_b = _make_mock_parser(parse_result=_good_parseddoc())
 
-    def _side_resolve(group: str, name: str) -> MagicMock:
-        if name == "missing":
-            raise LookupError("missing parser not installed")
-        if name == "b":
-            return mock_b
-        raise LookupError(name)
-
+    # "missing" is intentionally absent from ep_map so entry-point lookup
+    # raises LookupError (the for/else in parse_with_fallback fires) and
+    # parse_with_fallback continues to "b".
     raw = json.dumps({"key": "val"}).encode()
-    with patch("knowledge_lake.plugins.resolver.resolve", side_effect=_side_resolve):
+    with patch(
+        "knowledge_lake.plugins.resolver.entry_points",
+        side_effect=_make_entry_points_mock({"b": mock_b}),
+    ):
         _, parser_name, _ = parse_with_fallback(
             raw, "application/json", settings=settings
         )
