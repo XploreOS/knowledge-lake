@@ -143,7 +143,15 @@ def chunk_section(
 
             current_sentences = overlap_sents
             current_tokens = overlap_cost
-            # Do NOT advance i — re-process current sentence in the new window
+            # Guard: if the overlap window still cannot accommodate the current
+            # sentence, force-add it to break the infinite loop. This handles the
+            # case where a sentence whose token cost > (max_tokens - overlap_tokens)
+            # would otherwise cause the loop to emit the same overlap chunk forever.
+            if overlap_cost + costs[i] > max_tokens:
+                current_sentences.append(sentences[i])
+                current_tokens += costs[i]
+                i += 1
+            # Do NOT advance i otherwise — re-process current sentence in the new window
         else:
             current_sentences.append(sent)
             current_tokens += cost
