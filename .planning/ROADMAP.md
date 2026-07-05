@@ -98,7 +98,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Cleaned documents have boilerplate removed and whitespace normalized (citations preserved), language detected and recorded, and exact (hash) plus near-duplicates (MinHash) flagged across the corpus
   5. Chunks respect heading hierarchy and configurable token size/overlap, never split tables mid-table, and each records parent document, section path, and page reference
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Multi-format parser chain, quality scorer, Alembic 0006 migration, torture corpus fixtures and test suite (PARSE-01..05)
+- [ ] 03-02-PLAN.md — Boilerplate removal, language detection, MinHash near-dup flagging, cleaned_document artifact (CLEAN-01..03)
+- [ ] 03-03-PLAN.md — Token-aware chunking with table atomicity, Dagster clean/chunk assets, CLI/API parse-clean-chunk commands (CHUNK-01..04)
 
 ### Phase 4: Enrichment, Embedding & Search
 
