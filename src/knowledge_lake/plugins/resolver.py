@@ -26,8 +26,13 @@ from __future__ import annotations
 from importlib.metadata import entry_points
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 if TYPE_CHECKING:
     from knowledge_lake.config.settings import Settings
+    from knowledge_lake.plugins.protocols import ParsedDoc
+
+log = structlog.get_logger(__name__)
 
 # Entry-point group constants — stable names consumers can import
 GROUP_PARSERS = "knowledge_lake.parsers"
@@ -64,6 +69,98 @@ def resolve(group: str, name: str) -> Any:
         f"No plugin {name!r} registered in entry-point group {group!r}. "
         f"Check that the package declaring this plugin is installed and that "
         f"the name is spelled correctly in your settings."
+    )
+
+
+def parse_with_fallback(
+    raw: bytes,
+    mime_type: str,
+    *,
+    settings: "Settings",
+) -> "tuple[ParsedDoc, str, float]":
+    """Try parsers in settings.parse.chain order. Stop on first success (D-02).
+
+    Fallback triggers on exception OR quality gate failure (D-01):
+      - Exception during parse → log warning, continue to next parser
+      - Quality score below settings.parse.quality_threshold → log warning, continue
+      - LookupError (parser not installed) → log warning, continue
+      - can_parse() returns False → continue silently (format mismatch)
+
+    Returns (ParsedDoc, parser_name_used, quality_score) on first success.
+    Raises ValueError when all parsers in the chain are exhausted.
+
+    Args:
+        raw:       Raw document bytes to parse.
+        mime_type: MIME type of the document.
+        settings:  Application settings (parse.chain, parse.quality_threshold, etc.).
+
+    Returns:
+        Tuple of (ParsedDoc, str parser_name, float quality_score).
+
+    Raises:
+        ValueError: If all parsers in chain are exhausted without success.
+    """
+    from knowledge_lake.quality.scorer import compute_quality_score, maybe_llm_spot_check
+
+    tried: list[str] = []
+    for parser_name in settings.parse.chain:
+        tried.append(parser_name)
+
+        # Step 1: Resolve the parser from entry-point registry
+        try:
+            parser = resolve(GROUP_PARSERS, parser_name)
+        except LookupError:
+            log.warning(
+                "parse_with_fallback.parser_not_available",
+                parser_name=parser_name,
+                mime_type=mime_type,
+            )
+            continue
+
+        # Step 2: Check MIME type compatibility
+        if not parser.can_parse(mime_type):
+            continue
+
+        # Step 3: Attempt parsing
+        try:
+            parsed_doc = parser.parse(raw, mime_type)
+        except Exception as exc:
+            log.warning(
+                "parse_with_fallback.parser_failed",
+                parser_name=parser_name,
+                mime_type=mime_type,
+                error=str(exc),
+                exc_info=True,
+            )
+            continue
+
+        # Step 4: Compute deterministic heuristic quality score
+        score = compute_quality_score(parsed_doc, mime_type, settings)
+
+        # Step 5: Optional LLM spot-check in gray zone (D-04)
+        final_score = maybe_llm_spot_check(parsed_doc, score, settings)
+
+        # Step 6: Quality gate (D-01)
+        if final_score >= settings.parse.quality_threshold:
+            log.info(
+                "parse_with_fallback.success",
+                parser_name=parser_name,
+                mime_type=mime_type,
+                quality_score=round(final_score, 3),
+            )
+            return parsed_doc, parser_name, final_score
+
+        log.warning(
+            "parse_with_fallback.parser_low_quality",
+            parser_name=parser_name,
+            mime_type=mime_type,
+            quality_score=round(final_score, 3),
+            threshold=settings.parse.quality_threshold,
+        )
+
+    raise ValueError(
+        f"All parsers in chain exhausted for mime_type={mime_type!r}. "
+        f"Chain: {settings.parse.chain}. Tried: {tried}"
     )
 
 

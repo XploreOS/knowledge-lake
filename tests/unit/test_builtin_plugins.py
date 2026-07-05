@@ -204,9 +204,9 @@ class TestDoclingParser:
     def test_cannot_parse_unknown_type(self, parser: Any) -> None:
         assert parser.can_parse("application/unknown") is False
 
-    def test_cannot_parse_html_in_phase1(self, parser: Any) -> None:
-        # Phase 1 supports PDF only; HTML/DOCX added in Phase 3
-        assert parser.can_parse("text/html") is False
+    def test_can_parse_html_phase3(self, parser: Any) -> None:
+        # Phase 3 extends DoclingParser to support HTML/DOCX/MD/CSV/XLSX (PARSE-01)
+        assert parser.can_parse("text/html") is True
 
 
 # ---------------------------------------------------------------------------

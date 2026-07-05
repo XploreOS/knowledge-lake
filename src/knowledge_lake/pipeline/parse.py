@@ -16,7 +16,7 @@ import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.plugins.protocols import ParsedDoc
-from knowledge_lake.plugins.resolver import get_parser
+from knowledge_lake.plugins.resolver import get_parser, parse_with_fallback
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.storage.s3 import StorageBackend
@@ -53,7 +53,6 @@ def parse(
     """
     s = settings or get_settings()
     storage = StorageBackend(s.storage)
-    parser = get_parser(s)
 
     log.info("parse.start", raw_artifact_id=raw_artifact_id, mime_type=mime_type)
 
@@ -73,12 +72,16 @@ def parse(
     raw_bytes = storage.get_object(key)
     log.info("parse.loaded_raw", size=len(raw_bytes))
 
-    # Run the parser plugin
-    parsed_doc: ParsedDoc = parser.parse(raw_bytes, mime_type)
+    # Run the parser fallback chain (D-01, D-02)
+    parsed_doc, parser_used, quality_score = parse_with_fallback(
+        raw_bytes, mime_type, settings=s
+    )
     log.info(
         "parse.parsed",
         sections=len(parsed_doc.sections),
         text_len=len(parsed_doc.text),
+        parser_used=parser_used,
+        quality_score=quality_score,
     )
 
     # Content-hash the parsed text for dedup and silver-zone key
@@ -116,12 +119,15 @@ def parse(
             content_hash=content_hash,
             storage_uri=silver_uri,
             mime_type="text/markdown",
+            metadata={"quality_score": quality_score, "parser_used": parser_used},
         )
         session.flush()
         result = {
             "artifact_id": artifact.id,
             "storage_uri": artifact.storage_uri,
             "content_hash": artifact.content_hash,
+            "quality_score": quality_score,
+            "parser_used": parser_used,
         }
 
     log.info("parse.complete", artifact_id=result["artifact_id"])
