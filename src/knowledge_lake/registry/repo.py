@@ -1031,6 +1031,120 @@ def list_dataset_examples(
     return list(session.execute(stmt).scalars())
 
 
+def list_artifacts_by_type(
+    session: Session,
+    artifact_type: str,
+) -> list[Artifact]:
+    """Return all artifacts of the given type, ordered by created_at.
+
+    Generic version of list_cleaned_artifacts() — parameterized by artifact_type.
+    Used by export functions to enumerate ALL chunk artifacts (EXPORT-01) and ALL
+    curated_document artifacts (EXPORT-02).
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = (
+        select(Artifact)
+        .where(Artifact.artifact_type == artifact_type)
+        .order_by(Artifact.created_at)
+    )
+    return list(session.execute(stmt).scalars())
+
+
+def update_dataset_export(
+    session: Session,
+    dataset_id: str,
+    *,
+    format: str,
+    storage_uri: str,
+    example_count: int,
+) -> Dataset:
+    """Update a Dataset row's export materialization fields.
+
+    Fetches the Dataset row by ID and updates its format, storage_uri, and
+    example_count fields in place — materializing an existing logical dataset
+    to a file, not creating a new dataset row.
+
+    Used by export_finetune_dataset() after successfully writing the gold-zone
+    JSONL file. Raises ValueError if the dataset_id does not resolve to a
+    live row.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    dataset_id:
+        Primary key of the Dataset row to update.
+    format:
+        Export format written ('jsonl', 'parquet', etc.).
+    storage_uri:
+        S3 URI of the exported file in the gold zone.
+    example_count:
+        Number of examples written to the file.
+
+    Returns
+    -------
+    Dataset
+        The updated Dataset instance.
+
+    Raises
+    ------
+    ValueError
+        If no Dataset row exists for the given dataset_id.
+    """
+    row = session.get(Dataset, dataset_id)
+    if row is None:
+        raise ValueError(f"Dataset not found: {dataset_id!r}")
+    row.format = format
+    row.storage_uri = storage_uri
+    row.example_count = example_count
+    return row
+
+
+def list_all_dataset_examples(session: Session) -> list[DatasetExample]:
+    """Return all DatasetExample rows across every dataset.
+
+    Used by check_train_eval_contamination() — the contamination check is a
+    full-corpus check per 05-AI-SPEC Section 6/7, not scoped to one dataset.
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = select(DatasetExample)
+    return list(session.execute(stmt).scalars())
+
+
+def list_curated_documents_by_dedup_status(
+    session: Session,
+    status: str,
+) -> list[Artifact]:
+    """Return curated_document artifacts whose metadata_['dedup_status'] matches status.
+
+    Filters in Python (not via a DB-specific JSON operator) so the same code
+    works identically against the in-memory SQLite test fixture and real Postgres
+    (Python-side JSON field access is DB-agnostic).
+
+    Used by check_train_eval_contamination() to build the set of near-dup
+    flagged documents for the near-dup cross-check.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    status:
+        dedup_status string to filter by (e.g. 'near_dup', 'unique', 'not_yet_computed').
+
+    Returns
+    -------
+    list[Artifact]
+        Curated_document artifacts whose metadata_['dedup_status'] == status.
+    """
+    all_curated = list_artifacts_by_type(session, "curated_document")
+    return [
+        a for a in all_curated
+        if (a.metadata_ or {}).get("dedup_status") == status
+    ]
+
+
 def list_dataset_examples_by_cache_key(
     session: Session,
     cache_key: str,

@@ -228,6 +228,32 @@ class DatasetSettings(BaseModel):
     from more source context (AI-SPEC Section 4)."""
 
 
+class ExportSettings(BaseModel):
+    """Gold-zone export configuration (EXPORT-01..03).
+
+    Nested under Settings as settings.export. Environment variable pattern:
+    KLAKE_EXPORT__GOLD_PREFIX, KLAKE_EXPORT__MIN_QUALITY_SCORE_FOR_PRETRAIN, etc.
+    """
+
+    gold_prefix: str = "gold"
+    """S3 key prefix for gold-zone exports (raw -> bronze -> silver -> gold)."""
+
+    default_finetune_format: str = "openai_chat"
+    """Fine-tuning JSONL format: 'openai_chat' (chat-messages shape) is the default."""
+
+    min_quality_score_for_pretrain: float = 0.4
+    """Minimum composite_quality_score for a curated_document to be included in the
+    pretraining corpus export. Applied only at export time — curation itself stays
+    annotate-only (CONTEXT.md Open Question #1 resolution, D-10)."""
+
+    contamination_override_artifact_ids: list[str] = Field(default_factory=list)
+    """cleaned_document artifact IDs for documented, accepted train/eval overlaps.
+    Any cleaned_document ID listed here is excluded from the contamination check result
+    — the operator takes explicit responsibility for the accepted overlap.
+    This is the ONLY sanctioned bypass of the Section 6/7 hard-block guardrail
+    (05-AI-SPEC.md Section 6: 'unless overlap is deliberate and documented')."""
+
+
 class IndexSettings(BaseModel):
     """Vector index / alias configuration (INDEX-02, D-06).
 
@@ -345,6 +371,9 @@ class Settings(BaseSettings):
 
     index: IndexSettings = Field(default_factory=IndexSettings)
     """Vector index / alias configuration (INDEX-02)."""
+
+    export: ExportSettings = Field(default_factory=ExportSettings)
+    """Gold-zone export configuration (EXPORT-01..03)."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 
