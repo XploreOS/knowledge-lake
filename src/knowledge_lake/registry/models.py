@@ -463,17 +463,91 @@ class VectorCollection(Base):
 
 
 class Dataset(Base):
-    """Curated dataset record — created empty in migration #1 (FOUND-05).
+    """Curated dataset record — extended in Phase 5 with real columns (DATA-01..03).
 
-    Exercised in Phase 5 when curated exports are registered.
+    Originally a placeholder created in migration #1 (FOUND-05). Migration 0008
+    adds dataset_type, format, example_count, storage_uri, and a UNIQUE
+    constraint on name so get_or_create_dataset() is race-safe.
     """
 
     __tablename__ = "datasets"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_datasets_name"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    dataset_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    """Kind of dataset: 'rag_eval', 'instruction_tuning', 'pretraining', etc."""
+    format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    """Export format: 'jsonl', 'parquet', 'csv', etc. None until exported."""
+    example_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    """Running count of examples in this dataset; updated on export."""
+    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    """S3 URI of the exported dataset file (gold zone). None until exported."""
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+    # ── Relationships ─────────────────────────────────────────────────────────
+    examples: Mapped[list[DatasetExample]] = relationship(
+        "DatasetExample",
+        back_populates="dataset",
+        foreign_keys="[DatasetExample.dataset_id]",
+    )
+
+
+class DatasetExample(Base):
+    """Per-example lineage record for dataset generation (DATA-03, D-08).
+
+    NOT a lineage-tree Artifact node — lives in its own join table so
+    per-example provenance is queryable without exploding the artifacts table
+    at QA-pair granularity (D-08: per-example Artifact granularity explicitly
+    rejected). The nullable FK to artifacts.id (ondelete=SET NULL) means
+    examples survive artifact deletion while the lineage reference becomes NULL.
+    """
+
+    __tablename__ = "dataset_examples"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``dex_<uuidv7>``."""
+
+    dataset_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    """FK to the parent Dataset; CASCADE deletes all examples when dataset is deleted."""
+
+    source_artifact_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("artifacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    """FK to the source chunk (DATA-01) or enriched_document (DATA-02) artifact.
+    Nullable (ondelete=SET NULL) so examples survive artifact deletion."""
+
+    example_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    """Zero-based position of this example within its dataset."""
+
+    payload: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    """Validated LLM-generated example payload (QAPairResult or InstructionPairResult
+    fields + _cache_key). For QA: question, answer, citation_chunk_id, _cache_key.
+    For instruction: instruction, input, output, _cache_key."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    # ── Relationships ─────────────────────────────────────────────────────────
+    dataset: Mapped[Dataset] = relationship(
+        "Dataset",
+        back_populates="examples",
+        foreign_keys=[dataset_id],
     )

@@ -41,6 +41,8 @@ _PREFIX: dict[str, str] = {
     "crawl_state": "cst",
     "bronze_document": "doc",
     "curated_document": "doc",
+    "dataset": "dst",
+    "dataset_example": "dex",
 }
 
 

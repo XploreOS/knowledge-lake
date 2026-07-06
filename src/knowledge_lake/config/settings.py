@@ -202,6 +202,32 @@ class CurateSettings(BaseModel):
     """Bumping this invalidates the curation cache (mirrors EnrichSettings.prompt_version)."""
 
 
+class DatasetSettings(BaseModel):
+    """Dataset-generation configuration (DATA-01..03).
+
+    Nested under Settings as settings.dataset. Environment variable pattern:
+    KLAKE_DATASET__BUDGET_USD, KLAKE_DATASET__PROMPT_VERSION, etc.
+    """
+
+    budget_usd: float = 5.0
+    """Spend cap in USD before dataset generation halts gracefully (mirrors EnrichSettings)."""
+
+    prompt_version: str = "v1"
+    """Bumping this invalidates the dataset-generation cache (mirrors EnrichSettings)."""
+
+    cache_enabled: bool = True
+    """Enable or disable result caching keyed by prompt_version."""
+
+    qa_excerpt_chars: int = 512
+    """Defensive cap on chunk text sent to the LLM for QA generation — chunks are
+    already CHUNK-01-bounded (512 tokens ≈ 2048 chars); this cap is a secondary guard."""
+
+    instruction_excerpt_chars: int = 6000
+    """Bounds the cleaned-document excerpt sent for instruction-tuning generation —
+    larger than EnrichSettings.excerpt_chars=4000 because instruction-tuning benefits
+    from more source context (AI-SPEC Section 4)."""
+
+
 class IndexSettings(BaseModel):
     """Vector index / alias configuration (INDEX-02, D-06).
 
@@ -313,6 +339,9 @@ class Settings(BaseSettings):
 
     curate: CurateSettings = Field(default_factory=CurateSettings)
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03)."""
+
+    dataset: DatasetSettings = Field(default_factory=DatasetSettings)
+    """Dataset-generation configuration (DATA-01..03)."""
 
     index: IndexSettings = Field(default_factory=IndexSettings)
     """Vector index / alias configuration (INDEX-02)."""

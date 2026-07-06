@@ -37,6 +37,8 @@ from knowledge_lake.version import pipeline_version
 from knowledge_lake.registry.models import (
     Artifact,
     CrawlState,
+    Dataset,
+    DatasetExample,
     Job,
     LineageEvent,
     LlmSpend,
@@ -876,3 +878,183 @@ def get_current_vector_collection(
         .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
+
+
+# ── Dataset registry (DATA-01..03) ────────────────────────────────────────────
+
+
+def create_dataset(
+    session: Session,
+    *,
+    name: str,
+    dataset_type: str,
+    format: Optional[str] = None,
+    storage_uri: Optional[str] = None,
+    example_count: Optional[int] = None,
+) -> Dataset:
+    """Create a new Dataset row and add it to the session.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    name:
+        Human-readable, unique name for this dataset (unique constraint from 0008).
+    dataset_type:
+        Kind of dataset: 'rag_eval', 'instruction_tuning', 'pretraining', etc.
+    format:
+        Export format: 'jsonl', 'parquet', etc. None until exported.
+    storage_uri:
+        S3 URI of the exported dataset file. None until exported.
+    example_count:
+        Running example count. None until populated by export.
+
+    Returns
+    -------
+    Dataset
+        The newly created (unsaved) Dataset instance.
+    """
+    dataset = Dataset(
+        id=new_id("dataset"),
+        name=name,
+        dataset_type=dataset_type,
+        format=format,
+        storage_uri=storage_uri,
+        example_count=example_count,
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session.add(dataset)
+    return dataset
+
+
+def get_dataset_by_name(session: Session, name: str) -> Optional[Dataset]:
+    """Return the Dataset matching ``name``, or None.
+
+    Uses the uq_datasets_name unique index for O(1) lookup.
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = select(Dataset).where(Dataset.name == name).limit(1)
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def get_or_create_dataset(
+    session: Session,
+    *,
+    name: str,
+    dataset_type: str,
+    format: Optional[str] = None,
+) -> Dataset:
+    """Get an existing Dataset by name, or create it if it doesn't exist.
+
+    Uses the same get-or-create discipline as ``record_llm_spend`` — checks
+    for an existing row first so repeated per-chunk/per-document generation
+    calls accumulate into ONE logical dataset rather than creating a new
+    Dataset row per example.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    name:
+        Dataset name to look up or create.
+    dataset_type:
+        Dataset type used on creation only (ignored on get).
+    format:
+        Export format used on creation only.
+
+    Returns
+    -------
+    Dataset
+        Existing or newly created Dataset instance.
+    """
+    existing = get_dataset_by_name(session, name)
+    if existing is not None:
+        return existing
+    return create_dataset(session, name=name, dataset_type=dataset_type, format=format)
+
+
+def create_dataset_example(
+    session: Session,
+    *,
+    dataset_id: str,
+    source_artifact_id: Optional[str],
+    example_index: int,
+    payload: Optional[Any] = None,
+) -> DatasetExample:
+    """Create a new DatasetExample row and add it to the session (DATA-03).
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    dataset_id:
+        FK to the parent Dataset.
+    source_artifact_id:
+        FK to the source chunk (DATA-01) or enriched_document (DATA-02) artifact.
+        Nullable — ondelete=SET NULL keeps examples if the artifact is deleted.
+    example_index:
+        Zero-based position of this example within its dataset.
+    payload:
+        Dict carrying the validated LLM-generated content (plus _cache_key).
+
+    Returns
+    -------
+    DatasetExample
+        The newly created (unsaved) DatasetExample instance.
+    """
+    example = DatasetExample(
+        id=new_id("dataset_example"),
+        dataset_id=dataset_id,
+        source_artifact_id=source_artifact_id,
+        example_index=example_index,
+        payload=payload or {},
+        created_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session.add(example)
+    return example
+
+
+def list_dataset_examples(
+    session: Session,
+    dataset_id: str,
+) -> list[DatasetExample]:
+    """Return all DatasetExample rows for a dataset, ordered by example_index.
+
+    Used to compute the next example_index and to list examples for export.
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = (
+        select(DatasetExample)
+        .where(DatasetExample.dataset_id == dataset_id)
+        .order_by(DatasetExample.example_index)
+    )
+    return list(session.execute(stmt).scalars())
+
+
+def list_dataset_examples_by_cache_key(
+    session: Session,
+    cache_key: str,
+) -> list[DatasetExample]:
+    """Return DatasetExample rows whose payload._cache_key matches ``cache_key``.
+
+    Used by generate_qa_example/generate_instruction_example to detect idempotent
+    re-runs: the synthetic cache key (source_content_hash + prompt_version) is
+    stored inside payload["_cache_key"] so we can find prior generations without
+    needing a dedicated content-hash column on dataset_examples (D-08: examples
+    are NOT Artifact nodes with a UNIQUE(content_hash, artifact_type) constraint).
+
+    Returns an empty list if no matches are found.
+    No raw SQL — ORM select with JSON path comparison (T-01-03).
+    """
+    # SQLAlchemy JSON path query: payload["_cache_key"].as_string() == cache_key
+    # This uses the JSON type's path-based comparison (works on PostgreSQL and
+    # falls back gracefully on SQLite in-memory test databases).
+    from sqlalchemy import cast, String
+    stmt = (
+        select(DatasetExample)
+        .where(
+            cast(DatasetExample.payload["_cache_key"], String) == f'"{cache_key}"'
+        )
+        .limit(1)
+    )
+    return list(session.execute(stmt).scalars())
