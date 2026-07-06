@@ -187,6 +187,7 @@ def parsed_document(
     ingest_raw_document: dict[str, Any],
     postgres: PostgresResource,
     minio: MinIOResource,
+    litellm: LiteLLMResource,
 ) -> dict[str, Any]:
     """Parse stage: raw_document artifact → parsed_document artifact + ParsedDoc.
 
@@ -213,6 +214,7 @@ def parsed_document(
     settings = Settings(
         database_url=postgres.database_url,
         storage=storage_settings,
+        litellm_url=litellm.litellm_url,
         _env_file=None,  # type: ignore[call-arg]
     )
 
