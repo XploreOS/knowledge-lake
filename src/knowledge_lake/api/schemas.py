@@ -361,6 +361,66 @@ class EnrichResponse(BaseModel):
     )
 
 
+class CurateRequest(BaseModel):
+    """Request body for POST /curate — run the curate pipeline stage (CURATE-01..03).
+
+    Pydantic validates at the API boundary (ASVS V5, T-05-03).
+    """
+
+    cleaned_artifact_id: str = Field(
+        ...,
+        description="ID of the cleaned_document artifact to curate.",
+        min_length=1,
+    )
+    source_id: str = Field(
+        ...,
+        description="Source registry ID that owns the cleaned artifact.",
+        min_length=1,
+    )
+
+
+class CurateResponse(BaseModel):
+    """Response body for POST /curate (CURATE-01..03)."""
+
+    artifact_id: Optional[str] = Field(
+        default=None,
+        description="Curated document artifact ID (doc_...), None when unavailable.",
+    )
+    status: str = Field(
+        description="'curated' or 'cached'.",
+    )
+    cached: bool = Field(
+        default=False,
+        description="True when this call was a cache hit (same content_hash + filter_config_version).",
+    )
+    quality_score: Optional[float] = Field(
+        default=None,
+        description="Composite quality score in [0,1] spanning parse + enrich + curation stages.",
+    )
+    dedup_status: Optional[str] = Field(
+        default=None,
+        description=(
+            "'not_yet_computed' until batch_dedup_corpus() runs; "
+            "'near_dup' or 'unique' after."
+        ),
+    )
+
+
+class CuratedDocumentOut(BaseModel):
+    """A single curated document summary for GET /curated-documents (CURATE-03)."""
+
+    artifact_id: str = Field(description="Curated document artifact ID (doc_...).")
+    quality_score: Optional[float] = Field(
+        default=None,
+        description="Composite quality score in [0,1], None if not yet computed.",
+    )
+    dedup_status: Optional[str] = Field(
+        default=None,
+        description="'near_dup', 'unique', or 'not_yet_computed'.",
+    )
+    created_at: str = Field(description="ISO-8601 creation timestamp.")
+
+
 class ReindexResponse(BaseModel):
     """Response body for POST /reindex — zero-downtime alias reindex result (INDEX-02)."""
 

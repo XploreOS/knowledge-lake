@@ -37,6 +37,7 @@ from dagster import Definitions, EnvVar
 from knowledge_lake.dagster_defs.assets import (
     chunk_document,
     clean_document,
+    curate_document_asset,
     embed_chunks,
     enrich_document,
     index_chunks,
@@ -65,6 +66,7 @@ defs = Definitions(
         clean_document,
         chunk_document,
         enrich_document,
+        curate_document_asset,
         embed_chunks,
         index_chunks,
     ],

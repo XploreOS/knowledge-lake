@@ -40,6 +40,9 @@ from knowledge_lake.api.schemas import (
     CrawlJobCreate,
     CrawlJobOut,
     CrawlStateOut,
+    CurateRequest,
+    CurateResponse,
+    CuratedDocumentOut,
     DiscoverOut,
     DiscoverRequest,
     DiscoverResultItem,
@@ -726,6 +729,96 @@ def enrich_endpoint(body: EnrichRequest) -> EnrichResponse:
         cached=result.get("cached", False),
         quality_score=result.get("quality_score"),
     )
+
+
+@app.post(
+    "/curate",
+    response_model=CurateResponse,
+    tags=["pipeline"],
+    summary="Run DataTrove-style quality filtering on a cleaned_document artifact",
+    status_code=200,
+)
+def curate_endpoint(body: CurateRequest) -> CurateResponse:
+    """Run the curate pipeline stage on a cleaned_document artifact (CURATE-01..03).
+
+    Records per-heuristic DataTrove filter pass/fail, computes a composite quality
+    score spanning parse + enrich + curation stages, and stores the result as a
+    curated_document artifact. Returns 'curated' or 'cached' status.
+
+    Security (ASVS V5, T-05-03):
+        - cleaned_artifact_id/source_id are validated by Pydantic (min_length=1).
+        - Artifact lookup uses parameterised ORM query (no SQL injection).
+        - Invalid IDs return 422 with a clear error body.
+    """
+    from knowledge_lake.pipeline.curate import curate_document
+
+    logger.info("api.curate", cleaned_artifact_id=body.cleaned_artifact_id)
+
+    try:
+        result = curate_document(body.cleaned_artifact_id, body.source_id)
+    except (ValueError, LookupError) as exc:
+        logger.warning("api.curate.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info(
+        "api.curate.complete",
+        status=result["status"],
+        artifact_id=result.get("artifact_id"),
+    )
+    # dedup_status lives in the artifact's metadata_ — fetch from result metadata if present
+    dedup_status = result.get("dedup_status")
+    return CurateResponse(
+        artifact_id=result.get("artifact_id"),
+        status=result["status"],
+        cached=result.get("cached", False),
+        quality_score=result.get("quality_score"),
+        dedup_status=dedup_status,
+    )
+
+
+@app.get(
+    "/curated-documents",
+    response_model=list[CuratedDocumentOut],
+    tags=["pipeline"],
+    summary="List curated documents with optional quality-score filtering",
+    status_code=200,
+)
+def list_curated_documents_endpoint(
+    min_quality_score: Optional[float] = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum composite quality score to include (0.0–1.0, T-05-03).",
+    ),
+) -> list[CuratedDocumentOut]:
+    """Return curated_document artifacts ordered by quality_score descending.
+
+    Optional ``min_quality_score`` filter (Pydantic ge/le bounds reject out-of-range
+    values before the query runs, satisfying T-05-03). Uses a parameterized ORM
+    select() query — never raw SQL (T-01-03 injection prevention).
+
+    CURATE-03: satisfies the "queryable via API" criterion.
+    """
+    from sqlalchemy import select
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Artifact
+
+    with get_session() as session:
+        stmt = select(Artifact).where(Artifact.artifact_type == "curated_document")
+        if min_quality_score is not None:
+            stmt = stmt.where(Artifact.quality_score >= min_quality_score)
+        stmt = stmt.order_by(Artifact.quality_score.desc())
+        artifacts = list(session.execute(stmt).scalars())
+
+    return [
+        CuratedDocumentOut(
+            artifact_id=a.id,
+            quality_score=a.quality_score,
+            dedup_status=(a.metadata_ or {}).get("dedup_status"),
+            created_at=a.created_at.isoformat() if a.created_at else "",
+        )
+        for a in artifacts
+    ]
 
 
 @app.get(

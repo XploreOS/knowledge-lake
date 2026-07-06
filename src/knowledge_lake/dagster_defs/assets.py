@@ -512,3 +512,57 @@ def index_chunks(
         collection=collection,
     )
     return result
+
+
+@asset(
+    name="curate_document_asset",
+    description=(
+        "Run DataTrove-style quality filters on a cleaned_document artifact and compute "
+        "a composite quality score spanning parse + enrich + curation stages (CURATE-01..03). "
+        "Calls pipeline.curate.curate_document — no logic duplicated."
+    ),
+    group_name="pipeline",
+)
+def curate_document_asset(
+    clean_document: dict[str, Any],
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Curate stage: cleaned_document artifact → curated_document artifact.
+
+    Receives the clean_document output dict, runs DataTrove-style filters and
+    composite scoring, and returns the curate_document() result dict
+    (artifact_id, cached, status, quality_score).
+
+    Parallel branch off clean_document — runs alongside enrich_document and
+    chunk_document (D-01), none blocks the others.
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.curate import curate_document as curate_fn
+
+    cleaned_artifact_id = clean_document["artifact_id"]
+    source_id = clean_document["source_id"]
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.curate_document_asset.start", cleaned_artifact_id=cleaned_artifact_id)
+
+    result = curate_fn(cleaned_artifact_id, source_id, settings=settings)
+
+    log.info(
+        "dagster.curate_document_asset.complete",
+        status=result.get("status"),
+        quality_score=result.get("quality_score"),
+    )
+    return result

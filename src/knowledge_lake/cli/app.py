@@ -333,6 +333,56 @@ def cmd_enrich(
         raise typer.Exit(code=1)
 
 
+@app.command(name="curate")
+def cmd_curate(
+    cleaned_artifact_id: str = typer.Argument(
+        ..., help="ID of the cleaned_document artifact to curate."
+    ),
+    source_id: str = typer.Argument(..., help="Source ID that owns the cleaned artifact."),
+) -> None:
+    """Run DataTrove-style quality filters on a cleaned_document artifact (CURATE-01..03).
+
+    Records per-heuristic filter pass/fail in the curated_document artifact's metadata,
+    computes a composite quality score (parse + enrich + curation), and prints the result.
+    Run `klake dedupe` separately to update dedup_status after curation.
+    """
+    from knowledge_lake.pipeline.curate import curate_document
+
+    try:
+        result = curate_document(cleaned_artifact_id, source_id)
+        typer.echo("Curated:")
+        typer.echo(f"  status:        {result['status']}")
+        typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
+        typer.echo(f"  quality_score: {result.get('quality_score')}")
+        typer.echo(f"  cached:        {result.get('cached', False)}")
+        typer.echo(f"  dedup_status:  {result.get('dedup_status', 'not_yet_computed')}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="dedupe")
+def cmd_dedupe() -> None:
+    """Run corpus-wide MinHash deduplication over all cleaned_document artifacts (CURATE-02).
+
+    Builds ONE MinHash LSH index over the entire corpus in a single pass and
+    updates each curated_document artifact's dedup_status to 'near_dup' or 'unique'.
+    This is the authoritative batch dedup replacing Phase 3's transient per-call scan.
+    """
+    from knowledge_lake.pipeline.curate import batch_dedup_corpus
+
+    try:
+        summary = batch_dedup_corpus()
+        typer.echo("Deduplication complete:")
+        typer.echo(f"  total:                {summary['total']}")
+        typer.echo(f"  unique:               {summary['unique']}")
+        typer.echo(f"  near_dup:             {summary['near_dup']}")
+        typer.echo(f"  skipped_no_curation:  {summary['skipped_no_curation']}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="crawl")
 def cmd_crawl(
     url: str = typer.Argument(..., help="https:// seed URL to crawl."),
