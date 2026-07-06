@@ -514,6 +514,91 @@ def index_chunks(
     return result
 
 
+class GenerateDatasetConfig(Config):
+    """Dagster run config for the generate_dataset asset (DATA-01/02).
+
+    Specifies which source artifact to generate an example from, what kind
+    of dataset to generate, and which logical dataset to accumulate into.
+    """
+
+    kind: str = "qa"
+    """Dataset kind: 'qa' (eval_model) or 'instruction' (strong_model)."""
+
+    source_artifact_id: str = ""
+    """Source artifact ID: chunk ID for 'qa', enriched_document ID for 'instruction'."""
+
+    dataset_name: str = "default-dataset"
+    """Logical dataset name (get-or-create)."""
+
+
+@asset(
+    description=(
+        "Generate a dataset training/eval example from a chunk (qa) or enriched_document "
+        "(instruction) artifact. Calls pipeline.datasets.generate_qa_example or "
+        "pipeline.datasets.generate_instruction_example — no logic duplicated (D-02)."
+    ),
+    group_name="pipeline",
+)
+def generate_dataset(
+    config: GenerateDatasetConfig,
+    postgres: PostgresResource,
+    minio: MinIOResource,
+    litellm: LiteLLMResource,
+) -> dict[str, Any]:
+    """Dataset generation stage: source artifact → DatasetExample registry row.
+
+    Receives run config specifying kind, source_artifact_id, and dataset_name.
+    Returns the generate_qa_example() / generate_instruction_example() result dict
+    (status, example_id, dataset_id, cost_usd).
+
+    Resources: postgres (for the registry get_session() calls),
+               minio (for instruction-tuning's parent cleaned_document S3 fetch),
+               litellm (for the LLM completion call via eval_model/strong_model).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.datasets import (
+        generate_instruction_example,
+        generate_qa_example,
+    )
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        litellm_url=litellm.litellm_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info(
+        "dagster.generate_dataset.start",
+        kind=config.kind,
+        source_artifact_id=config.source_artifact_id,
+        dataset_name=config.dataset_name,
+    )
+
+    if config.kind == "qa":
+        result = generate_qa_example(
+            config.source_artifact_id, config.dataset_name, settings=settings
+        )
+    else:
+        result = generate_instruction_example(
+            config.source_artifact_id, config.dataset_name, settings=settings
+        )
+
+    log.info(
+        "dagster.generate_dataset.complete",
+        status=result.get("status"),
+        example_id=result.get("example_id"),
+    )
+    return result
+
+
 @asset(
     name="curate_document_asset",
     description=(

@@ -383,6 +383,67 @@ def cmd_dedupe() -> None:
         raise typer.Exit(code=1)
 
 
+class DatasetKind(str):
+    """Dataset kind enum for the generate-dataset command."""
+
+    QA = "qa"
+    INSTRUCTION = "instruction"
+
+
+@app.command(name="generate-dataset")
+def cmd_generate_dataset(
+    kind: str = typer.Argument(
+        ...,
+        help="Dataset kind to generate: 'qa' (chunk → Q&A pair via eval_model) or "
+             "'instruction' (enriched_document → instruction pair via strong_model).",
+    ),
+    source_artifact_id: str = typer.Argument(
+        ...,
+        help="ID of the source artifact: chunk artifact ID for 'qa', "
+             "enriched_document artifact ID for 'instruction'.",
+    ),
+    dataset_name: str = typer.Option(
+        ...,
+        "--dataset-name",
+        "-d",
+        help="Name of the dataset to accumulate this example into (get-or-create).",
+    ),
+) -> None:
+    """Generate a dataset example from a chunk (qa) or enriched document (instruction).
+
+    qa:          Generates a citation-grounded Q&A/RAG-eval pair from a chunk artifact
+                 via the eval_model task alias (DATA-01).
+    instruction: Generates an instruction-tuning pair from an enriched_document artifact
+                 via the strong_model task alias (DATA-02).
+
+    Every example records lineage back to its source artifact (DATA-03).
+    Re-running for the same source artifact + prompt_version is a no-op (cached).
+    """
+    from knowledge_lake.pipeline.datasets import (
+        generate_instruction_example,
+        generate_qa_example,
+    )
+
+    if kind not in ("qa", "instruction"):
+        typer.echo(f"Error: kind must be 'qa' or 'instruction', got {kind!r}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        if kind == "qa":
+            result = generate_qa_example(source_artifact_id, dataset_name)
+        else:
+            result = generate_instruction_example(source_artifact_id, dataset_name)
+
+        typer.echo(f"Dataset example generated:")
+        typer.echo(f"  status:      {result['status']}")
+        typer.echo(f"  example_id:  {result.get('example_id')}")
+        typer.echo(f"  dataset_id:  {result.get('dataset_id')}")
+        typer.echo(f"  cost_usd:    {result.get('cost_usd')}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="crawl")
 def cmd_crawl(
     url: str = typer.Argument(..., help="https:// seed URL to crawl."),

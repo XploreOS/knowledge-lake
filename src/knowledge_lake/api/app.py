@@ -48,6 +48,8 @@ from knowledge_lake.api.schemas import (
     DiscoverResultItem,
     EnrichRequest,
     EnrichResponse,
+    GenerateDatasetRequest,
+    GenerateDatasetResponse,
     LineageGraph,
     LineageNode,
     ParseRequest,
@@ -773,6 +775,60 @@ def curate_endpoint(body: CurateRequest) -> CurateResponse:
         cached=result.get("cached", False),
         quality_score=result.get("quality_score"),
         dedup_status=dedup_status,
+    )
+
+
+@app.post(
+    "/datasets/examples",
+    response_model=GenerateDatasetResponse,
+    tags=["datasets"],
+    summary="Generate a dataset example from a chunk (qa) or enriched document (instruction)",
+    status_code=200,
+)
+def generate_dataset_endpoint(body: GenerateDatasetRequest) -> GenerateDatasetResponse:
+    """Generate a dataset training/eval example and store it with full lineage (DATA-01/02/03).
+
+    Routes to pipeline.datasets.generate_qa_example (kind='qa') or
+    pipeline.datasets.generate_instruction_example (kind='instruction') —
+    no logic duplicated (D-02).
+
+    Security (ASVS V5, T-05-07):
+        - kind is bounded to '^(qa|instruction)$' via Pydantic pattern validation.
+        - source_artifact_id/dataset_name are validated by Pydantic (min_length=1).
+        - Artifact lookups use parameterised ORM queries — no raw SQL.
+        - Invalid artifact IDs or wrong artifact types return 422.
+    """
+    from knowledge_lake.pipeline.datasets import (
+        generate_instruction_example,
+        generate_qa_example,
+    )
+
+    logger.info(
+        "api.generate_dataset",
+        kind=body.kind,
+        source_artifact_id=body.source_artifact_id,
+        dataset_name=body.dataset_name,
+    )
+
+    try:
+        if body.kind == "qa":
+            result = generate_qa_example(body.source_artifact_id, body.dataset_name)
+        else:
+            result = generate_instruction_example(body.source_artifact_id, body.dataset_name)
+    except ValueError as exc:
+        logger.warning("api.generate_dataset.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info(
+        "api.generate_dataset.complete",
+        status=result["status"],
+        example_id=result.get("example_id"),
+    )
+    return GenerateDatasetResponse(
+        status=result["status"],
+        example_id=result.get("example_id"),
+        dataset_id=result.get("dataset_id"),
+        cost_usd=result.get("cost_usd"),
     )
 
 

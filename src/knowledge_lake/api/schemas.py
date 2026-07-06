@@ -432,6 +432,52 @@ class ReindexResponse(BaseModel):
     )
 
 
+class GenerateDatasetRequest(BaseModel):
+    """Request body for POST /datasets/examples — generate a dataset example (DATA-01/02).
+
+    Pydantic validates at the API boundary (ASVS V5, T-05-07):
+      - kind is bounded to '^(qa|instruction)$' via pattern validation
+      - Artifact lookups use parameterised SQLAlchemy queries (no raw SQL)
+    """
+
+    kind: str = Field(
+        ...,
+        description="Dataset kind: 'qa' (chunk → Q&A via eval_model) or 'instruction' (enriched_document → instruction via strong_model).",
+        pattern=r"^(qa|instruction)$",
+    )
+    source_artifact_id: str = Field(
+        ...,
+        description="Source artifact ID: chunk ID for 'qa', enriched_document ID for 'instruction'.",
+        min_length=1,
+    )
+    dataset_name: str = Field(
+        ...,
+        description="Name of the dataset to accumulate this example into (get-or-create).",
+        min_length=1,
+        max_length=255,
+    )
+
+
+class GenerateDatasetResponse(BaseModel):
+    """Response body for POST /datasets/examples (DATA-01/02/03)."""
+
+    status: str = Field(
+        description="'generated', 'cached', 'skipped_budget_exceeded', or 'skipped_generation_failed'.",
+    )
+    example_id: Optional[str] = Field(
+        default=None,
+        description="DatasetExample ID (dex_...), None when skipped.",
+    )
+    dataset_id: Optional[str] = Field(
+        default=None,
+        description="Dataset ID (dst_...) this example belongs to.",
+    )
+    cost_usd: Optional[float] = Field(
+        default=None,
+        description="LLM call cost in USD for this generation. 0.0 on cache hit, None when skipped.",
+    )
+
+
 class DiscoverRequest(BaseModel):
     """Request body for POST /discover — run a discovery query.
 
