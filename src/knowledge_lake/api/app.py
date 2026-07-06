@@ -5,7 +5,9 @@ Entry point: uvicorn knowledge_lake.api.app:app
 
 Endpoints:
   GET /health                    → {"status": "ok"}
-  GET /search?q=...&top_k=...   → list[SearchHit] — calls pipeline.search() (D-02)
+  GET /search?q=...&top_k=...   → list[SearchHit] — calls pipeline.search() (D-02),
+                                    filterable by domain/document_type/min_quality_score (INDEX-03)
+  POST /reindex?collection=...   → ReindexResponse — zero-downtime alias reindex (INDEX-02)
   GET /lineage/{artifact_id}     → list[LineageNode] — calls lineage.resolve_ancestry() (D-02)
 
 Security (T-01-14):
@@ -23,6 +25,7 @@ from __future__ import annotations
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
 
 import structlog
@@ -46,6 +49,7 @@ from knowledge_lake.api.schemas import (
     LineageNode,
     ParseRequest,
     ParseResponse,
+    ReindexResponse,
     SearchHit,
     SearchParams,
     SourceCreate,
@@ -141,6 +145,20 @@ def search_endpoint(
         default="klake_chunks",
         description="Qdrant collection to search.",
     ),
+    domain: Optional[str] = Query(
+        default=None,
+        description="Filter results to this domain.",
+    ),
+    document_type: Optional[str] = Query(
+        default=None,
+        description="Filter results to this document_type.",
+    ),
+    min_quality_score: Optional[float] = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Filter results to quality_score >= this value.",
+    ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
 
@@ -148,12 +166,16 @@ def search_endpoint(
 
     Security (T-01-14 / ASVS V5):
         - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.
+        - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.
         - Empty/whitespace queries return an empty list (not an error).
 
     Args:
-        q:          Natural-language search query.
-        top_k:      Maximum number of results (1–100, default 5).
-        collection: Qdrant collection to search (default: klake_chunks).
+        q:                 Natural-language search query.
+        top_k:             Maximum number of results (1–100, default 5).
+        collection:        Qdrant collection to search (default: klake_chunks).
+        domain:            Optional filter — payload['domain'] must match exactly.
+        document_type:     Optional filter — payload['document_type'] must match exactly.
+        min_quality_score: Optional filter — payload['quality_score'] must be >= this value.
 
     Returns:
         A list of SearchHit objects ordered by score descending.
@@ -167,10 +189,25 @@ def search_endpoint(
         raise HTTPException(status_code=422, detail="Invalid collection name format.")
 
     # Delegate entirely to the existing plain function (D-02)
-    logger.info("api.search", q=q[:80], top_k=top_k, collection=collection)
-    hits = search(q, collection=collection, top_k=top_k)
+    logger.info(
+        "api.search",
+        q=q[:80],
+        top_k=top_k,
+        collection=collection,
+        domain=domain,
+        document_type=document_type,
+        min_quality_score=min_quality_score,
+    )
+    hits = search(
+        q,
+        collection=collection,
+        top_k=top_k,
+        domain=domain,
+        document_type=document_type,
+        min_quality_score=min_quality_score,
+    )
 
-    # Map Hit → SearchHit, extracting citation fields from payload
+    # Map Hit → SearchHit, extracting citation + enrichment fields from payload
     result: list[SearchHit] = []
     for hit in hits:
         payload = hit.payload or {}
@@ -183,11 +220,57 @@ def search_endpoint(
                 page=int(payload.get("page", 1)),
                 chunk_id=payload.get("chunk_id", hit.id),
                 text=payload.get("text", ""),
+                domain=payload.get("domain"),
+                document_type=payload.get("document_type"),
+                keywords=payload.get("keywords", []),
+                quality_score=payload.get("quality_score"),
             )
         )
 
     logger.info("api.search.complete", results=len(result))
     return result
+
+
+@app.post(
+    "/reindex",
+    response_model=ReindexResponse,
+    tags=["pipeline"],
+    summary="Reindex a Qdrant alias with zero search downtime",
+    status_code=200,
+)
+def reindex_endpoint(
+    collection: str = Query(default="klake_chunks", description="Qdrant alias to reindex."),
+) -> ReindexResponse:
+    """Reindex a Qdrant alias with zero search downtime (INDEX-02).
+
+    Creates the next versioned physical collection, copies all existing points
+    into it via ``copy_all_points()``, then atomically repoints the alias.
+    Calls ``pipeline.index.reindex_collection()`` — the same function the CLI
+    uses (D-02). The prior physical collection is retained, never auto-dropped.
+
+    Security (ASVS V5):
+        - collection is validated against the same format guard as /search (WR-04).
+    """
+    from knowledge_lake.pipeline.index import reindex_collection
+
+    if not _COLLECTION_NAME_RE.fullmatch(collection):
+        raise HTTPException(status_code=422, detail="Invalid collection name format.")
+
+    logger.info("api.reindex", collection=collection)
+
+    try:
+        result = reindex_collection(collection)
+    except ValueError as exc:
+        logger.warning("api.reindex.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info(
+        "api.reindex.complete",
+        collection=collection,
+        new_physical=result["new_physical"],
+        old_physical=result.get("old_physical"),
+    )
+    return ReindexResponse(**result)
 
 
 @app.post(

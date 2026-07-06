@@ -71,6 +71,18 @@ class SearchHit(BaseModel):
     page: int = Field(description="Page number where this chunk appears (1-indexed).")
     chunk_id: str = Field(description="Chunk artifact ID (registry ID, prefixed with 'chk_').")
     text: str = Field(default="", description="Chunk text snippet for display.")
+    domain: Optional[str] = Field(
+        default=None, description="Domain classification from the source (e.g. 'healthcare')."
+    )
+    document_type: Optional[str] = Field(
+        default=None, description="Enrichment-derived document type (e.g. 'regulation', 'guidance')."
+    )
+    keywords: list[str] = Field(
+        default_factory=list, description="Enrichment-derived keywords for this document."
+    )
+    quality_score: Optional[float] = Field(
+        default=None, description="LLM-judged quality score in [0, 1] from enrichment."
+    )
 
 
 class LineageNode(BaseModel):
@@ -346,6 +358,17 @@ class EnrichResponse(BaseModel):
     quality_score: Optional[float] = Field(
         default=None,
         description="LLM-judged quality score in [0,1], None when skipped.",
+    )
+
+
+class ReindexResponse(BaseModel):
+    """Response body for POST /reindex — zero-downtime alias reindex result (INDEX-02)."""
+
+    collection: str = Field(description="Qdrant alias that was reindexed.")
+    new_physical: str = Field(description="New physical collection the alias now points to.")
+    old_physical: Optional[str] = Field(
+        default=None,
+        description="Prior physical collection (retained, never auto-dropped); None on first-ever reindex.",
     )
 
 

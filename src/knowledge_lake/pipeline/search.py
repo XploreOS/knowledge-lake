@@ -4,6 +4,16 @@ The embedder and vector store are resolved from settings.
 The query is embedded with the same embedder used during indexing — the
 collection dimension must match (both default to 'local' → 384-dim).
 
+Optional domain/document_type/min_quality_score keyword arguments build a
+Qdrant Filter that narrows ANN results to chunks whose payload matches
+(INDEX-03). Calling search() with none of these kwargs behaves identically to
+the pre-Phase-4 signature — additive and backward compatible.
+
+NOTE: importing qdrant_client.models here couples this file to the Qdrant
+backend's filter shape — an acknowledged, accepted simplification since only
+one VectorStorePlugin implementation (QdrantVectorStore) exists today
+(RESEARCH.md's own verified Code Example).
+
 Returns: list[Hit], each Hit has .id, .score, .payload with citation fields.
 """
 
@@ -12,6 +22,7 @@ from __future__ import annotations
 from typing import Optional
 
 import structlog
+from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.plugins.protocols import Hit
@@ -25,21 +36,28 @@ def search(
     *,
     collection: str = "klake_chunks",
     top_k: int = 5,
+    domain: Optional[str] = None,
+    document_type: Optional[str] = None,
+    min_quality_score: Optional[float] = None,
     settings: Optional[Settings] = None,
 ) -> list[Hit]:
     """Embed a query and return the top-k nearest chunk hits.
 
     Args:
-        query:      Natural-language query string.
-        collection: Qdrant collection to search (must exist and be populated).
-        top_k:      Maximum number of results to return.
-        settings:   Settings override.
+        query:             Natural-language query string.
+        collection:        Qdrant collection to search (must exist and be populated).
+        top_k:             Maximum number of results to return.
+        domain:            Optional filter — payload['domain'] must match exactly.
+        document_type:     Optional filter — payload['document_type'] must match exactly.
+        min_quality_score: Optional filter — payload['quality_score'] must be >= this value.
+        settings:          Settings override.
 
     Returns:
         List of Hit objects ordered by score descending, each carrying:
           .id             — chunk artifact ID (also in .payload['chunk_id'])
           .score          — cosine similarity score in [0, 1]
-          .payload        — dict with document, section_path, page, chunk_id, text
+          .payload        — dict with document, section_path, page, chunk_id, text,
+                            domain, document_type, keywords, quality_score
     """
     if not query.strip():
         log.warning("search.empty_query")
@@ -49,14 +67,34 @@ def search(
     embedder = get_embedder(s)
     vstore = get_vectorstore(s)
 
-    log.info("search.start", query=query[:80], collection=collection, top_k=top_k)
+    log.info(
+        "search.start",
+        query=query[:80],
+        collection=collection,
+        top_k=top_k,
+        domain=domain,
+        document_type=document_type,
+        min_quality_score=min_quality_score,
+    )
 
     # Embed the query
     query_vectors = embedder.embed([query])
     query_vector = query_vectors[0]
 
+    # Build an optional Qdrant Filter from the given filter kwargs (INDEX-03).
+    must: list = []
+    if domain:
+        must.append(FieldCondition(key="domain", match=MatchValue(value=domain)))
+    if document_type:
+        must.append(FieldCondition(key="document_type", match=MatchValue(value=document_type)))
+    if min_quality_score is not None:
+        must.append(FieldCondition(key="quality_score", range=Range(gte=min_quality_score)))
+    query_filter = Filter(must=must) if must else None
+
     # ANN search
-    hits: list[Hit] = vstore.search(collection, query_vector, top_k=top_k)
+    hits: list[Hit] = vstore.search(
+        collection, query_vector, top_k=top_k, query_filter=query_filter
+    )
 
     log.info("search.complete", hits=len(hits))
     return hits

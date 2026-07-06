@@ -139,6 +139,58 @@ def index(
     return indexed_ids
 
 
+def reindex_collection(
+    collection: str = "klake_chunks",
+    *,
+    settings: Optional[Settings] = None,
+) -> dict:
+    """Zero-downtime reindex of an alias-backed collection (INDEX-02, D-06).
+
+    Creates the next versioned physical collection, copies every existing
+    point into it via copy_all_points(), atomically repoints the alias, and
+    registers the new alias->physical mapping in the registry. The prior
+    physical collection is retained — never auto-dropped.
+
+    Args:
+        collection: Qdrant alias name to reindex (default: 'klake_chunks').
+        settings:   Settings override.
+
+    Returns:
+        {"collection": ..., "new_physical": ..., "old_physical": ...}
+    """
+    s = settings or get_settings()
+    vstore = get_vectorstore(s)
+
+    dim = vstore.get_collection_dim(collection)
+
+    def _copy_fn(new_physical: str) -> None:
+        vstore.copy_all_points(collection, new_physical)
+
+    log.info("index.reindex.start", collection=collection, dim=dim)
+    result = vstore.reindex(collection, dim=dim, upsert_fn=_copy_fn)
+
+    with get_session() as session:
+        registry_repo.register_vector_collection(
+            session,
+            alias_name=collection,
+            physical_collection=result["new_physical"],
+            dim=dim,
+        )
+        session.flush()
+
+    log.info(
+        "index.reindex.complete",
+        collection=collection,
+        new_physical=result["new_physical"],
+        old_physical=result["old_physical"],
+    )
+    return {
+        "collection": collection,
+        "new_physical": result["new_physical"],
+        "old_physical": result["old_physical"],
+    }
+
+
 def _strip_prefix(prefixed_id: str) -> str:
     """Strip the type prefix from a registry ID to produce a bare UUID.
 

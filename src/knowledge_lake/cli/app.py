@@ -9,7 +9,8 @@ Commands:
   clean       — clean a parsed_document artifact (boilerplate removal, dedup)
   chunk       — chunk a parsed_document artifact into chunk artifacts
   enrich      — enrich a cleaned_document artifact with LLM-judged metadata
-  search      — embed a query and return cited search results
+  search      — embed a query and return cited, filterable search results
+  reindex     — zero-downtime reindex of a Qdrant alias (INDEX-02)
   lineage     — print ancestry tree (or JSON) for a given artifact ID
   demo        — run the full spike end-to-end (ingest → search → lineage)
 """
@@ -402,6 +403,15 @@ def cmd_search(
         "klake_chunks", "--collection", "-c", help="Qdrant collection to search."
     ),
     top_k: int = typer.Option(5, "--top-k", "-k", help="Maximum number of results."),
+    domain: Optional[str] = typer.Option(
+        None, "--domain", help="Filter results to this domain."
+    ),
+    document_type: Optional[str] = typer.Option(
+        None, "--document-type", help="Filter results to this document_type."
+    ),
+    min_quality_score: Optional[float] = typer.Option(
+        None, "--min-quality-score", help="Filter results to quality_score >= this value."
+    ),
 ) -> None:
     """Embed a query and return the top-K matching chunks with citation.
 
@@ -409,7 +419,14 @@ def cmd_search(
     """
     from knowledge_lake.pipeline.search import search
 
-    hits = search(query, collection=collection, top_k=top_k)
+    hits = search(
+        query,
+        collection=collection,
+        top_k=top_k,
+        domain=domain,
+        document_type=document_type,
+        min_quality_score=min_quality_score,
+    )
 
     if not hits:
         typer.echo(f"No results for query: {query!r}")
@@ -425,10 +442,37 @@ def cmd_search(
         typer.echo(f"      section:      {payload.get('section_path', '?')}")
         typer.echo(f"      page:         {payload.get('page', '?')}")
         typer.echo(f"      chunk_id:     {payload.get('chunk_id', hit.id)}")
+        typer.echo(f"      domain:       {payload.get('domain', '?')}")
+        typer.echo(f"      document_type:{payload.get('document_type', '?')}")
+        typer.echo(f"      quality_score:{payload.get('quality_score', '?')}")
         text_snippet = (payload.get("text") or "")[:120].replace("\n", " ")
         if text_snippet:
             typer.echo(f"      text:         {text_snippet!r}")
         typer.echo()
+
+
+@app.command(name="reindex")
+def cmd_reindex(
+    collection: str = typer.Option(
+        "klake_chunks", "--collection", "-c", help="Qdrant alias to reindex."
+    ),
+) -> None:
+    """Reindex a Qdrant alias with zero search downtime (INDEX-02).
+
+    Creates the next versioned physical collection, copies all existing points
+    into it, then atomically repoints the alias. The prior physical collection
+    is retained (never auto-dropped).
+    """
+    from knowledge_lake.pipeline.index import reindex_collection
+
+    try:
+        result = reindex_collection(collection)
+        typer.echo(f"Reindexed: {result['collection']}")
+        typer.echo(f"  new_physical: {result['new_physical']}")
+        typer.echo(f"  old_physical: {result.get('old_physical')}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
 
 
 @app.command(name="lineage")
