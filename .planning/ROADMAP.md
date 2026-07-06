@@ -155,7 +155,20 @@ Plans:
   3. User can export the RAG corpus (chunks + metadata) to Parquet and query it via DuckDB
   4. User can export a pretraining-style text corpus to JSONL and fine-tuning datasets to JSONL in standard chat/instruction formats
 
-**Plans**: TBD
+**Plans**: 0/3 plans complete
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Curation: DataTrove quality filters, corpus-wide MinHash dedup, composite quality score, CLI/API/Dagster (CURATE-01, 02, 03) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-02-PLAN.md — Dataset generation: per-chunk Q&A (eval_model) + per-document instruction-tuning (strong_model), dataset_examples lineage, CLI/API/Dagster (DATA-01, 02, 03) [Wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 05-03-PLAN.md — Export: RAG corpus Parquet + DuckDB query, pretrain JSONL, fine-tune chat-format JSONL, CLI/API/Dagster (EXPORT-01, 02, 03) [Wave 3]
 
 ### Phase 6: Healthcare Domain Pack & Full-Surface Validation
 
@@ -184,7 +197,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 3/3 | Complete    | 2026-07-06 |
-| 5. Curation, Datasets & Export | 0/TBD | Not started | - |
+| 5. Curation, Datasets & Export | 0/3 | Not started | - |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
 
 ## Coverage
