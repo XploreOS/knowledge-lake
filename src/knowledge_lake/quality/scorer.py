@@ -155,13 +155,23 @@ def maybe_llm_spot_check(
         )
 
         response = litellm.completion(
-            model="cheap_model",
+            # "openai/" = wire protocol the LiteLLM proxy speaks, not the actual
+            # model provider — see pipeline/enrich.py::_call_llm_for_enrichment
+            # for the full rationale (Phase 4 checkpoint finding).
+            model="openai/cheap_model",
             messages=[{"role": "user", "content": prompt}],
             api_base=settings.litellm_url,
+            api_key=settings.litellm_api_key,
             max_tokens=32,
         )
         content = response.choices[0].message.content or ""
-        parsed = _json.loads(content)
+        # Live Bedrock Claude models sometimes wrap JSON in markdown fences
+        # despite the prompt asking for none (Phase 4 checkpoint finding).
+        stripped = content.strip()
+        if stripped.startswith("```"):
+            stripped = stripped.removeprefix("```json").removeprefix("```")
+            stripped = stripped.removesuffix("```").strip()
+        parsed = _json.loads(stripped)
         llm_score = float(parsed["score"])
         llm_score = max(0.0, min(1.0, llm_score))
         log.debug("quality_scorer.llm_spot_check_result", llm_score=llm_score)

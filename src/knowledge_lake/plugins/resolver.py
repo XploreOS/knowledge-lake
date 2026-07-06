@@ -239,7 +239,11 @@ def get_embedder(settings: "Settings") -> Any:
         An instantiated EmbedderPlugin (satisfies EmbedderPlugin Protocol).
     """
     name = settings.embedder
-    kwargs = {"litellm_url": settings.litellm_url} if name == "litellm" else {}
+    kwargs = (
+        {"litellm_url": settings.litellm_url, "litellm_api_key": settings.litellm_api_key}
+        if name == "litellm"
+        else {}
+    )
     return _resolve_with_kwargs(GROUP_EMBEDDERS, name, **kwargs)
 
 

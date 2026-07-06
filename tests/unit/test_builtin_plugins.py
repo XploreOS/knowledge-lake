@@ -164,8 +164,9 @@ class TestLiteLLMEmbedder:
             result = embedder.embed(["test text"])
         call_kwargs = mock_emb.call_args
         model_used = call_kwargs[1].get("model") or call_kwargs[0][0]
-        assert model_used == "embedding_model", (
-            f"LiteLLMEmbedder must pass model='embedding_model' alias, got {model_used!r}"
+        assert model_used == "openai/embedding_model", (
+            f"LiteLLMEmbedder must pass model='openai/embedding_model' "
+            f"(openai/ = wire protocol, embedding_model = task alias), got {model_used!r}"
         )
 
     def test_embed_returns_correct_dim_via_mock(self, embedder: Any) -> None:

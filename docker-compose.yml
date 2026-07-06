@@ -119,12 +119,20 @@ services:
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       # AWS Bedrock API key (optional: proxy boots healthy without it; D-13).
       # Set AWS_BEDROCK_API_KEY in .env to activate Bedrock model calls (D-12).
       AWS_BEDROCK_API_KEY: "${AWS_BEDROCK_API_KEY:-}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
       LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:-}"
+      # Required by the proxy's budget/spend-tracking and managed-files hooks —
+      # without it, every /chat/completions and /embeddings call fails with
+      # "400 No connected db" (Phase 4 checkpoint finding). Separate database
+      # from klake's own registry schema, same rationale as dagster_storage.
+      DATABASE_URL: "postgresql://klake:${POSTGRES_PASSWORD:-klake}@postgres:5432/litellm_storage"
     volumes:
       - ./infra/litellm/config.yaml:/app/config.yaml:ro
     ports:

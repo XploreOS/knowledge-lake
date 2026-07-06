@@ -3,7 +3,11 @@
 # Model aliases (D-12): task-based names → Bedrock model IDs
 # These aliases are used in ALL code; never hardcode provider model IDs.
 #
-# Authentication: Uses AWS Bedrock API key (aws_bedrock_api_key).
+# Authentication: Uses AWS Bedrock's bearer-token API key auth. LiteLLM has no
+# "aws_bedrock_api_key" field (that name is silently ignored) — the bearer key
+# must be passed as the generic `api_key` litellm_param, which the bedrock
+# provider reads as the Bearer token when no SigV4 credentials are configured
+# (litellm/llms/bedrock/base_aws_llm.py — Phase 4 checkpoint finding).
 # Set AWS_BEDROCK_API_KEY in your .env file.
 # The proxy boots healthy with no AWS creds (A5) — model calls fail at
 # invocation time, not at startup; the spike uses local embeddings (D-13).
@@ -15,23 +19,26 @@ model_list:
   # Cheap/fast tasks: simple classification, short prompts, metadata extraction
   - model_name: cheap_model
     litellm_params:
-      model: bedrock/anthropic.claude-haiku-4-5-20260925-v1:0
+      # Cross-region inference profile ID — this model family only supports
+      # INFERENCE_PROFILE invocation, not a bare on-demand model ID (Phase 4
+      # checkpoint finding, verified against bedrock ListInferenceProfiles).
+      model: bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0
       aws_region_name: us-east-1
-      aws_bedrock_api_key: os.environ/AWS_BEDROCK_API_KEY
+      api_key: os.environ/AWS_BEDROCK_API_KEY
 
   # Strong reasoning / synthesis tasks
   - model_name: strong_model
     litellm_params:
-      model: bedrock/anthropic.claude-sonnet-4-5-20260925-v1:0
+      model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
       aws_region_name: us-east-1
-      aws_bedrock_api_key: os.environ/AWS_BEDROCK_API_KEY
+      api_key: os.environ/AWS_BEDROCK_API_KEY
 
   # Evaluation / judge tasks
   - model_name: eval_model
     litellm_params:
-      model: bedrock/anthropic.claude-sonnet-4-5-20260925-v1:0
+      model: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
       aws_region_name: us-east-1
-      aws_bedrock_api_key: os.environ/AWS_BEDROCK_API_KEY
+      api_key: os.environ/AWS_BEDROCK_API_KEY
 
   # Embedding model (Bedrock Titan Text v2 — used when KLAKE_EMBEDDER=litellm)
   # Spike default is local sentence-transformers (D-13); this activates on config switch
@@ -39,11 +46,15 @@ model_list:
     litellm_params:
       model: bedrock/amazon.titan-embed-text-v2:0
       aws_region_name: us-east-1
-      aws_bedrock_api_key: os.environ/AWS_BEDROCK_API_KEY
+      api_key: os.environ/AWS_BEDROCK_API_KEY
 
 # General proxy settings
 general_settings:
-  master_key: ${LITELLM_MASTER_KEY}  # optional; injected via env at runtime
+  # os.environ/ is LiteLLM's own env-var substitution syntax for config.yaml —
+  # shell-style ${VAR} is NOT supported here and silently becomes the literal,
+  # unresolved string, which the proxy then accepts as the master key itself
+  # (Phase 4 checkpoint finding).
+  master_key: os.environ/LITELLM_MASTER_KEY  # optional; injected via env at runtime
 
 # Router settings
 router_settings:

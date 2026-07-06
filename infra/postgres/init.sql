@@ -19,3 +19,17 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'dagster_storage') \ge
 \c dagster_storage
 GRANT ALL PRIVILEGES ON DATABASE dagster_storage TO klake;
 \c klake
+
+-- ── LiteLLM proxy database ─────────────────────────────────────────────────
+-- The LiteLLM proxy's budget/spend-tracking and managed-files hooks require a
+-- Prisma-backed DATABASE_URL — without one, /chat/completions and /embeddings
+-- return "400 No connected db" for every model call. Same separate-DB rationale
+-- as dagster_storage: LiteLLM's own Prisma-managed tables must never touch the
+-- klake registry schema (Phase 4 checkpoint finding).
+SELECT 'CREATE DATABASE litellm_storage OWNER klake'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'litellm_storage') \gexec
+
+-- Grant the klake user full access to litellm_storage
+\c litellm_storage
+GRANT ALL PRIVILEGES ON DATABASE litellm_storage TO klake;
+\c klake

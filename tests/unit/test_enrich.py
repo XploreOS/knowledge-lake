@@ -173,8 +173,10 @@ def test_enrich_produces_valid_result(
     assert result["quality_score"] == pytest.approx(0.9)
     assert result["artifact_id"] is not None
     mock_completion.assert_called_once()
-    # cheap_model task alias only — never a hardcoded provider model ID
-    assert mock_completion.call_args.kwargs["model"] == "cheap_model"
+    # cheap_model task alias only — never a hardcoded provider model ID.
+    # "openai/" is the wire-protocol prefix the LiteLLM proxy requires, not a
+    # provider ID (Phase 4 checkpoint finding).
+    assert mock_completion.call_args.kwargs["model"] == "openai/cheap_model"
 
     expected_title = extract_deterministic_fields(
         parsed_doc.metadata, parsed_doc.sections, CLEANED_TEXT

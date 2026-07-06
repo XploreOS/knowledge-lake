@@ -115,9 +115,17 @@ class LiteLLMEmbedder:
     name: str = "litellm"
     dim: int = _LITELLM_DIM
 
-    def __init__(self, litellm_url: str = "http://localhost:4000") -> None:
+    def __init__(
+        self,
+        litellm_url: str = "http://localhost:4000",
+        litellm_api_key: str = "sk-local-noauth",
+    ) -> None:
         # Proxy base URL — injected by the resolver from Settings.litellm_url (CR-03)
         self._proxy_url: str = litellm_url
+        # Required by the litellm SDK for any api_base call even when the proxy
+        # has no LITELLM_MASTER_KEY configured — client-side requirement, not
+        # proxy-side auth (Phase 4 checkpoint finding).
+        self._api_key: str = litellm_api_key
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed texts via the LiteLLM gateway using the 'embedding_model' alias.
@@ -146,9 +154,13 @@ class LiteLLMEmbedder:
         )
         try:
             response = litellm.embedding(
-                model=_LITELLM_ALIAS,
+                # "openai/" declares the wire protocol the LiteLLM proxy speaks
+                # (OpenAI-compatible), not the actual model provider — see
+                # pipeline/enrich.py::_call_llm_for_enrichment for full rationale.
+                model=f"openai/{_LITELLM_ALIAS}",
                 input=texts,
                 api_base=self._proxy_url,
+                api_key=self._api_key,
             )
         except Exception as exc:
             raise RuntimeError(

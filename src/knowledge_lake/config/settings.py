@@ -232,6 +232,13 @@ class Settings(BaseSettings):
     litellm_url: str = "http://localhost:4000"
     """LiteLLM proxy URL for all model calls."""
 
+    litellm_api_key: str = "sk-local-noauth"
+    """API key sent to the LiteLLM proxy. The litellm SDK requires a non-empty
+    value for any api_base call even when the proxy has no LITELLM_MASTER_KEY
+    configured (dev default) — this is a client-side SDK requirement, not
+    proxy-side auth enforcement. Override via KLAKE_LITELLM_API_KEY when the
+    proxy's LITELLM_MASTER_KEY is set."""
+
     searxng_url: str = "http://localhost:8888"
     """SearXNG meta-search engine URL for source discovery (INGEST-07)."""
 

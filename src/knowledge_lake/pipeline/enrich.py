@@ -109,6 +109,21 @@ def _enrichment_cache_key(cleaned_content_hash: str, prompt_version: str) -> str
     return hashlib.sha256(f"{cleaned_content_hash}:{prompt_version}".encode()).hexdigest()
 
 
+def _strip_json_fences(content: str) -> str:
+    """Strip a ```json ... ``` / ``` ... ``` wrapper if the model added one.
+
+    The system prompt explicitly forbids markdown fences, but live Bedrock
+    Claude models still wrap JSON output in them despite that instruction
+    (observed against cheap_model — Phase 4 checkpoint finding). Stripped
+    defensively here rather than relied on prompt compliance alone.
+    """
+    stripped = content.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.removeprefix("```json").removeprefix("```")
+        stripped = stripped.removesuffix("```").strip()
+    return stripped
+
+
 def _build_enrichment_prompt(excerpt: str, deterministic: dict) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) pair for the enrichment LLM call."""
     user_prompt = (
@@ -139,19 +154,26 @@ def _call_llm_for_enrichment(
 
     try:
         response = litellm.completion(
-            model="cheap_model",
+            # "openai/" declares the wire protocol the LiteLLM proxy speaks
+            # (OpenAI-compatible), NOT the actual model provider — the proxy
+            # resolves the "cheap_model" task alias to whatever backend model
+            # infra/litellm/config.yaml maps it to (Bedrock/Anthropic in dev).
+            # Without this prefix litellm.completion() cannot infer a provider
+            # from api_base alone and raises before any request is sent.
+            model="openai/cheap_model",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             api_base=settings.litellm_url,
+            api_key=settings.litellm_api_key,
             max_tokens=512,
             temperature=0.0,
         )
     except Exception as exc:  # noqa: BLE001 — re-raised as RuntimeError for tenacity
         raise RuntimeError(f"enrichment LLM call failed: {exc}") from exc
 
-    content = response.choices[0].message.content or ""
+    content = _strip_json_fences(response.choices[0].message.content or "")
     result = EnrichmentResult.model_validate_json(content)
     return result, response
 
