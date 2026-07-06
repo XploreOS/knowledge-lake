@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation & End-to-End Spike** - Registries, immutable storage, plugin interfaces, and one document flowing through the full pipe on a one-command dev stack (completed 2026-07-03)
 - [x] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling (completed 2026-07-04)
 - [x] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking (completed 2026-07-05)
-- [ ] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations
+- [x] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations (completed 2026-07-06)
 - [ ] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports
 - [ ] **Phase 6: Healthcare Domain Pack & Full-Surface Validation** - Healthcare pack with seed sources, complete CLI/API/Dagster surface, and 5-10 real sources verified end-to-end
 
@@ -127,7 +127,7 @@ Plans:
   4. User can run semantic search via CLI and API returning chunks with scores and source citations that trace back to document, section, and page
   5. Qdrant collections are managed via aliases tracked in the registry, and a full reindex completes without search downtime
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -140,7 +140,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 04-03-PLAN.md — Index/search vertical slice: Qdrant alias + zero-downtime reindex, payload extension, filtered search (INDEX-01..03) [Wave 3]
+- [x] 04-03-PLAN.md — Index/search vertical slice: Qdrant alias + zero-downtime reindex, payload extension, filtered search (INDEX-01..03) [Wave 3]
 
 ### Phase 5: Curation, Datasets & Export
 
@@ -183,7 +183,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation & End-to-End Spike | 6/6 | Complete    | 2026-07-03 |
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
-| 4. Enrichment, Embedding & Search | 2/3 | In Progress|  |
+| 4. Enrichment, Embedding & Search | 3/3 | Complete   | 2026-07-06 |
 | 5. Curation, Datasets & Export | 0/TBD | Not started | - |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
 

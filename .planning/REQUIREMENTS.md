@@ -63,9 +63,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Indexing & Search
 
-- [ ] **INDEX-01**: Chunks with embeddings are indexed into Qdrant with payload metadata (domain, document, section, tags)
+- [x] **INDEX-01**: Chunks with embeddings are indexed into Qdrant with payload metadata (domain, document, section, tags)
 - [x] **INDEX-02**: Qdrant collections are managed via aliases and tracked in the registry, enabling reindexing without downtime
-- [ ] **INDEX-03**: User can run semantic search via CLI and API returning chunks with scores and source citations
+- [x] **INDEX-03**: User can run semantic search via CLI and API returning chunks with scores and source citations
 
 ### Curation & Datasets
 
@@ -175,9 +175,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ENRICH-04 | Phase 4 | Complete |
 | ENRICH-05 | Phase 4 | Complete |
 | ENRICH-06 | Phase 4 | Complete |
-| INDEX-01 | Phase 4 | Pending |
+| INDEX-01 | Phase 4 | Complete |
 | INDEX-02 | Phase 4 | Complete |
-| INDEX-03 | Phase 4 | Pending |
+| INDEX-03 | Phase 4 | Complete |
 | CURATE-01 | Phase 5 | Pending |
 | CURATE-02 | Phase 5 | Pending |
 | CURATE-03 | Phase 5 | Pending |

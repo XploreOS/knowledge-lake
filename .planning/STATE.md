@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 current_phase_name: Enrichment, Embedding & Search
-status: executing
-stopped_at: Completed 04-02-PLAN.md (checkpoint resolved via human-authorized live Bedrock test, commit ac299e1)
-last_updated: "2026-07-06T09:26:41.148Z"
+status: verifying
+stopped_at: Completed 04-03-PLAN.md (index/search vertical slice, INDEX-01..03) — Phase 04 complete
+last_updated: "2026-07-06T09:48:10.623Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 18
-  completed_plans: 17
-  percent: 50
+  completed_plans: 18
+  percent: 67
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 Phase: 04 (Enrichment, Embedding & Search) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-05 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P02 | 8m | 2 tasks | 4 files |
 | Phase 04 P01 | 8min | 2 tasks | 7 files |
 | Phase 04 P02 | 8min+checkpoint | 4 tasks | 11 files |
+| Phase 04 P03 | 35min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Single global llm_spend scope accepted for Phase 4 MVP; scope is a plain string key so finer-grained scopes can be added later without a schema change
 - [Phase ?]: vector_collections uses an is_current boolean flip (not a separate active-alias pointer table) so reindex history is preserved and auditable via created_at
 - [Phase 04-02]: Live Bedrock checkpoint resolved: enrich_document() live-verified against real Bedrock via LiteLLM proxy (status=enriched, then cached on re-run); six real gaps found and fixed in commit ac299e1 (openai/ provider prefix, litellm_storage DB, master_key env-var syntax, api_key field, real Bedrock model IDs, markdown-fence stripping)
+- [Phase 04]: Alias swap is one atomic update_collection_aliases() call (delete-old + create-new) — verified live against the real docker-compose Qdrant server, not just mocked
+- [Phase 04]: index()'s enrichment join (domain, document_type, keywords, quality_score) is looked up once per index() call via a single get_session() block, not once per chunk
+- [Phase 04]: reindex_collection() resolves the alias's current dim via the new get_collection_dim() rather than requiring the caller to pass it, so klake reindex needs no --dim flag
 
 ### Pending Todos
 
@@ -120,7 +124,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-02-PLAN.md (checkpoint resolved via human-authorized live Bedrock test, commit ac299e1)
+**Stopped at:** Completed 04-03-PLAN.md (index/search vertical slice, INDEX-01..03) — Phase 04 complete
 
-Last session: 2026-07-06T09:26:41.140Z
+Last session: 2026-07-06T09:48:10.615Z
 Resume file: None
