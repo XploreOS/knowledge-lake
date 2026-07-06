@@ -23,7 +23,7 @@ No core code edits required (FOUND-08, D-11).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
 
 # ---------------------------------------------------------------------------
@@ -197,9 +197,14 @@ class VectorStorePlugin(Protocol):
     """Protocol for managing a vector collection and performing similarity search.
 
     Implementations must expose:
-      ensure_collection(name, dim, distance) — idempotently create/verify a collection
-      upsert(collection, points)             — batch-upsert VectorPoint records
-      search(collection, query, top_k)       — ANN search returning Hits with citation payload
+      ensure_collection(name, dim, distance)          — idempotently create/verify a collection
+      ensure_aliased_collection(alias, dim, distance) — idempotently create the first versioned
+                                                          collection behind an alias (D-06, INDEX-02)
+      reindex(alias, dim, upsert_fn, distance)        — zero-downtime reindex via atomic alias swap
+      copy_all_points(source, dest, batch_size)       — scroll+upsert all points between collections
+      get_collection_dim(alias)                       — read back a collection's configured vector size
+      upsert(collection, points)                      — batch-upsert VectorPoint records
+      search(collection, query, top_k, query_filter)  — ANN search returning Hits with citation payload
 
     Default built-in: QdrantVectorStore ('qdrant', cosine similarity, citation-payload upsert).
     """
@@ -216,6 +221,87 @@ class VectorStorePlugin(Protocol):
         """
         ...
 
+    def ensure_aliased_collection(
+        self, alias: str, dim: int, distance: str = "Cosine"
+    ) -> tuple[str, bool]:
+        """Idempotently create the first versioned collection behind ``alias``.
+
+        Only creates a physical collection (named ``f"{alias}_v1"``) and points
+        the alias at it the FIRST time ``alias`` is used — every subsequent call
+        with an existing alias is a no-op (D-06). Callers keep passing ``alias``
+        to embed()/index()/search() unchanged; only the resolution layer
+        underneath changes when a reindex happens.
+
+        Args:
+            alias:    Stable collection name applications use (never a physical
+                      collection name directly).
+            dim:      Vector dimension (must match the embedder's dim).
+            distance: Distance metric to use (default: 'Cosine').
+
+        Returns:
+            (physical_collection_name, created) — ``created`` is True only the
+            first time this alias is bootstrapped.
+        """
+        ...
+
+    def reindex(
+        self,
+        alias: str,
+        dim: int,
+        upsert_fn: Any,
+        distance: str = "Cosine",
+    ) -> dict:
+        """Zero-downtime reindex: build a new physical collection, then atomically
+        repoint ``alias`` at it (D-06, INDEX-02).
+
+        Creates the next versioned collection after the highest existing
+        ``f"{alias}_vN"`` suffix, calls ``upsert_fn(new_physical_name)`` to
+        populate it, then issues a single ``update_collection_aliases()`` call
+        containing both the delete-old-alias and create-new-alias operations so
+        the alias never resolves to nothing mid-swap. The prior physical
+        collection is retained — never auto-dropped; the caller decides if/when
+        to drop it.
+
+        Args:
+            alias:     Stable collection name applications use.
+            dim:       Vector dimension for the new physical collection.
+            upsert_fn: Callable invoked with the new physical collection name;
+                       responsible for populating it (e.g. copy_all_points or
+                       a full re-embed).
+            distance:  Distance metric to use (default: 'Cosine').
+
+        Returns:
+            {"new_physical": ..., "old_physical": ...} (``old_physical`` is
+            None on the very first reindex of a never-aliased collection).
+        """
+        ...
+
+    def copy_all_points(self, source: str, dest: str, batch_size: int = 256) -> int:
+        """Scroll all points (vectors + payload) out of ``source`` and upsert
+        them into ``dest``. The default ``upsert_fn`` ``reindex()`` uses when no
+        re-embedding is needed.
+
+        Args:
+            source:     Source collection name.
+            dest:       Destination collection name.
+            batch_size: Number of points to scroll/upsert per batch.
+
+        Returns:
+            Total count of points copied (0 for an empty source collection).
+        """
+        ...
+
+    def get_collection_dim(self, alias: str) -> int:
+        """Return the configured vector dimension for a collection or alias.
+
+        Args:
+            alias: Collection name or alias to inspect.
+
+        Returns:
+            The vector dimension (size) configured for this collection.
+        """
+        ...
+
     def upsert(self, collection: str, points: list[VectorPoint]) -> None:
         """Upsert a batch of VectorPoints into the collection.
 
@@ -226,14 +312,23 @@ class VectorStorePlugin(Protocol):
         ...
 
     def search(
-        self, collection: str, query: list[float], top_k: int
+        self,
+        collection: str,
+        query: list[float],
+        top_k: int,
+        query_filter: Optional[Any] = None,
     ) -> list[Hit]:
         """Perform approximate nearest-neighbour search.
 
         Args:
-            collection: Collection to search.
-            query:      Query vector (must have the same dimension as the collection).
-            top_k:      Maximum number of results to return.
+            collection:   Collection to search.
+            query:        Query vector (must have the same dimension as the collection).
+            top_k:        Maximum number of results to return.
+            query_filter: Optional backend-specific filter object (Qdrant's
+                          ``Filter`` for the built-in implementation) — an
+                          acknowledged simplification for this MVP phase since
+                          there is currently only one VectorStorePlugin
+                          implementation.
 
         Returns:
             List of Hit objects ordered by score descending.

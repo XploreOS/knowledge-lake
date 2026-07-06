@@ -2,8 +2,15 @@
 
 Wraps qdrant-client 1.18 to provide:
   - ensure_collection(): idempotently create a named collection with cosine distance
+  - ensure_aliased_collection(): idempotently bootstrap the first versioned
+    collection behind a stable alias (D-06, INDEX-02)
+  - reindex(): zero-downtime reindex — new physical collection, populate, then
+    atomically repoint the alias in a single update_collection_aliases() call
+  - copy_all_points(): scroll+upsert all points between two collections
+  - get_collection_dim(): read back a collection's configured vector size
   - upsert(): batch-upsert VectorPoints with citation payload fields (D-07)
-  - search(): ANN search returning Hits with score and citation payload
+  - search(): ANN search returning Hits with score and citation payload,
+    optionally narrowed by a Qdrant Filter (query_filter, INDEX-03)
 
 Citation payload fields preserved in each Qdrant point (D-07, D-14):
   document     — parsed document artifact ID this chunk came from
@@ -16,6 +23,8 @@ Registered as entry point:
     qdrant = "knowledge_lake.plugins.builtin.qdrant_store:QdrantVectorStore"
 """
 from __future__ import annotations
+
+from typing import Any, Optional
 
 import structlog
 
@@ -48,6 +57,20 @@ class QdrantVectorStore:
         self._client = QdrantClient(url=qdrant_url)
         log.debug("qdrant_store.connect", url=qdrant_url)
 
+    def _distance_from_name(self, distance: str):
+        """Resolve a distance-metric name string to the qdrant_client Distance enum.
+
+        Shared by ensure_collection/ensure_aliased_collection/reindex so all
+        collection-creation paths use the same Cosine/Euclid/Dot mapping.
+        """
+        Distance = self._Distance
+        distance_map = {
+            "Cosine": Distance.COSINE,
+            "Euclid": Distance.EUCLID,
+            "Dot": Distance.DOT,
+        }
+        return distance_map.get(distance, Distance.COSINE)
+
     def ensure_collection(
         self, name: str, dim: int, distance: str = "Cosine"
     ) -> None:
@@ -65,19 +88,166 @@ class QdrantVectorStore:
             log.debug("qdrant_store.collection_exists", collection=name)
             return
 
-        Distance = self._Distance
-        distance_map = {
-            "Cosine": Distance.COSINE,
-            "Euclid": Distance.EUCLID,
-            "Dot": Distance.DOT,
-        }
-        dist = distance_map.get(distance, Distance.COSINE)
+        dist = self._distance_from_name(distance)
 
         log.info("qdrant_store.create_collection", collection=name, dim=dim, distance=distance)
         self._client.create_collection(
             collection_name=name,
             vectors_config=self._VectorParams(size=dim, distance=dist),
         )
+
+    def ensure_aliased_collection(
+        self, alias: str, dim: int, distance: str = "Cosine"
+    ) -> tuple[str, bool]:
+        """Idempotently bootstrap the first versioned collection behind ``alias`` (D-06).
+
+        No-op (returns ``(alias, False)``) when the alias already resolves to a
+        collection. Otherwise creates ``f"{alias}_v1"`` and points ``alias`` at it,
+        returning ``(physical, True)``.
+        """
+        if self._client.collection_exists(alias):
+            log.debug("qdrant_store.alias_exists", alias=alias)
+            return (alias, False)
+
+        physical = f"{alias}_v1"
+        dist = self._distance_from_name(distance)
+
+        log.info(
+            "qdrant_store.ensure_aliased_collection.create",
+            alias=alias,
+            physical=physical,
+            dim=dim,
+            distance=distance,
+        )
+        self._client.create_collection(
+            collection_name=physical,
+            vectors_config=self._VectorParams(size=dim, distance=dist),
+        )
+
+        from qdrant_client.models import CreateAlias, CreateAliasOperation
+
+        self._client.update_collection_aliases(
+            change_aliases_operations=[
+                CreateAliasOperation(
+                    create_alias=CreateAlias(collection_name=physical, alias_name=alias)
+                )
+            ]
+        )
+        return (physical, True)
+
+    def _next_version_name(self, alias: str) -> str:
+        """Return the next ``f"{alias}_vN"`` name after the highest existing version."""
+        collections = self._client.get_collections().collections
+        prefix = f"{alias}_v"
+        versions: list[int] = []
+        for c in collections:
+            if c.name.startswith(prefix):
+                suffix = c.name[len(prefix):]
+                if suffix.isdigit():
+                    versions.append(int(suffix))
+        next_version = (max(versions) + 1) if versions else 1
+        return f"{prefix}{next_version}"
+
+    def _resolve_alias_target(self, alias: str) -> Optional[str]:
+        """Return the physical collection name ``alias`` currently resolves to, or None."""
+        aliases = self._client.get_aliases().aliases
+        for a in aliases:
+            if a.alias_name == alias:
+                return a.collection_name
+        return None
+
+    def copy_all_points(self, source: str, dest: str, batch_size: int = 256) -> int:
+        """Scroll all points (vectors + payload) out of ``source`` and upsert into ``dest``.
+
+        Returns the total count copied (0 for an empty source collection).
+        """
+        total = 0
+        next_offset: Any = None
+        while True:
+            records, next_offset = self._client.scroll(
+                collection_name=source,
+                limit=batch_size,
+                offset=next_offset,
+                with_vectors=True,
+                with_payload=True,
+            )
+            if not records:
+                break
+
+            batch = [
+                self._PointStruct(id=r.id, vector=r.vector, payload=r.payload)
+                for r in records
+            ]
+            self._client.upsert(collection_name=dest, points=batch)
+            total += len(batch)
+
+            if next_offset is None:
+                break
+
+        log.info("qdrant_store.copy_all_points", source=source, dest=dest, count=total)
+        return total
+
+    def reindex(
+        self,
+        alias: str,
+        dim: int,
+        upsert_fn: Any,
+        distance: str = "Cosine",
+    ) -> dict:
+        """Zero-downtime reindex: build the next versioned collection, populate it via
+        ``upsert_fn``, then atomically repoint ``alias`` at it in one call (D-06, INDEX-02).
+        """
+        old_physical = self._resolve_alias_target(alias)
+        next_physical = self._next_version_name(alias)
+        dist = self._distance_from_name(distance)
+
+        log.info(
+            "qdrant_store.reindex.create",
+            alias=alias,
+            old_physical=old_physical,
+            next_physical=next_physical,
+        )
+        self._client.create_collection(
+            collection_name=next_physical,
+            vectors_config=self._VectorParams(size=dim, distance=dist),
+        )
+
+        upsert_fn(next_physical)
+
+        from qdrant_client.models import (
+            CreateAlias,
+            CreateAliasOperation,
+            DeleteAlias,
+            DeleteAliasOperation,
+        )
+
+        change_aliases_operations: list[Any] = []
+        if old_physical is not None:
+            change_aliases_operations.append(
+                DeleteAliasOperation(delete_alias=DeleteAlias(alias_name=alias))
+            )
+        change_aliases_operations.append(
+            CreateAliasOperation(
+                create_alias=CreateAlias(collection_name=next_physical, alias_name=alias)
+            )
+        )
+
+        self._client.update_collection_aliases(
+            change_aliases_operations=change_aliases_operations
+        )
+
+        log.info(
+            "qdrant_store.reindex.complete",
+            alias=alias,
+            new_physical=next_physical,
+            old_physical=old_physical,
+        )
+        return {"new_physical": next_physical, "old_physical": old_physical}
+
+    def get_collection_dim(self, alias: str) -> int:
+        """Return the configured vector dimension for ``alias`` (or a physical collection name)."""
+        info = self._client.get_collection(alias)
+        return info.config.params.vectors.size
 
     def upsert(self, collection: str, points: list[VectorPoint]) -> None:
         """Batch-upsert VectorPoints into a Qdrant collection.
@@ -106,7 +276,11 @@ class QdrantVectorStore:
         )
 
     def search(
-        self, collection: str, query: list[float], top_k: int
+        self,
+        collection: str,
+        query: list[float],
+        top_k: int,
+        query_filter: Optional[Any] = None,
     ) -> list[Hit]:
         """Perform approximate nearest-neighbour search.
 
@@ -115,9 +289,10 @@ class QdrantVectorStore:
         citation payload from the matched VectorPoint.
 
         Args:
-            collection: Collection to search.
-            query:      Query vector (must have the same dimension as the collection).
-            top_k:      Maximum number of results to return.
+            collection:   Collection to search.
+            query:        Query vector (must have the same dimension as the collection).
+            top_k:        Maximum number of results to return.
+            query_filter: Optional Qdrant Filter to narrow results (INDEX-03).
 
         Returns:
             List of Hit objects ordered by score descending.
@@ -128,6 +303,7 @@ class QdrantVectorStore:
             collection_name=collection,
             query=query,
             limit=top_k,
+            query_filter=query_filter,
         )
 
         hits: list[Hit] = [
