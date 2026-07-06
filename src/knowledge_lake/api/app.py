@@ -48,6 +48,8 @@ from knowledge_lake.api.schemas import (
     DiscoverResultItem,
     EnrichRequest,
     EnrichResponse,
+    ExportRequest,
+    ExportResponse,
     GenerateDatasetRequest,
     GenerateDatasetResponse,
     LineageGraph,
@@ -945,3 +947,75 @@ def lineage_endpoint(artifact_id: str) -> list[LineageNode]:
 
     logger.info("api.lineage.complete", artifact_id=artifact_id, nodes=len(result))
     return result
+
+
+@app.post(
+    "/exports",
+    response_model=ExportResponse,
+    tags=["export"],
+    summary="Export the corpus or a dataset to the gold zone (EXPORT-01/02/03)",
+    status_code=200,
+)
+def export_endpoint(body: ExportRequest) -> ExportResponse:
+    """Export curated corpus or dataset examples to the gold zone (EXPORT-01/02/03).
+
+    Routes to the appropriate pipeline.export function based on ``kind``:
+    - ``rag-corpus`` → export_rag_corpus() → Parquet (EXPORT-01)
+    - ``pretrain``   → export_pretrain_corpus() → JSONL (EXPORT-02)
+    - ``finetune``   → export_finetune_dataset(dataset_name) → JSONL (EXPORT-03)
+
+    All export functions fail closed with a 422 if any undocumented train/eval
+    contamination exists (05-AI-SPEC Section 6/7 hard gate, T-05-11).
+
+    Security (T-05-09 / ASVS V5):
+        - ``kind`` is bounded to ``^(rag-corpus|pretrain|finetune)$`` via Pydantic pattern.
+        - No free-form string reaches the gold-zone S3 key construction.
+        - ``dataset_name`` is bounded to max_length=255.
+        - ``ValueError`` (missing dataset, invalid kind) → 422.
+
+    D-02 compliance:
+        Calls the same pipeline.export functions as the CLI export command — no
+        behavior re-implemented.
+    """
+    from knowledge_lake.pipeline.export import (
+        TrainEvalContaminationError,
+        export_finetune_dataset,
+        export_pretrain_corpus,
+        export_rag_corpus,
+    )
+
+    if body.kind == "finetune" and not body.dataset_name:
+        raise HTTPException(
+            status_code=422,
+            detail="dataset_name is required for kind='finetune'.",
+        )
+
+    logger.info("api.export", kind=body.kind, dataset_name=body.dataset_name)
+
+    try:
+        if body.kind == "rag-corpus":
+            result = export_rag_corpus()
+        elif body.kind == "pretrain":
+            result = export_pretrain_corpus()
+        else:
+            assert body.dataset_name is not None  # validated above
+            result = export_finetune_dataset(body.dataset_name)
+    except TrainEvalContaminationError as exc:
+        logger.warning("api.export.contamination", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.warning("api.export.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info(
+        "api.export.complete",
+        kind=body.kind,
+        dataset_id=result.get("dataset_id"),
+        row_count=result.get("row_count"),
+    )
+    return ExportResponse(
+        dataset_id=result["dataset_id"],
+        storage_uri=result["storage_uri"],
+        row_count=result["row_count"],
+        skipped_dangling_lineage=result.get("skipped_dangling_lineage"),
+    )

@@ -128,6 +128,40 @@ class LineageGraph(BaseModel):
     nodes: list[LineageNode] = Field(description="Ordered ancestry nodes (leaf → root).")
 
 
+# ── Export schemas (EXPORT-01..03) ─────────────────────────────────────────────
+
+
+class ExportRequest(BaseModel):
+    """Request body for POST /exports.
+
+    Bounded to the three valid export kinds via Pydantic pattern validation
+    (T-05-09: no free-form string ever reaches the gold-zone S3 key construction).
+    """
+
+    kind: str = Field(
+        ...,
+        pattern=r"^(rag-corpus|pretrain|finetune)$",
+        description="Export kind: 'rag-corpus', 'pretrain', or 'finetune'.",
+    )
+    dataset_name: Optional[str] = Field(
+        default=None,
+        max_length=255,
+        description="Required for kind='finetune'. The logical Dataset name to export.",
+    )
+
+
+class ExportResponse(BaseModel):
+    """Response body for POST /exports."""
+
+    dataset_id: str = Field(description="Registry ID of the created/updated Dataset row.")
+    storage_uri: str = Field(description="S3 URI of the exported file in the gold zone.")
+    row_count: int = Field(description="Number of rows/examples written to the export file.")
+    skipped_dangling_lineage: Optional[int] = Field(
+        default=None,
+        description="(finetune only) Number of examples skipped due to unresolvable source_artifact_id.",
+    )
+
+
 # ── Source registration schemas (02-01) ──────────────────────────────────────
 
 

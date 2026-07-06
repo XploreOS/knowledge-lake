@@ -651,3 +651,147 @@ def curate_document_asset(
         quality_score=result.get("quality_score"),
     )
     return result
+
+
+# ── Export assets (EXPORT-01..03) ─────────────────────────────────────────────
+
+
+@asset(
+    description=(
+        "Export all chunk artifacts as a Parquet file to the gold zone (EXPORT-01). "
+        "Uses Polars for columnar write + DuckDB httpfs for verification. "
+        "Calls pipeline.export.export_rag_corpus — no logic duplicated (D-02)."
+    ),
+    group_name="export",
+)
+def export_rag_corpus(
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Export stage: chunk artifacts → gold-zone Parquet (EXPORT-01).
+
+    Joins each chunk's citation fields with enrichment metadata via the same
+    join helper as pipeline.index.index(). Writes only _RAG_CORPUS_FIELDS columns
+    (T-05-08 information-disclosure mitigation).
+
+    Fails closed with TrainEvalContaminationError on any undocumented train/eval
+    overlap (05-AI-SPEC Section 6/7 hard gate).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.export import export_rag_corpus as export_rag_fn
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.export_rag_corpus.start")
+    result = export_rag_fn(settings=settings)
+    log.info("dagster.export_rag_corpus.complete", row_count=result.get("row_count"))
+    return result
+
+
+@asset(
+    description=(
+        "Export quality-filtered curated_document text as JSONL to the gold zone (EXPORT-02). "
+        "Applies ExportSettings.min_quality_score_for_pretrain at export time. "
+        "Calls pipeline.export.export_pretrain_corpus — no logic duplicated (D-02)."
+    ),
+    group_name="export",
+)
+def export_pretrain_corpus(
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Export stage: curated_document artifacts → gold-zone JSONL (EXPORT-02).
+
+    Only includes documents whose composite_quality_score >= min_quality_score_for_pretrain.
+
+    Fails closed with TrainEvalContaminationError on any undocumented train/eval
+    overlap (05-AI-SPEC Section 6/7 hard gate).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.export import export_pretrain_corpus as export_pretrain_fn
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.export_pretrain_corpus.start")
+    result = export_pretrain_fn(settings=settings)
+    log.info("dagster.export_pretrain_corpus.complete", row_count=result.get("row_count"))
+    return result
+
+
+class ExportFinetuneConfig(Config):
+    """Dagster run config for the export_finetune_dataset asset (EXPORT-03).
+
+    Specifies which logical Dataset to export as OpenAI chat-messages JSONL.
+    """
+
+    dataset_name: str = ""
+    """Name of the logical Dataset row to export (must already exist in the registry)."""
+
+
+@asset(
+    description=(
+        "Export a logical Dataset's examples as OpenAI chat-messages JSONL to the gold zone (EXPORT-03). "
+        "Skips examples with dangling source_artifact_id (DATA-03 lineage integrity). "
+        "Calls pipeline.export.export_finetune_dataset — no logic duplicated (D-02)."
+    ),
+    group_name="export",
+)
+def export_finetune_dataset(
+    config: ExportFinetuneConfig,
+    postgres: PostgresResource,
+    minio: MinIOResource,
+) -> dict[str, Any]:
+    """Export stage: DatasetExample rows → gold-zone chat-messages JSONL (EXPORT-03).
+
+    Branches on payload shape (QA-shaped vs instruction-shaped) to produce the
+    appropriate OpenAI chat-messages format.
+
+    Fails closed with TrainEvalContaminationError on any undocumented train/eval
+    overlap (05-AI-SPEC Section 6/7 hard gate).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.export import export_finetune_dataset as export_finetune_fn
+
+    storage_settings = StorageSettings(
+        endpoint_url=minio.endpoint_url,
+        bucket=minio.bucket,
+        access_key_id=minio.access_key_id,
+        secret_access_key=minio.secret_access_key,
+        region=minio.region,
+    )
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.export_finetune_dataset.start", dataset_name=config.dataset_name)
+    result = export_finetune_fn(config.dataset_name, settings=settings)
+    log.info(
+        "dagster.export_finetune_dataset.complete",
+        row_count=result.get("row_count"),
+        skipped_dangling=result.get("skipped_dangling_lineage"),
+    )
+    return result

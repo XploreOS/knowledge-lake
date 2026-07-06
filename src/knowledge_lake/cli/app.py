@@ -751,5 +751,80 @@ def cmd_demo(
     typer.echo("Demo complete. Walking skeleton is alive.")
 
 
+class ExportKind(str):
+    """Valid export kind values for the klake export command (T-05-09)."""
+
+    RAG_CORPUS = "rag-corpus"
+    PRETRAIN = "pretrain"
+    FINETUNE = "finetune"
+
+    @classmethod
+    def _valid_values(cls) -> list[str]:
+        return [cls.RAG_CORPUS, cls.PRETRAIN, cls.FINETUNE]
+
+
+@app.command(name="export")
+def cmd_export(
+    kind: str = typer.Argument(
+        ...,
+        help="Export kind: 'rag-corpus' (Parquet), 'pretrain' (JSONL), or 'finetune' (JSONL).",
+    ),
+    dataset_name: Optional[str] = typer.Option(
+        None,
+        "--dataset-name",
+        "-d",
+        help="Required for kind=finetune. The logical Dataset name to export.",
+    ),
+) -> None:
+    """Export the curated corpus or a dataset to the gold zone.
+
+    Writes gold-zone Parquet (rag-corpus) or JSONL (pretrain, finetune) files to S3.
+    Fails closed with an error if any undocumented train/eval contamination exists
+    (05-AI-SPEC Section 6/7 hard gate).
+
+    Examples:
+        klake export rag-corpus
+        klake export pretrain
+        klake export finetune --dataset-name my_rag_eval_v1
+    """
+    from knowledge_lake.pipeline.export import (
+        TrainEvalContaminationError,
+        export_finetune_dataset,
+        export_pretrain_corpus,
+        export_rag_corpus,
+    )
+
+    valid_kinds = ["rag-corpus", "pretrain", "finetune"]
+    if kind not in valid_kinds:
+        typer.echo(f"Error: kind must be one of {valid_kinds}, got {kind!r}", err=True)
+        raise typer.Exit(code=1)
+
+    if kind == "finetune" and dataset_name is None:
+        typer.echo("Error: --dataset-name is required for kind=finetune", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        if kind == "rag-corpus":
+            result = export_rag_corpus()
+        elif kind == "pretrain":
+            result = export_pretrain_corpus()
+        else:
+            assert dataset_name is not None
+            result = export_finetune_dataset(dataset_name)
+    except TrainEvalContaminationError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Export complete:")
+    typer.echo(f"  dataset_id:  {result['dataset_id']}")
+    typer.echo(f"  storage_uri: {result['storage_uri']}")
+    typer.echo(f"  row_count:   {result['row_count']}")
+    if result.get("skipped_dangling_lineage") is not None:
+        typer.echo(f"  skipped_dangling_lineage: {result['skipped_dangling_lineage']}")
+
+
 if __name__ == "__main__":
     app()

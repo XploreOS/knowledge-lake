@@ -40,6 +40,9 @@ from knowledge_lake.dagster_defs.assets import (
     curate_document_asset,
     embed_chunks,
     enrich_document,
+    export_finetune_dataset,
+    export_pretrain_corpus,
+    export_rag_corpus,
     generate_dataset,
     index_chunks,
     ingest_raw_document,
@@ -71,6 +74,9 @@ defs = Definitions(
         generate_dataset,
         embed_chunks,
         index_chunks,
+        export_rag_corpus,
+        export_pretrain_corpus,
+        export_finetune_dataset,
     ],
     resources={
         "postgres": PostgresResource(
