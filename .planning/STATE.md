@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 04
 current_phase_name: Enrichment, Embedding & Search
 status: executing
-stopped_at: "Paused at 04-02-PLAN.md Task 4 (checkpoint:human-verify, blocking) — awaiting human Bedrock smoke-test approval"
-last_updated: "2026-07-05T17:44:23.043Z"
+stopped_at: Completed 04-02-PLAN.md (checkpoint resolved via human-authorized live Bedrock test, commit ac299e1)
+last_updated: "2026-07-06T09:26:41.148Z"
 last_activity: 2026-07-05
 last_activity_desc: Phase 04 execution started
 progress:
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 04 (Enrichment, Embedding & Search) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-05 — Phase 04 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P05 | 25m | 3 tasks | 6 files |
 | Phase 03 P02 | 8m | 2 tasks | 4 files |
 | Phase 04 P01 | 8min | 2 tasks | 7 files |
+| Phase 04 P02 | 8min+checkpoint | 4 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Artifact.quality_score mapped as a real ORM column (0006 already added the physical column); language/dedup_status remain metadata_-JSON-only, out of scope for Phase 4 Plan 1
 - [Phase ?]: Single global llm_spend scope accepted for Phase 4 MVP; scope is a plain string key so finer-grained scopes can be added later without a schema change
 - [Phase ?]: vector_collections uses an is_current boolean flip (not a separate active-alias pointer table) so reindex history is preserved and auditable via created_at
+- [Phase 04-02]: Live Bedrock checkpoint resolved: enrich_document() live-verified against real Bedrock via LiteLLM proxy (status=enriched, then cached on re-run); six real gaps found and fixed in commit ac299e1 (openai/ provider prefix, litellm_storage DB, master_key env-var syntax, api_key field, real Bedrock model IDs, markdown-fence stripping)
 
 ### Pending Todos
 
@@ -107,7 +109,6 @@ None yet.
 - [Phase 3]: Parser quality on real healthcare PDFs unvalidated — torture-test corpus (PARSE-05) gates bulk ingestion; needs deeper research at planning time
 - [Phase 4]: LiteLLM budget enforcement behavior under burst load unverified; Qdrant collection aliasing patterns need research
 - [Phase 5]: No documented pattern for running DataTrove pipeline blocks inside Dagster assets — needs experimentation
-- [Phase 4 Plan 2]: Paused at Task 4 checkpoint:human-verify (blocking) — live Bedrock enrichment smoke test requires AWS_BEDROCK_API_KEY + running LiteLLM proxy + human sign-off (RESEARCH.md Open Question #2). Tasks 1-3 complete and committed (a542e49, 687d246, 1e57025).
 
 ## Deferred Items
 
@@ -119,7 +120,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Paused at 04-02-PLAN.md Task 4 (checkpoint:human-verify, blocking) — awaiting human Bedrock smoke-test approval
+**Stopped at:** Completed 04-02-PLAN.md (checkpoint resolved via human-authorized live Bedrock test, commit ac299e1)
 
-Last session: 2026-07-05T17:44:23.035Z
-Resume file: 04-02-PLAN.md
+Last session: 2026-07-06T09:26:41.140Z
+Resume file: None

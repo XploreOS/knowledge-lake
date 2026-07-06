@@ -54,12 +54,12 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Enrichment
 
-- [ ] **ENRICH-01**: All LLM calls route through LiteLLM using task-based aliases (cheap_model, strong_model, eval_model, embedding_model) with no provider IDs in business logic
-- [ ] **ENRICH-02**: Deterministic extraction (title, dates, headings) runs before any LLM enrichment
-- [ ] **ENRICH-03**: LLM enrichment produces title, summary, document type, organization, jurisdiction, keywords, entities, and quality score per document
-- [ ] **ENRICH-04**: Enrichment results are cached by prompt version + input hash — re-running is a no-op unless prompts change
+- [x] **ENRICH-01**: All LLM calls route through LiteLLM using task-based aliases (cheap_model, strong_model, eval_model, embedding_model) with no provider IDs in business logic
+- [x] **ENRICH-02**: Deterministic extraction (title, dates, headings) runs before any LLM enrichment
+- [x] **ENRICH-03**: LLM enrichment produces title, summary, document type, organization, jurisdiction, keywords, entities, and quality score per document
+- [x] **ENRICH-04**: Enrichment results are cached by prompt version + input hash — re-running is a no-op unless prompts change
 - [x] **ENRICH-05**: LLM spend is capped by configurable budget limits; jobs halt gracefully when exceeded
-- [ ] **ENRICH-06**: Embeddings are generated via configurable provider (local sentence-transformers or LiteLLM API)
+- [x] **ENRICH-06**: Embeddings are generated via configurable provider (local sentence-transformers or LiteLLM API)
 
 ### Indexing & Search
 
@@ -169,12 +169,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHUNK-02 | Phase 3 | Complete |
 | CHUNK-03 | Phase 3 | Complete |
 | CHUNK-04 | Phase 3 | Complete |
-| ENRICH-01 | Phase 4 | Pending |
-| ENRICH-02 | Phase 4 | Pending |
-| ENRICH-03 | Phase 4 | Pending |
-| ENRICH-04 | Phase 4 | Pending |
+| ENRICH-01 | Phase 4 | Complete |
+| ENRICH-02 | Phase 4 | Complete |
+| ENRICH-03 | Phase 4 | Complete |
+| ENRICH-04 | Phase 4 | Complete |
 | ENRICH-05 | Phase 4 | Complete |
-| ENRICH-06 | Phase 4 | Pending |
+| ENRICH-06 | Phase 4 | Complete |
 | INDEX-01 | Phase 4 | Pending |
 | INDEX-02 | Phase 4 | Complete |
 | INDEX-03 | Phase 4 | Pending |
