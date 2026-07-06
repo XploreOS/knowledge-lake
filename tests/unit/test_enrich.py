@@ -241,6 +241,64 @@ def test_budget_exceeded_halts_gracefully(
     mock_completion.assert_not_called()
 
 
+def test_enrich_title_recovered_via_registry_reconstruction_when_parsed_doc_none(
+    engine, seeded, fake_storage, test_settings
+) -> None:
+    """Regression for CR-01: api/app.py's enrich_endpoint and cli/app.py's
+    cmd_enrich no longer call enrich_document() with parsed_doc=None — they
+    reconstruct a minimal ParsedDoc from the cleaned artifact's parent
+    parsed_document artifact's stored metadata_ (which now carries a "title"
+    key persisted by pipeline.parse.parse(), per the CR-01 fix) and pass that
+    in. This test replicates that exact reconstruction and asserts the
+    persisted enriched artifact's title is non-empty — i.e. the CLI/API path
+    no longer silently persists title: "".
+    """
+    from sqlalchemy.orm import Session as _Session
+
+    from knowledge_lake.registry import repo as registry_repo
+
+    # Seed a parsed_document artifact with a "title" key in its metadata_,
+    # exactly as pipeline.parse.parse() now persists post-CR-01-fix, then
+    # point the seeded cleaned artifact's parent at it.
+    with Session(engine) as seed_session:
+        cleaned_artifact = registry_repo.get_artifact(seed_session, seeded["cleaned_artifact_id"])
+        parsed_artifact = registry_repo.get_artifact(
+            seed_session, cleaned_artifact.parent_artifact_id
+        )
+        parsed_artifact.metadata_ = {
+            "quality_score": 0.8,
+            "parser_used": "docling",
+            "title": "HIPAA Security Rule Overview",
+        }
+        seed_session.commit()
+
+    # Replicate exactly what enrich_endpoint / cmd_enrich now do: fetch the
+    # cleaned artifact's parent parsed_document artifact and reconstruct a
+    # minimal ParsedDoc from its metadata_ before calling enrich_document().
+    with _Session(engine) as session:
+        cleaned_artifact = registry_repo.get_artifact(session, seeded["cleaned_artifact_id"])
+        parsed_artifact = registry_repo.get_artifact(session, cleaned_artifact.parent_artifact_id)
+        parsed_metadata = (parsed_artifact.metadata_ if parsed_artifact else None) or {}
+
+    reconstructed_parsed_doc = ParsedDoc(text="", sections=[], metadata=parsed_metadata)
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(VALID_PAYLOAD))
+    with patch("litellm.completion", mock_completion):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=reconstructed_parsed_doc,
+            settings=test_settings,
+        )
+
+    assert result["status"] == "enriched"
+    with Session(engine) as check_session:
+        artifact = registry_repo.get_artifact(check_session, result["artifact_id"])
+        assert artifact is not None
+        assert artifact.metadata_["title"] == "HIPAA Security Rule Overview"
+        assert artifact.metadata_["title"] != ""
+
+
 def test_llm_call_failure_is_skipped_not_raised(
     engine, seeded, fake_storage, parsed_doc, test_settings
 ) -> None:

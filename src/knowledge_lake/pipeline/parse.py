@@ -15,6 +15,7 @@ from typing import Optional
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.pipeline.deterministic import extract_title
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.plugins.resolver import get_parser, parse_with_fallback
@@ -90,6 +91,14 @@ def parse(
     content_hash = hashlib.sha256(parsed_bytes).hexdigest()
     silver_key = f"{_SILVER_PREFIX}/{source_id}/{content_hash}.md"
 
+    # Deterministic title, computed once here and persisted into the
+    # parsed_document artifact's metadata_ so callers that only have the
+    # artifact ID (no in-memory ParsedDoc, e.g. CLI/API enrich entry points —
+    # CR-01) can still recover a real title instead of "" (parsed_doc.metadata
+    # never carries a "title" key from any parser plugin; sections are only
+    # available in-memory and are never persisted separately).
+    title = extract_title(parsed_doc.metadata, parsed_doc.sections)
+
     # Dedup check and artifact creation in a single session block to prevent race
     # conditions under concurrent execution (CR-02). Both the read and the write
     # happen within the same session, making the dedup + insert effectively atomic.
@@ -120,7 +129,11 @@ def parse(
             content_hash=content_hash,
             storage_uri=silver_uri,
             mime_type="text/markdown",
-            metadata={"quality_score": quality_score, "parser_used": parser_used},
+            metadata={
+                "quality_score": quality_score,
+                "parser_used": parser_used,
+                "title": title,
+            },
         )
         session.flush()
         result = {

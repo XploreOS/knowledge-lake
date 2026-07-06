@@ -300,9 +300,29 @@ def cmd_enrich(
     quality_score, and cached on success.
     """
     from knowledge_lake.pipeline.enrich import enrich_document
+    from knowledge_lake.plugins.protocols import ParsedDoc
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry import repo as registry_repo
 
     try:
-        result = enrich_document(cleaned_artifact_id, source_id)
+        # Reconstruct a minimal ParsedDoc from the cleaned artifact's parent
+        # parsed_document artifact's stored metadata (which carries a "title"
+        # key persisted by pipeline.parse.parse()) so the deterministic title
+        # is not silently dropped to "" on this entry point (CR-01) — mirrors
+        # the parent-artifact-fetch pattern already used by cmd_chunk.
+        with get_session() as session:
+            cleaned_artifact = registry_repo.get_artifact(session, cleaned_artifact_id)
+            if cleaned_artifact is None:
+                raise ValueError(f"Cleaned artifact {cleaned_artifact_id!r} not found in registry")
+            parsed_artifact = (
+                registry_repo.get_artifact(session, cleaned_artifact.parent_artifact_id)
+                if cleaned_artifact.parent_artifact_id
+                else None
+            )
+            parsed_metadata = (parsed_artifact.metadata_ if parsed_artifact else None) or {}
+
+        parsed_doc = ParsedDoc(text="", sections=[], metadata=parsed_metadata)
+        result = enrich_document(cleaned_artifact_id, source_id, parsed_doc=parsed_doc)
         typer.echo(f"Enriched:")
         typer.echo(f"  status:        {result['status']}")
         typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
