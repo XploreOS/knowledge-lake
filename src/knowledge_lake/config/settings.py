@@ -151,7 +151,7 @@ class EnrichSettings(BaseModel):
     """Bounds the cleaned-document excerpt sent to the LLM — cost and
     prompt-injection surface control (AI-SPEC Section 4)."""
 
-    cheap_model_bedrock_id: str = "bedrock/anthropic.claude-haiku-4-5-20260925-v1:0"
+    cheap_model_bedrock_id: str = "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"
     """Used ONLY by llm.pricing.bootstrap_llm_pricing()'s
     litellm.register_model() call so completion_cost() does not raise for
     this project's configured model IDs (RESEARCH.md Pitfall 1). NEVER
@@ -159,7 +159,7 @@ class EnrichSettings(BaseModel):
     uses the "cheap_model" task alias — mirrors this default against
     infra/litellm/config.yaml's current cheap_model mapping."""
 
-    strong_model_bedrock_id: str = "bedrock/anthropic.claude-sonnet-4-5-20260925-v1:0"
+    strong_model_bedrock_id: str = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     """Same rationale as cheap_model_bedrock_id, registered for
     forward-compatibility with Phase 5's strong_model/eval_model usage."""
 

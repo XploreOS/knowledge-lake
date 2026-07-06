@@ -189,3 +189,38 @@ class TestGetSettings:
             s = get_settings()
         # The unprefixed DATABASE_URL must not override the KLAKE_-prefixed setting
         assert "other@other" not in s.database_url
+
+
+class TestBedrockPricingIdsMatchLiteLLMConfig:
+    """Regression for WR-01: the Bedrock IDs registered for cost tracking must
+    exactly match the model IDs infra/litellm/config.yaml actually configures
+    for the cheap_model/strong_model task aliases — otherwise
+    litellm.completion_cost() silently fails to resolve pricing and
+    compute_call_cost() falls back to the coarse estimate for every call.
+    """
+
+    @staticmethod
+    def _config_path() -> "Path":
+        from pathlib import Path
+
+        return Path(__file__).parent.parent.parent / "infra" / "litellm" / "config.yaml"
+
+    def test_cheap_and_strong_model_ids_match_config_yaml(self) -> None:
+        yaml = pytest.importorskip("yaml")
+        from knowledge_lake.config.settings import Settings
+
+        config_path = self._config_path()
+        assert config_path.exists(), f"infra/litellm/config.yaml not found at {config_path}"
+        config = yaml.safe_load(config_path.read_text())
+
+        model_by_name = {entry["model_name"]: entry["litellm_params"]["model"] for entry in config["model_list"]}
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.enrich.cheap_model_bedrock_id == model_by_name["cheap_model"], (
+            "settings.enrich.cheap_model_bedrock_id has drifted from "
+            "infra/litellm/config.yaml's cheap_model mapping (WR-01)"
+        )
+        assert s.enrich.strong_model_bedrock_id == model_by_name["strong_model"], (
+            "settings.enrich.strong_model_bedrock_id has drifted from "
+            "infra/litellm/config.yaml's strong_model mapping (WR-01)"
+        )
