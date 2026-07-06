@@ -108,6 +108,53 @@ def compute_quality_score(
     return score
 
 
+def compute_composite_quality_score(
+    parse_quality_score: float,
+    enrich_quality_score: float,
+    filter_results: dict[str, dict],
+) -> float:
+    """Compute a composite quality score combining three pipeline-stage signals (CURATE-03).
+
+    Weighted formula (weights sum to 1.0):
+      parse_quality_score  * 0.30  — Phase 3 heuristic score (text length, sections, encoding)
+      enrich_quality_score * 0.40  — Phase 4 LLM-judged quality score
+      filter_pass_ratio    * 0.30  — Phase 5 DataTrove-style filter pass ratio
+
+    Args:
+        parse_quality_score:   Quality score from parsed_document.metadata_ (Phase 3).
+        enrich_quality_score:  Quality score from enriched_document.quality_score (Phase 4).
+        filter_results:        Dict of {filter_name: {"passed": bool, "reason": str|None}}
+                               from score_document() (Phase 5 Gopher/C4 filters).
+
+    Returns:
+        float in [0.0, 1.0] — higher is better quality.
+    """
+    if filter_results:
+        filter_pass_ratio = sum(1 for r in filter_results.values() if r["passed"]) / len(
+            filter_results
+        )
+    else:
+        filter_pass_ratio = 0.0
+
+    score = (
+        parse_quality_score * 0.3
+        + enrich_quality_score * 0.4
+        + filter_pass_ratio * 0.3
+    )
+
+    # Clamp to [0.0, 1.0] for safety against floating-point edge cases
+    score = max(0.0, min(1.0, score))
+
+    log.debug(
+        "quality_scorer.composite",
+        parse_quality_score=round(parse_quality_score, 3),
+        enrich_quality_score=round(enrich_quality_score, 3),
+        filter_pass_ratio=round(filter_pass_ratio, 3),
+        final_score=round(score, 3),
+    )
+    return score
+
+
 def maybe_llm_spot_check(
     parsed_doc: ParsedDoc,
     score: float,

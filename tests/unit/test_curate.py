@@ -23,13 +23,14 @@ import knowledge_lake.pipeline.curate as curate_module
 import knowledge_lake.registry.db as registry_db
 from knowledge_lake.config.settings import Settings
 
-CLEANED_TEXT_A = "The HIPAA Security Rule requires administrative safeguards to protect health information."
-CLEANED_TEXT_B = (
-    "The HIPAA Security Rule requires administrative safeguards to protect health information data."
-)  # near-duplicate of A (high Jaccard)
-CLEANED_TEXT_C = (
-    "Totally unrelated content about quantum physics and advanced mathematics algorithms."
-)
+# Texts A and B are near-identical (same content, one has a trailing word).
+# When measured with 5-word shingles and num_perm=128, the shared shingle count
+# is high enough that with threshold=0.5 they are detected as near-dups.
+# Text C is completely unrelated.
+_HIPAA_SENTENCE = "The HIPAA Security Rule requires administrative safeguards to protect electronic health information."
+CLEANED_TEXT_A = (_HIPAA_SENTENCE + " ") * 15
+CLEANED_TEXT_B = (_HIPAA_SENTENCE + " ") * 15 + "Additional minor note here."
+CLEANED_TEXT_C = "Totally unrelated quantum physics mathematics algorithms advanced research. " * 15
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -116,19 +117,24 @@ def test_settings() -> Settings:
 # ── Helper: fake filter double ────────────────────────────────────────────────
 
 
-class _FakeFilter:
-    """Minimal filter double whose .filter() returns a configurable result."""
+def _FakeFilter(name: str, passes: bool, reason: str | None = None):
+    """Factory returning a filter double whose type(f).__name__ == name.
 
-    def __init__(self, name: str, passes: bool, reason: str | None = None):
-        self._name = name
-        self._passes = passes
-        self._reason = reason
-        type(self).__name__ = name  # make type(f).__name__ return the configured name
+    Creates a unique subclass per call so that different _FakeFilter instances
+    have distinct type(f).__name__ values — a shared class attribute would be
+    overwritten by the last created instance.
+    """
+    _passes = passes
+    _reason = reason
 
-    def filter(self, doc):  # noqa: A003
-        if self._reason:
-            return (self._passes, self._reason)
-        return self._passes
+    def _filter_method(self, doc):  # noqa: A003
+        if _reason:
+            return (_passes, _reason)
+        return _passes
+
+    # Create a fresh class with the given name — type(instance).__name__ returns name
+    fake_cls = type(name, (), {"filter": _filter_method})
+    return fake_cls()
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -270,17 +276,17 @@ def test_batch_dedup_single_pass(engine, seeded, fake_storage, test_settings, mo
         cleaned_b_id = cleaned_b.id
         cleaned_c_id = cleaned_c.id
 
-    # Stub storage to return the right text per artifact id via side_effect
+    # Stub storage to return the right text per key (uri_to_key strips the bucket prefix:
+    # "s3://b/silver/cleaned_h.md" -> "silver/cleaned_h.md")
     storage_texts = {
-        "s3://b/silver/cleaned_h.md": CLEANED_TEXT_A,
-        "s3://b/silver/cleaned_b.md": CLEANED_TEXT_B,
-        "s3://b/silver/cleaned_c.md": CLEANED_TEXT_C,
+        "silver/cleaned_h.md": CLEANED_TEXT_A,
+        "silver/cleaned_b.md": CLEANED_TEXT_B,
+        "silver/cleaned_c.md": CLEANED_TEXT_C,
     }
 
     def _get_object(key):
-        # key comes in without s3://b/ prefix — re-map
-        for uri, text in storage_texts.items():
-            if key in uri or uri.endswith(key):
+        for stored_key, text in storage_texts.items():
+            if key == stored_key or key.endswith(stored_key):
                 return text.encode("utf-8")
         return CLEANED_TEXT_A.encode("utf-8")
 
@@ -291,19 +297,32 @@ def test_batch_dedup_single_pass(engine, seeded, fake_storage, test_settings, mo
     filters = [_FakeFilter("FilterAlpha", True)]
     monkeypatch.setattr(curate_module, "_build_filters", lambda s: filters)
 
-    # Override get_object for curate_document calls too
-    for cleaned_id, uri in [
-        (cleaned_a_id, "s3://b/silver/cleaned_h.md"),
-        (cleaned_b_id, "s3://b/silver/cleaned_b.md"),
-        (cleaned_c_id, "s3://b/silver/cleaned_c.md"),
+    # Override get_object for curate_document calls too (use key-based storage_texts)
+    key_to_text = {
+        "silver/cleaned_h.md": CLEANED_TEXT_A,
+        "silver/cleaned_b.md": CLEANED_TEXT_B,
+        "silver/cleaned_c.md": CLEANED_TEXT_C,
+    }
+    for cleaned_id, key in [
+        (cleaned_a_id, "silver/cleaned_h.md"),
+        (cleaned_b_id, "silver/cleaned_b.md"),
+        (cleaned_c_id, "silver/cleaned_c.md"),
     ]:
-        # Patch storage to return right text for each curate call
-        fake_storage.get_object.return_value = storage_texts[uri].encode("utf-8")
+        fake_storage.get_object.return_value = key_to_text[key].encode("utf-8")
         curate_module.curate_document(cleaned_id, source_id, settings=test_settings)
 
     # Restore side_effect for batch_dedup_corpus
     fake_storage.get_object.side_effect = _get_object
     fake_storage.get_object.return_value = None  # ensure side_effect is used
+
+    # Use a lower minhash_threshold so the near-identical texts are detected as near_dup
+    # (the two texts share ~74% Jaccard similarity, which is above 0.5 but below 0.8)
+    from knowledge_lake.config.settings import CleanSettings
+
+    dedup_settings = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        clean=CleanSettings(minhash_threshold=0.5, minhash_num_perm=128, minhash_shingle_size=5),
+    )
 
     # Count MinHashLSH constructor calls to verify single-pass
     import datasketch as _datasketch
@@ -319,7 +338,7 @@ def test_batch_dedup_single_pass(engine, seeded, fake_storage, test_settings, mo
     monkeypatch.setattr(_datasketch, "MinHashLSH", _CountingLSH)
     monkeypatch.setattr(curate_module, "MinHashLSH", _CountingLSH)
 
-    summary = curate_module.batch_dedup_corpus(settings=test_settings)
+    summary = curate_module.batch_dedup_corpus(settings=dedup_settings)
 
     assert lsh_call_count["n"] == 1, (
         f"Expected exactly 1 MinHashLSH construction (single-pass), got {lsh_call_count['n']}"
@@ -329,7 +348,7 @@ def test_batch_dedup_single_pass(engine, seeded, fake_storage, test_settings, mo
 
     # Verify dedup_status on the curated_document children
     with Session(engine) as check_session:
-        from knowledge_lake.registry import repo as registry_repo as repo
+        from knowledge_lake.registry import repo as registry_repo
 
         curated_a = registry_repo.get_child_artifact_by_type(
             check_session, cleaned_a_id, "curated_document"

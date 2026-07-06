@@ -7,7 +7,16 @@ this stage reads from and writes to the silver zone only.
 T-03-06 (DoS — transient LSH corpus scan): The near-duplicate check builds an
 in-memory MinHash LSH from all existing cleaned artifacts per clean() call.
 This is O(n) per call — acceptable for Phase 3 MVP corpus sizes (< 10,000
-documents). Phase 5 DataTrove pipeline replaces this with batch dedup.
+documents).
+
+As of Phase 5, `pipeline.curate.batch_dedup_corpus()` is the AUTHORITATIVE
+corpus-wide dedup signal — it builds one MinHashLSH index over ALL
+cleaned_document artifacts in a single batch pass and records the result on
+curated_document.metadata_["dedup_status"] (D-02, CURATE-02). The per-call
+transient LSH block below remains running as a legacy best-effort advisory-only
+flag on cleaned_document.metadata_["dedup_status"]. It is retained here to
+avoid destabilising Phase 3's existing tests/CLI/API contract — D-02 explicitly
+leaves removing it to planner discretion.
 """
 
 from __future__ import annotations
@@ -236,7 +245,13 @@ def clean(
 
     # Step 8: Transient LSH near-dup check (read-only; separate session is safe here
     # because this result is advisory — near_dup is metadata only, not a gate).
-    # O(n) per call — acceptable for Phase 3 MVP (T-03-06 accepted).
+    # O(n) per call — accepted for Phase 3 MVP (T-03-06).
+    #
+    # NOTE (Phase 5): pipeline.curate.batch_dedup_corpus() is the AUTHORITATIVE
+    # corpus-wide dedup signal (recorded on curated_document.metadata_["dedup_status"],
+    # CURATE-02 / D-02). This per-call block is retained as a legacy advisory-only
+    # flag on cleaned_document.metadata_["dedup_status"]; removing it is left to
+    # planner discretion per D-02. Do NOT remove without updating Phase 3 tests.
     dedup_status = "unique"
     with get_session() as session:
         existing_cleaned = registry_repo.list_cleaned_artifacts(session)

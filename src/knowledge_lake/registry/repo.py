@@ -663,6 +663,87 @@ def create_enriched_artifact(
     return art
 
 
+# ── Curated document (CURATE-01..03) ─────────────────────────────────────────
+
+
+def create_curated_artifact(
+    session: Session,
+    *,
+    source_id: str,
+    parent_artifact_id: str,
+    content_hash: str,
+    metadata: Optional[Any] = None,
+    quality_score: Optional[float] = None,
+) -> Artifact:
+    """Persist a curated document artifact node (CURATE-01..03).
+
+    ``parent_artifact_id`` MUST point to the cleaned_document artifact (D-01),
+    never parsed_document — curation always parents off the cleaned text,
+    mirroring enriched_document's own parent convention exactly.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_id:
+        FK to the source this document belongs to.
+    parent_artifact_id:
+        ID of the cleaned_document artifact this was curated from (required).
+    content_hash:
+        Synthetic SHA256 keyed on cleaned_content_hash + filter_config_version
+        (mirrors _curation_cache_key's output — drives idempotent re-runs via
+        the UNIQUE(content_hash, artifact_type) constraint).
+    metadata:
+        JSON dict carrying filter_results, composite_quality_score,
+        parse_quality_score, enrich_quality_score, and dedup_status keys.
+    quality_score:
+        Composite quality score stored as the real Artifact.quality_score column
+        for filterable API queries (mirrors enriched_document's usage).
+
+    Returns
+    -------
+    Artifact
+        The newly created (unsaved) Artifact instance.
+    """
+    art = _make_artifact(
+        kind="curated_document",
+        source_id=source_id,
+        artifact_type="curated_document",
+        content_hash=content_hash,
+        storage_uri=None,
+        parent_artifact_id=parent_artifact_id,
+        metadata=metadata,
+    )
+    art.quality_score = quality_score
+    session.add(art)
+    return art
+
+
+def get_child_artifact_by_type(
+    session: Session,
+    parent_artifact_id: str,
+    artifact_type: str,
+) -> Optional[Artifact]:
+    """Return the first direct child of ``parent_artifact_id`` matching ``artifact_type``,
+    or None if no such child exists.
+
+    Generic one-hop child lookup used for:
+      - Finding the curated_document child of a cleaned_document parent.
+      - Finding the enriched_document sibling for composite-score lookup (Pitfall 4:
+        enriched_document and curated_document are cousins sharing a cleaned_document
+        parent — this lookup finds them via the shared parent, not an ancestor walk).
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = (
+        select(Artifact)
+        .where(Artifact.parent_artifact_id == parent_artifact_id)
+        .where(Artifact.artifact_type == artifact_type)
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
 # ── LLM spend accounting (ENRICH-05) ─────────────────────────────────────────
 
 
