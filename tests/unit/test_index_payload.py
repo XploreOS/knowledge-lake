@@ -209,3 +209,20 @@ class TestEmptyChunksShortCircuit:
     ) -> None:
         assert index_module.index([], [], dim=4, parsed_artifact_id="doc_missing") == []
         fake_vstore.ensure_aliased_collection.assert_not_called()
+
+
+class TestChunksVectorsLengthMismatch:
+    def test_mismatched_lengths_raise_value_error_not_assert(
+        self, session, fake_vstore
+    ) -> None:
+        """Regression for WR-04: a chunks/vectors length mismatch must raise a
+        real ValueError (never a bare ``assert``, which is compiled out under
+        python -O) so a buggy embedder can't silently truncate indexed chunks.
+        """
+        chunks = [_one_chunk("chk_001"), _one_chunk("chk_002")]
+        vectors = [[0.1] * 4]  # one vector short
+
+        with pytest.raises(ValueError, match="length mismatch"):
+            index_module.index(chunks, vectors, dim=4, parsed_artifact_id="doc_missing")
+
+        fake_vstore.ensure_aliased_collection.assert_not_called()

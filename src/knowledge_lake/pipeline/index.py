@@ -67,9 +67,10 @@ def index(
     if not chunks:
         return []
 
-    assert len(chunks) == len(vectors), (
-        f"index: chunks ({len(chunks)}) and vectors ({len(vectors)}) length mismatch"
-    )
+    if len(chunks) != len(vectors):
+        raise ValueError(
+            f"index: chunks ({len(chunks)}) and vectors ({len(vectors)}) length mismatch"
+        )
 
     s = settings or get_settings()
     vstore = get_vectorstore(s)
