@@ -22,6 +22,7 @@ from typing import Optional
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError, field_validator
+from sqlalchemy.exc import IntegrityError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -279,41 +280,72 @@ def enrich_document(
 
     cost = compute_call_cost(response, s)
 
-    # Step 5: Re-check cache (guards a concurrent identical run) then write
-    with get_session() as session:
-        existing = registry_repo.get_artifact_by_hash(session, synthetic_hash, "enriched_document")
-        if existing is not None:
+    # Step 5: Re-check cache (guards a concurrent identical run) then write.
+    # A concurrent enrich_document() call for the same cleaned artifact can
+    # also miss both cache checks and race this insert — catch the resulting
+    # UNIQUE(content_hash, artifact_type) IntegrityError and treat it as a
+    # cache hit rather than letting it propagate as an unhandled 500 (WR-02).
+    try:
+        with get_session() as session:
+            existing = registry_repo.get_artifact_by_hash(
+                session, synthetic_hash, "enriched_document"
+            )
+            if existing is not None:
+                return {
+                    "artifact_id": existing.id,
+                    "cached": True,
+                    "status": "cached",
+                    "quality_score": existing.quality_score,
+                }
+
+            registry_repo.record_llm_spend(session, scope="global", cost_usd=cost)
+
+            # The deterministic title is merged here because EnrichmentResult itself
+            # has no title field (title is a D-02 deterministic value, never
+            # LLM-derived) — without this explicit merge the persisted artifact
+            # would have no title at all, silently failing ENRICH-03/D-01.
+            enriched_metadata = {**result.model_dump(), "title": deterministic["title"]}
+
+            artifact = registry_repo.create_enriched_artifact(
+                session,
+                source_id=source_id,
+                parent_artifact_id=cleaned_artifact_id,
+                content_hash=synthetic_hash,
+                metadata=enriched_metadata,
+                quality_score=result.quality_score,
+            )
+            session.flush()
+            response_dict = {
+                "artifact_id": artifact.id,
+                "cached": False,
+                "status": "enriched",
+                "quality_score": result.quality_score,
+                "cost_usd": cost,
+            }
+    except IntegrityError:
+        log.info(
+            "enrich.cache_race_lost",
+            cleaned_artifact_id=cleaned_artifact_id,
+            synthetic_hash=synthetic_hash,
+        )
+        with get_session() as session:
+            existing = registry_repo.get_artifact_by_hash(
+                session, synthetic_hash, "enriched_document"
+            )
+            if existing is None:
+                # No concurrent writer's artifact to fall back to (e.g. its
+                # transaction itself rolled back after our insert failed) —
+                # there is genuinely nothing to return, so re-raise.
+                raise
+            # Return directly here (mirroring the other cache-hit returns
+            # above) rather than falling through to the "enriched" log/return
+            # below, which assumes a "cost_usd" key that a cache hit never has.
             return {
                 "artifact_id": existing.id,
                 "cached": True,
                 "status": "cached",
                 "quality_score": existing.quality_score,
             }
-
-        registry_repo.record_llm_spend(session, scope="global", cost_usd=cost)
-
-        # The deterministic title is merged here because EnrichmentResult itself
-        # has no title field (title is a D-02 deterministic value, never
-        # LLM-derived) — without this explicit merge the persisted artifact
-        # would have no title at all, silently failing ENRICH-03/D-01.
-        enriched_metadata = {**result.model_dump(), "title": deterministic["title"]}
-
-        artifact = registry_repo.create_enriched_artifact(
-            session,
-            source_id=source_id,
-            parent_artifact_id=cleaned_artifact_id,
-            content_hash=synthetic_hash,
-            metadata=enriched_metadata,
-            quality_score=result.quality_score,
-        )
-        session.flush()
-        response_dict = {
-            "artifact_id": artifact.id,
-            "cached": False,
-            "status": "enriched",
-            "quality_score": result.quality_score,
-            "cost_usd": cost,
-        }
 
     log.info(
         "enrich.complete",

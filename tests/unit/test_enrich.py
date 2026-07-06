@@ -241,6 +241,55 @@ def test_budget_exceeded_halts_gracefully(
     mock_completion.assert_not_called()
 
 
+def test_enrich_integrity_error_on_race_is_treated_as_cache_hit(
+    engine, seeded, fake_storage, parsed_doc, test_settings
+) -> None:
+    """Regression for WR-02: if a concurrent enrich_document() call wins the
+    race and commits the enriched_document row for this synthetic_hash first,
+    the resulting UNIQUE(content_hash, artifact_type) IntegrityError raised by
+    this call's own insert must be caught and treated as a cache hit — never
+    propagated as an unhandled exception.
+    """
+    from knowledge_lake.registry import repo as registry_repo
+
+    original_create = registry_repo.create_enriched_artifact
+    winner: dict = {}
+
+    def _racing_create(session, **kwargs):
+        # Simulate a concurrent writer winning the race: commit the same
+        # (content_hash, artifact_type) row in a completely separate
+        # session/transaction, right before this call attempts its own insert.
+        if not winner:
+            with Session(engine) as race_session:
+                race_artifact = original_create(
+                    race_session,
+                    source_id=kwargs["source_id"],
+                    parent_artifact_id=kwargs["parent_artifact_id"],
+                    content_hash=kwargs["content_hash"],
+                    metadata={"summary": "race winner"},
+                    quality_score=0.5,
+                )
+                race_session.commit()
+                winner["artifact_id"] = race_artifact.id
+        return original_create(session, **kwargs)
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(VALID_PAYLOAD))
+    with patch("litellm.completion", mock_completion), patch.object(
+        registry_repo, "create_enriched_artifact", side_effect=_racing_create
+    ):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert winner, "test setup bug: the racing insert never ran"
+    assert result["status"] == "cached"
+    assert result["cached"] is True
+    assert result["artifact_id"] == winner["artifact_id"]
+
+
 def test_enrich_title_recovered_via_registry_reconstruction_when_parsed_doc_none(
     engine, seeded, fake_storage, test_settings
 ) -> None:
