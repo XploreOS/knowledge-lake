@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Ingestion** - Sources, downloads, uploads, three crawler plugins, SearXNG discovery, dedup, and polite crawling (completed 2026-07-04)
 - [x] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking (completed 2026-07-05)
 - [x] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations (completed 2026-07-06)
-- [ ] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports
+- [x] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports (completed 2026-07-06)
 - [ ] **Phase 6: Healthcare Domain Pack & Full-Surface Validation** - Healthcare pack with seed sources, complete CLI/API/Dagster surface, and 5-10 real sources verified end-to-end
 
 ## Phase Details
@@ -155,7 +155,7 @@ Plans:
   3. User can export the RAG corpus (chunks + metadata) to Parquet and query it via DuckDB
   4. User can export a pretraining-style text corpus to JSONL and fine-tuning datasets to JSONL in standard chat/instruction formats
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -168,7 +168,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 05-03-PLAN.md — Export: RAG corpus Parquet + DuckDB query, pretrain JSONL, fine-tune chat-format JSONL, CLI/API/Dagster (EXPORT-01, 02, 03) [Wave 3]
+- [x] 05-03-PLAN.md — Export: RAG corpus Parquet + DuckDB query, pretrain JSONL, fine-tune chat-format JSONL, CLI/API/Dagster (EXPORT-01, 02, 03) [Wave 3]
 
 ### Phase 6: Healthcare Domain Pack & Full-Surface Validation
 
@@ -197,7 +197,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 3/3 | Complete    | 2026-07-06 |
-| 5. Curation, Datasets & Export | 2/3 | In Progress|  |
+| 5. Curation, Datasets & Export | 3/3 | Complete   | 2026-07-06 |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
 
 ## Coverage

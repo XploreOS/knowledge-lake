@@ -78,9 +78,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Export
 
-- [ ] **EXPORT-01**: User can export the RAG corpus (chunks + metadata) to Parquet queryable via DuckDB
-- [ ] **EXPORT-02**: User can export pretraining-style text corpus to JSONL
-- [ ] **EXPORT-03**: User can export fine-tuning datasets to JSONL in standard chat/instruction formats
+- [x] **EXPORT-01**: User can export the RAG corpus (chunks + metadata) to Parquet queryable via DuckDB
+- [x] **EXPORT-02**: User can export pretraining-style text corpus to JSONL
+- [x] **EXPORT-03**: User can export fine-tuning datasets to JSONL in standard chat/instruction formats
 
 ### Interfaces
 
@@ -184,9 +184,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-01 | Phase 5 | Complete |
 | DATA-02 | Phase 5 | Complete |
 | DATA-03 | Phase 5 | Complete |
-| EXPORT-01 | Phase 5 | Pending |
-| EXPORT-02 | Phase 5 | Pending |
-| EXPORT-03 | Phase 5 | Pending |
+| EXPORT-01 | Phase 5 | Complete |
+| EXPORT-02 | Phase 5 | Complete |
+| EXPORT-03 | Phase 5 | Complete |
 | DOMAIN-01 | Phase 6 | Pending |
 | DOMAIN-02 | Phase 6 | Pending |
 | DOMAIN-03 | Phase 6 | Pending |
