@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 5
 current_phase_name: Curation, Datasets & Export
 status: verifying
-stopped_at: Completed 04-03-PLAN.md (index/search vertical slice, INDEX-01..03) — Phase 04 complete
-last_updated: "2026-07-06T10:30:53.474Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-07-06T10:58:31.304Z"
 last_activity: 2026-07-06
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
@@ -125,7 +125,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Completed 04-03-PLAN.md (index/search vertical slice, INDEX-01..03) — Phase 04 complete
+**Stopped at:** Phase 5 context gathered
 
-Last session: 2026-07-06T09:48:10.615Z
-Resume file: None
+Last session: 2026-07-06T10:58:31.296Z
+Resume file: .planning/phases/05-curation-datasets-export/05-CONTEXT.md
