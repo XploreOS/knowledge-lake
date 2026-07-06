@@ -8,7 +8,17 @@ Each chunk's VectorPoint payload carries the citation fields (D-07, D-14):
   chunk_id     — chunk artifact ID (matches the point ID)
   text         — the chunk text (for snippet rendering without a second lookup)
 
-The collection is created (idempotently) with the correct dimension before upsert.
+Plus the enrichment-derived filterable fields (D-07, INDEX-01):
+  domain         — Source.config['domain'] (never a Source.domain/Artifact column, RESEARCH.md Pitfall 4)
+  document_type  — from the sibling enriched_document artifact's metadata_, or None
+  keywords       — from the sibling enriched_document artifact's metadata_, or []
+  quality_score  — from the sibling enriched_document artifact's real column, or None
+These four fields degrade gracefully to null/empty when no enrichment has run
+yet for the document — enrichment is never a hard blocker to indexing (D-01).
+
+``collection`` remains the alias name applications pass unchanged; only the
+resolution layer underneath changed to an alias-backed physical collection via
+ensure_aliased_collection()/reindex() (D-06, INDEX-02).
 
 Returns: list of chunk_ids indexed (same order as input chunks).
 """
@@ -22,6 +32,8 @@ import structlog
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.plugins.protocols import VectorPoint
 from knowledge_lake.plugins.resolver import get_vectorstore
+from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.db import get_session
 
 log = structlog.get_logger(__name__)
 
@@ -35,16 +47,18 @@ def index(
     collection: str = "klake_chunks",
     settings: Optional[Settings] = None,
 ) -> list[str]:
-    """Upsert chunk vectors into the vector store with citation payload.
+    """Upsert chunk vectors into the vector store with citation + enrichment payload.
 
-    Creates the collection idempotently before upserting.
+    Bootstraps the alias-backed collection idempotently before upserting, and
+    joins in domain/document_type/keywords/quality_score from the sibling
+    enrichment (when one exists) before building each chunk's payload.
 
     Args:
         chunks:              List of chunk dicts from the chunk stage.
         vectors:             Embedding vectors (one per chunk, same order).
         dim:                 Embedding dimension (for collection setup).
         parsed_artifact_id:  ID of the parsed_document artifact (for 'document' payload).
-        collection:          Qdrant collection name (default: 'klake_chunks').
+        collection:          Qdrant alias name (default: 'klake_chunks').
         settings:            Settings override.
 
     Returns:
@@ -60,10 +74,35 @@ def index(
     s = settings or get_settings()
     vstore = get_vectorstore(s)
 
-    log.info("index.ensure_collection", collection=collection, dim=dim)
-    vstore.ensure_collection(collection, dim=dim)
+    log.info("index.ensure_aliased_collection", collection=collection, dim=dim)
+    physical, created = vstore.ensure_aliased_collection(collection, dim=dim)
+    if created:
+        with get_session() as session:
+            registry_repo.register_vector_collection(
+                session, alias_name=collection, physical_collection=physical, dim=dim
+            )
+            session.flush()
 
-    # Build VectorPoints with citation payload.
+    # Resolve domain (Source.config['domain']) and the sibling enrichment
+    # (parsed_document -> cleaned_document -> enriched_document) once per
+    # index() call, not once per chunk (INDEX-01, D-07).
+    with get_session() as session:
+        parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
+        domain = (
+            registry_repo.get_domain_for_source(session, parsed_artifact.source_id)
+            if parsed_artifact is not None
+            else None
+        )
+
+        enriched = registry_repo.get_enriched_artifact_for_parsed(session, parsed_artifact_id)
+        if enriched is not None:
+            enrichment_metadata = enriched.metadata_ or {}
+            quality_score = enriched.quality_score
+        else:
+            enrichment_metadata = {}
+            quality_score = None
+
+    # Build VectorPoints with citation + enrichment payload.
     # Qdrant requires point IDs to be unsigned integers or bare UUIDs —
     # our chunk IDs are prefixed (e.g. "chk_0196a2c1-...").  We strip the
     # prefix for the Qdrant point ID and preserve the full prefixed ID in the
@@ -79,6 +118,10 @@ def index(
             "chunk_id": full_chunk_id,       # registry ID (with prefix)
             "qdrant_id": qdrant_point_id,    # bare UUID for Qdrant cross-ref
             "text": chunk.get("text", ""),
+            "domain": domain,
+            "document_type": enrichment_metadata.get("document_type"),
+            "keywords": enrichment_metadata.get("keywords", []),
+            "quality_score": quality_score,
         }
         points.append(
             VectorPoint(

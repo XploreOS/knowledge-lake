@@ -64,11 +64,25 @@ class DummyStore:
     ) -> None:
         pass
 
+    def ensure_aliased_collection(
+        self, alias: str, dim: int, distance: str = "Cosine"
+    ) -> tuple[str, bool]:
+        return (alias, False)
+
+    def reindex(self, alias: str, dim: int, upsert_fn, distance: str = "Cosine") -> dict:
+        return {"new_physical": alias, "old_physical": None}
+
+    def copy_all_points(self, source: str, dest: str, batch_size: int = 256) -> int:
+        return 0
+
+    def get_collection_dim(self, alias: str) -> int:
+        return 0
+
     def upsert(self, collection: str, points: list[VectorPoint]) -> None:
         pass
 
     def search(
-        self, collection: str, query: list[float], top_k: int
+        self, collection: str, query: list[float], top_k: int, query_filter=None
     ) -> list[Hit]:
         return []
 
