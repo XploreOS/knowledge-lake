@@ -143,13 +143,21 @@ def _build_enrichment_prompt(excerpt: str, deterministic: dict) -> tuple[str, st
     reraise=True,
 )
 def _call_llm_for_enrichment(
-    system_prompt: str, user_prompt: str, settings: Settings
+    system_prompt: str, user_prompt: str, settings: Settings, attempt_costs: list[float]
 ) -> tuple[EnrichmentResult, object]:
     """Make the single LiteLLM completion call and validate the JSON response.
 
     Always routes through the "cheap_model" task alias — never a hardcoded
     provider model ID (CLAUDE.md constraint). Retries up to 3 attempts total
     on a RuntimeError (gateway failure) or ValidationError (malformed JSON).
+
+    ``attempt_costs`` is a caller-owned accumulator list: every response that
+    is actually received from LiteLLM (i.e. a real, billable Bedrock call)
+    has its cost appended immediately, even on attempts where the JSON
+    response then fails validation and tenacity retries this same function
+    (WR-03) — so retry-induced cost is never silently dropped from the
+    caller's budget accounting. A RuntimeError (gateway failure, no response
+    received) contributes no cost, since no billable call occurred.
     """
     import litellm  # noqa: PLC0415 — lazy import, avoids proxy dependency in unit tests
 
@@ -173,6 +181,8 @@ def _call_llm_for_enrichment(
         )
     except Exception as exc:  # noqa: BLE001 — re-raised as RuntimeError for tenacity
         raise RuntimeError(f"enrichment LLM call failed: {exc}") from exc
+
+    attempt_costs.append(compute_call_cost(response, settings))
 
     content = _strip_json_fences(response.choices[0].message.content or "")
     result = EnrichmentResult.model_validate_json(content)
@@ -268,8 +278,11 @@ def enrich_document(
     bootstrap_llm_pricing(s)
     excerpt = cleaned_text[: s.enrich.excerpt_chars]
     system_prompt, user_prompt = _build_enrichment_prompt(excerpt, deterministic)
+    # attempt_costs accumulates the cost of every billable attempt (including
+    # ones that were retried after a ValidationError) — see WR-03.
+    attempt_costs: list[float] = []
     try:
-        result, response = _call_llm_for_enrichment(system_prompt, user_prompt, s)
+        result, _response = _call_llm_for_enrichment(system_prompt, user_prompt, s, attempt_costs)
     except Exception as exc:  # noqa: BLE001 — never let an LLM failure raise (D-05)
         log.warning(
             "enrich.llm_call_failed",
@@ -278,7 +291,7 @@ def enrich_document(
         )
         return {"artifact_id": None, "cached": False, "status": "skipped_enrichment_failed"}
 
-    cost = compute_call_cost(response, s)
+    cost = sum(attempt_costs)
 
     # Step 5: Re-check cache (guards a concurrent identical run) then write.
     # A concurrent enrich_document() call for the same cleaned artifact can

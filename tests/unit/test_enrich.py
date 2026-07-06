@@ -290,6 +290,47 @@ def test_enrich_integrity_error_on_race_is_treated_as_cache_hit(
     assert result["artifact_id"] == winner["artifact_id"]
 
 
+def test_retry_cost_is_accumulated_not_dropped(
+    engine, seeded, fake_storage, parsed_doc, test_settings, monkeypatch
+) -> None:
+    """Regression for WR-03: a first attempt that returns malformed JSON is a
+    real, billable Bedrock call — its cost must still be counted even though
+    tenacity retries and the second attempt succeeds. cost_usd must reflect
+    both attempts, not just the final one.
+    """
+    import tenacity
+
+    from knowledge_lake.pipeline import enrich as enrich_module_ref
+
+    # Zero out the retry backoff so this test doesn't sleep between attempts.
+    monkeypatch.setattr(
+        enrich_module_ref._call_llm_for_enrichment.retry, "wait", tenacity.wait_none()
+    )
+
+    malformed_response = _mock_llm_response({"not": "a valid enrichment payload"})
+    valid_response = _mock_llm_response(VALID_PAYLOAD)
+    mock_completion = MagicMock(side_effect=[malformed_response, valid_response])
+
+    with patch("litellm.completion", mock_completion):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert result["status"] == "enriched"
+    assert mock_completion.call_count == 2
+
+    # Each mocked attempt reports the same usage (100/50 tokens), so with the
+    # fallback per-1k pricing the two billable attempts must sum to exactly
+    # double a single attempt's cost — never just the final attempt's cost.
+    per_attempt_cost = (100 / 1000 * test_settings.enrich.fallback_cost_per_1k_input) + (
+        50 / 1000 * test_settings.enrich.fallback_cost_per_1k_output
+    )
+    assert result["cost_usd"] == pytest.approx(per_attempt_cost * 2)
+
+
 def test_enrich_title_recovered_via_registry_reconstruction_when_parsed_doc_none(
     engine, seeded, fake_storage, test_settings
 ) -> None:
