@@ -69,9 +69,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Curation & Datasets
 
-- [ ] **CURATE-01**: User can run DataTrove-style quality filters over the corpus (length, repetition, boilerplate heuristics)
-- [ ] **CURATE-02**: User can run corpus-wide deduplication producing a cleaned training corpus
-- [ ] **CURATE-03**: Documents and sources get composite quality scores queryable via CLI/API
+- [x] **CURATE-01**: User can run DataTrove-style quality filters over the corpus (length, repetition, boilerplate heuristics)
+- [x] **CURATE-02**: User can run corpus-wide deduplication producing a cleaned training corpus
+- [x] **CURATE-03**: Documents and sources get composite quality scores queryable via CLI/API
 - [ ] **DATA-01**: User can generate citation-grounded Q&A / RAG-eval datasets from enriched chunks via LiteLLM
 - [ ] **DATA-02**: User can generate instruction-tuning datasets from enriched documents
 - [ ] **DATA-03**: Generated dataset examples record lineage to their source chunks/documents
@@ -178,9 +178,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INDEX-01 | Phase 4 | Complete |
 | INDEX-02 | Phase 4 | Complete |
 | INDEX-03 | Phase 4 | Complete |
-| CURATE-01 | Phase 5 | Pending |
-| CURATE-02 | Phase 5 | Pending |
-| CURATE-03 | Phase 5 | Pending |
+| CURATE-01 | Phase 5 | Complete |
+| CURATE-02 | Phase 5 | Complete |
+| CURATE-03 | Phase 5 | Complete |
 | DATA-01 | Phase 5 | Pending |
 | DATA-02 | Phase 5 | Pending |
 | DATA-03 | Phase 5 | Pending |

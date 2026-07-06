@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 5
 current_phase_name: Curation, Datasets & Export
-status: verifying
+status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-07-06T10:58:31.304Z"
+last_updated: "2026-07-06T17:19:10.247Z"
 last_activity: 2026-07-06
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
+last_activity_desc: Phase 5 execution started
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 21
+  completed_plans: 19
   percent: 67
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 04 — Enrichment, Embedding & Search
+**Current focus:** Phase 5 — Curation, Datasets & Export
 
 ## Current Position
 
-Phase: 5 — Curation, Datasets & Export
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-07-06 — Phase 04 complete, transitioned to Phase 5
+Phase: 5 (Curation, Datasets & Export) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-07-06 — Phase 5 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P01 | 8min | 2 tasks | 7 files |
 | Phase 04 P02 | 8min+checkpoint | 4 tasks | 11 files |
 | Phase 04 P03 | 35min | 3 tasks | 12 files |
+| Phase 05 P01 | 10m | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Alias swap is one atomic update_collection_aliases() call (delete-old + create-new) — verified live against the real docker-compose Qdrant server, not just mocked
 - [Phase 04]: index()'s enrichment join (domain, document_type, keywords, quality_score) is looked up once per index() call via a single get_session() block, not once per chunk
 - [Phase 04]: reindex_collection() resolves the alias's current dim via the new get_collection_dim() rather than requiring the caller to pass it, so klake reindex needs no --dim flag
+- [Phase 05-01]: DataTrove filters called via .filter(doc) directly in a loop (never .run()) — records all heuristics' pass/fail regardless of failure order (CURATE-01, Pitfall 2)
+- [Phase 05-01]: Composite quality score weights: parse*0.30 + enrich*0.40 + filter_pass_ratio*0.30 (CURATE-03, Claude's discretion)
+- [Phase 05-01]: batch_dedup_corpus() builds ONE MinHashLSH over entire corpus (CURATE-02), resolving T-03-06 tech debt from Phase 3
+- [Phase 05-01]: datatrove==0.9.0 and nltk>=3.9,<4 added as direct dependencies; curated_document artifact type added to ids.py _PREFIX
 
 ### Pending Todos
 
@@ -113,7 +118,7 @@ None yet.
 
 - [Phase 3]: Parser quality on real healthcare PDFs unvalidated — torture-test corpus (PARSE-05) gates bulk ingestion; needs deeper research at planning time
 - [Phase 4]: LiteLLM budget enforcement behavior under burst load unverified; Qdrant collection aliasing patterns need research
-- [Phase 5]: No documented pattern for running DataTrove pipeline blocks inside Dagster assets — needs experimentation
+- [Phase 5 RESOLVED]: DataTrove integration pattern resolved — call .filter(doc) directly on in-memory Document objects; skip LocalPipelineExecutor/file I/O entirely (curate.py)
 
 ## Deferred Items
 
@@ -125,7 +130,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Phase 5 context gathered
+**Stopped at:** Completed 05-01 (curation core, batch dedup, CLI/API/Dagster wiring)
 
-Last session: 2026-07-06T10:58:31.296Z
-Resume file: .planning/phases/05-curation-datasets-export/05-CONTEXT.md
+Last session: 2026-07-06T17:20:00.000Z
+Resume file: .planning/phases/05-curation-datasets-export/05-02-PLAN.md
