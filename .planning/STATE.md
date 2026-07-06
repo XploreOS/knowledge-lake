@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 5
 current_phase_name: Curation, Datasets & Export
-status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-06T17:19:10.247Z"
+status: verifying
+stopped_at: Completed 05-02 (dataset generation — DATA-01, DATA-02, DATA-03)
+last_updated: "2026-07-06T17:31:12.410Z"
 last_activity: 2026-07-06
 last_activity_desc: Phase 5 execution started
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 67
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 5 (Curation, Datasets & Export) — EXECUTING
-Plan: 2 of 3
-Status: Ready to execute
+Plan: 3 of 3
+Status: Phase complete — ready for verification
 Last activity: 2026-07-06 — Phase 5 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P02 | 8min+checkpoint | 4 tasks | 11 files |
 | Phase 04 P03 | 35min | 3 tasks | 12 files |
 | Phase 05 P01 | 10m | 3 tasks | 14 files |
+| Phase 05 P02 | 8min | - tasks | - files |
 
 ## Accumulated Context
 
@@ -109,6 +110,9 @@ Recent decisions affecting current work:
 - [Phase 05-01]: Composite quality score weights: parse*0.30 + enrich*0.40 + filter_pass_ratio*0.30 (CURATE-03, Claude's discretion)
 - [Phase 05-01]: batch_dedup_corpus() builds ONE MinHashLSH over entire corpus (CURATE-02), resolving T-03-06 tech debt from Phase 3
 - [Phase 05-01]: datatrove==0.9.0 and nltk>=3.9,<4 added as direct dependencies; curated_document artifact type added to ids.py _PREFIX
+- [Phase ?]: QAPairResult excludes citation_chunk_id — caller assigns programmatically from chunk_id (T-05-05, AI-SPEC Pitfall 1)
+- [Phase ?]: dataset_generation LlmSpend scope separate from enrich global scope (AI-SPEC Pitfall 2, DATA-01/02/03)
+- [Phase ?]: dataset_examples cache key in payload _cache_key for idempotency (examples not Artifact nodes, D-08)
 
 ### Pending Todos
 
@@ -130,7 +134,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-01 (curation core, batch dedup, CLI/API/Dagster wiring)
+**Stopped at:** Completed 05-02 (dataset generation — DATA-01, DATA-02, DATA-03)
 
-Last session: 2026-07-06T17:20:00.000Z
-Resume file: .planning/phases/05-curation-datasets-export/05-02-PLAN.md
+Last session: 2026-07-06T17:31:12.401Z
+Resume file: .planning/phases/05-curation-datasets-export/05-03-PLAN.md

@@ -155,7 +155,7 @@ Plans:
   3. User can export the RAG corpus (chunks + metadata) to Parquet and query it via DuckDB
   4. User can export a pretraining-style text corpus to JSONL and fine-tuning datasets to JSONL in standard chat/instruction formats
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -164,7 +164,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-02-PLAN.md — Dataset generation: per-chunk Q&A (eval_model) + per-document instruction-tuning (strong_model), dataset_examples lineage, CLI/API/Dagster (DATA-01, 02, 03) [Wave 2]
+- [x] 05-02-PLAN.md — Dataset generation: per-chunk Q&A (eval_model) + per-document instruction-tuning (strong_model), dataset_examples lineage, CLI/API/Dagster (DATA-01, 02, 03) [Wave 2]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -197,7 +197,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Ingestion | 6/6 | Complete    | 2026-07-04 |
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 3/3 | Complete    | 2026-07-06 |
-| 5. Curation, Datasets & Export | 1/3 | In Progress|  |
+| 5. Curation, Datasets & Export | 2/3 | In Progress|  |
 | 6. Healthcare Domain Pack & Full-Surface Validation | 0/TBD | Not started | - |
 
 ## Coverage
