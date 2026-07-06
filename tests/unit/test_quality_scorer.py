@@ -13,7 +13,7 @@ import string
 import pytest
 
 from knowledge_lake.plugins.protocols import ParsedDoc, Section
-from knowledge_lake.quality.scorer import compute_quality_score
+from knowledge_lake.quality.scorer import compute_composite_quality_score, compute_quality_score
 
 
 def _make_doc(
@@ -108,3 +108,60 @@ def test_empty_sections_lower_score() -> None:
     doc_full = _make_doc(text="x" * 400, sections=sections_full)
 
     assert compute_quality_score(doc_full) > compute_quality_score(doc_empty)
+
+
+def test_composite_quality_score() -> None:
+    """compute_composite_quality_score must use the exact 0.3/0.4/0.3 weighting formula.
+
+    Given:
+      parse_quality_score = 0.8
+      enrich_quality_score = 0.6
+      filter_results = {"A": {"passed": True}, "B": {"passed": False}}
+      filter_pass_ratio = 0.5
+
+    Expected:
+      0.8 * 0.3 + 0.6 * 0.4 + 0.5 * 0.3 = 0.24 + 0.24 + 0.15 = 0.63
+    """
+    filter_results = {
+        "A": {"passed": True},
+        "B": {"passed": False},
+    }
+    score = compute_composite_quality_score(
+        parse_quality_score=0.8,
+        enrich_quality_score=0.6,
+        filter_results=filter_results,
+    )
+    expected = 0.8 * 0.3 + 0.6 * 0.4 + 0.5 * 0.3
+    assert score == pytest.approx(expected), (
+        f"Expected {expected:.4f} (0.3/0.4/0.3 weighting), got {score:.4f}"
+    )
+
+
+def test_composite_quality_score_all_pass() -> None:
+    """All filters passing should yield the highest filter-ratio contribution."""
+    filter_results = {
+        "A": {"passed": True},
+        "B": {"passed": True},
+        "C": {"passed": True},
+    }
+    score = compute_composite_quality_score(1.0, 1.0, filter_results)
+    assert score == pytest.approx(1.0)
+
+
+def test_composite_quality_score_all_fail() -> None:
+    """All filters failing should yield the lowest filter-ratio contribution."""
+    filter_results = {
+        "A": {"passed": False},
+        "B": {"passed": False},
+    }
+    score = compute_composite_quality_score(0.0, 0.0, filter_results)
+    assert score == pytest.approx(0.0)
+
+
+def test_composite_quality_score_is_bounded() -> None:
+    """compute_composite_quality_score must always return a value in [0.0, 1.0]."""
+    filter_results = {"X": {"passed": True}}
+    score = compute_composite_quality_score(1.0, 1.0, filter_results)
+    assert 0.0 <= score <= 1.0
+    score2 = compute_composite_quality_score(0.0, 0.0, {"Y": {"passed": False}})
+    assert 0.0 <= score2 <= 1.0

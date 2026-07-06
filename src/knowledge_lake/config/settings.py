@@ -182,6 +182,26 @@ class EnrichSettings(BaseModel):
     """Used only if completion_cost() itself raises even after registration."""
 
 
+class CurateSettings(BaseModel):
+    """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03).
+
+    Nested under Settings as settings.curate. Environment variable pattern:
+    KLAKE_CURATE__GOPHER_MIN_DOC_WORDS, etc.
+    """
+
+    gopher_min_doc_words: int = 50
+    """Minimum word count for GopherQualityFilter — FineWeb production default."""
+
+    gopher_max_doc_words: int = 100_000
+    """Maximum word count for GopherQualityFilter — FineWeb production default."""
+
+    filter_no_terminal_punct: bool = False
+    """If True, C4QualityFilter will reject lines without terminal punctuation."""
+
+    filter_config_version: str = "v1"
+    """Bumping this invalidates the curation cache (mirrors EnrichSettings.prompt_version)."""
+
+
 class IndexSettings(BaseModel):
     """Vector index / alias configuration (INDEX-02, D-06).
 
@@ -290,6 +310,9 @@ class Settings(BaseSettings):
 
     enrich: EnrichSettings = Field(default_factory=EnrichSettings)
     """LLM-based metadata enrichment configuration (ENRICH-01..05)."""
+
+    curate: CurateSettings = Field(default_factory=CurateSettings)
+    """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03)."""
 
     index: IndexSettings = Field(default_factory=IndexSettings)
     """Vector index / alias configuration (INDEX-02)."""

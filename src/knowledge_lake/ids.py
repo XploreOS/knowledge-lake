@@ -40,6 +40,7 @@ _PREFIX: dict[str, str] = {
     "crawl_job": "job",
     "crawl_state": "cst",
     "bronze_document": "doc",
+    "curated_document": "doc",
 }
 
 
