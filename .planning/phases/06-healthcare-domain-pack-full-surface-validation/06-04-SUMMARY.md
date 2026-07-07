@@ -119,7 +119,7 @@ Asset selection uses direct Python object references (not string names) to avoid
 | 1 | TDD RED: Wave 0 test stubs | Done | 075e48c |
 | 2 | TDD GREEN: RetryPolicy + healthcare_e2e_job | Done | 4a7d519 |
 | 3 | 5-source E2E fixture files | Done | 5c06f0b |
-| 4 | Checkpoint: Phase 6 human verification | Pending | — |
+| 4 | Checkpoint: Phase 6 human verification | Approved | — |
 
 ## Deviations from Plan
 

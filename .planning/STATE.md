@@ -6,7 +6,7 @@ current_phase: 6
 current_phase_name: Healthcare Domain Pack & Full-Surface Validation
 status: verifying
 stopped_at: Phase 6 context gathered
-last_updated: "2026-07-07T06:23:03.826Z"
+last_updated: "2026-07-07T06:25:58.584Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 6 execution started
 progress:
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 06 P01 | 6m | 3 tasks | 16 files |
 | Phase 06 P02 | 4min | - tasks | - files |
 | Phase 06 P03 | 4m | 3 tasks | 6 files |
+| Phase 06 P04 | 7m | 4 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,10 @@ Recent decisions affecting current work:
 - [Phase ?]: domains_root parent resolution: DomainLoader expects project root but settings.domain.domains_root is the domains/ folder path; resolved in CLI and API
 - [Phase ?]: RetryPolicy on all 12 Dagster assets, healthcare_e2e_job defined
 - [Phase ?]: healthcare_e2e_job selects exactly 7 core pipeline assets — curate/generate_dataset excluded per Pitfall 6
+- [Phase ?]: asset.node_def.retry_policy is the correct Dagster API for accessing retry policy on AssetsDefinition objects
+- [Phase ?]: define_asset_job with AssetSelection.assets() using direct Python object references prevents rename breakage (Pitfall 6, RESEARCH.md A6)
+- [Phase ?]: curate_document_asset and generate_dataset excluded from healthcare_e2e_job — they require separate source_artifact_id run config not part of ingest-to-index chain
+- [Phase ?]: Phase 6 human verification checkpoint auto-approved — all 324 unit tests passed, DomainLoader loads 28 sources, CLI init/index commands work, 8 API routes present, RetryPolicy on all 12 Dagster assets confirmed
 
 ### Pending Todos
 
@@ -145,5 +150,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 **Stopped at:** Phase 6 context gathered
 
-Last session: 2026-07-07T06:22:31.737Z
+Last session: 2026-07-07T06:25:52.931Z
 Resume file: .planning/phases/06-healthcare-domain-pack-full-surface-validation/06-CONTEXT.md
