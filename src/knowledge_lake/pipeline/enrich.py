@@ -125,15 +125,27 @@ def _strip_json_fences(content: str) -> str:
     return stripped
 
 
-def _build_enrichment_prompt(excerpt: str, deterministic: dict) -> tuple[str, str]:
-    """Build the (system_prompt, user_prompt) pair for the enrichment LLM call."""
+def _build_enrichment_prompt(
+    excerpt: str, deterministic: dict, domain_system_prompt: Optional[str] = None
+) -> tuple[str, str]:
+    """Build the (system_prompt, user_prompt) pair for the enrichment LLM call.
+
+    Args:
+        excerpt:              Cleaned document excerpt (bounded by settings.enrich.excerpt_chars).
+        deterministic:        Deterministic fields dict from extract_deterministic_fields().
+        domain_system_prompt: Optional operator-supplied domain-pack system prompt. When provided,
+                              replaces _ENRICHMENT_SYSTEM_PROMPT as the system prompt (DOMAIN-03).
+                              Must be a rendered Jinja2 template from an operator-controlled domain
+                              pack — not end-user input (T-06-06).
+    """
+    system = domain_system_prompt or _ENRICHMENT_SYSTEM_PROMPT
     user_prompt = (
         f"Deterministic title: {deterministic['title']!r}\n"
         f"Deterministic dates found: {deterministic['dates']!r}\n"
         f"Deterministic headings found: {deterministic['headings']!r}\n\n"
         f"Document text:\n{excerpt}"
     )
-    return _ENRICHMENT_SYSTEM_PROMPT, user_prompt
+    return system, user_prompt
 
 
 @retry(
@@ -198,6 +210,7 @@ def enrich_document(
     *,
     parsed_doc: Optional[ParsedDoc] = None,
     settings: Optional[Settings] = None,
+    domain_system_prompt: Optional[str] = None,
 ) -> dict:
     """Enrich a cleaned_document artifact with LLM-judged metadata (ENRICH-01..05).
 
@@ -208,9 +221,13 @@ def enrich_document(
     Args:
         cleaned_artifact_id: ID of the cleaned_document artifact to enrich.
         source_id:           Source ID that owns the cleaned artifact.
-        parsed_doc:          Optional in-memory ParsedDoc (sections/metadata) forwarded
-                             from the Dagster pipeline; used for deterministic extraction.
-        settings:            Settings override (for testing).
+        parsed_doc:            Optional in-memory ParsedDoc (sections/metadata) forwarded
+                               from the Dagster pipeline; used for deterministic extraction.
+        settings:              Settings override (for testing).
+        domain_system_prompt:  Optional domain-pack system prompt rendered from a Jinja2 template
+                               (DOMAIN-03). When provided, overrides _ENRICHMENT_SYSTEM_PROMPT as
+                               the LLM system prompt for this call. Defaults to None (generic
+                               prompt). Must be operator-controlled content — not end-user input.
 
     Returns:
         dict with keys: artifact_id, cached, status, and (when applicable)
@@ -277,7 +294,9 @@ def enrich_document(
     # Step 4: LLM call (outside any session)
     bootstrap_llm_pricing(s)
     excerpt = cleaned_text[: s.enrich.excerpt_chars]
-    system_prompt, user_prompt = _build_enrichment_prompt(excerpt, deterministic)
+    system_prompt, user_prompt = _build_enrichment_prompt(
+        excerpt, deterministic, domain_system_prompt=domain_system_prompt
+    )
     # attempt_costs accumulates the cost of every billable attempt (including
     # ones that were retried after a ValidationError) — see WR-03.
     attempt_costs: list[float] = []
