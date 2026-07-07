@@ -33,7 +33,7 @@ def parse(
     raw_artifact_id: str,
     source_id: str,
     *,
-    mime_type: str = "application/pdf",
+    mime_type: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> tuple[dict, ParsedDoc]:
     """Parse raw document bytes into a ParsedDoc and create a parsed_document artifact.
@@ -41,7 +41,8 @@ def parse(
     Args:
         raw_artifact_id: ID of the raw_document artifact to parse.
         source_id:       Source ID (parent of the raw artifact).
-        mime_type:       MIME type of the raw document (default: application/pdf).
+        mime_type:       MIME type override. If None, the stored artifact mime_type is
+                         used; falls back to 'application/pdf' if neither is set.
         settings:        Settings override.
 
     Returns:
@@ -56,8 +57,6 @@ def parse(
     s = settings or get_settings()
     storage = StorageBackend(s.storage)
 
-    log.info("parse.start", raw_artifact_id=raw_artifact_id, mime_type=mime_type)
-
     # Load raw bytes from storage
     with get_session() as session:
         raw_artifact = registry_repo.get_artifact(session, raw_artifact_id)
@@ -68,6 +67,11 @@ def parse(
             raise ValueError(
                 f"parse: raw_artifact {raw_artifact_id!r} has no storage_uri"
             )
+        # Resolve effective mime_type: caller override > stored artifact > fallback
+        effective_mime = mime_type or raw_artifact.mime_type or "application/pdf"
+
+    mime_type = effective_mime  # rebind for use below
+    log.info("parse.start", raw_artifact_id=raw_artifact_id, mime_type=mime_type)
 
     # Retrieve raw bytes from storage (s3://bucket/key → key)
     key = _uri_to_key(storage_uri)

@@ -156,6 +156,7 @@ class StorageBackend:
         data: bytes,
         ext: str,
         session: "Session",
+        mime_type: Optional[str] = None,
     ) -> "Artifact":
         """Write bytes to the content-addressed immutable raw zone.
 
@@ -241,6 +242,7 @@ class StorageBackend:
                 source_id=source_id,
                 content_hash=content_hash,
                 storage_uri=self.object_uri(key),
+                mime_type=mime_type,
             )
             session.flush()
         except IntegrityError:

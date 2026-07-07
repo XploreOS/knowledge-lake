@@ -34,7 +34,7 @@ def run_document(
     fixture_path: Optional[Path] = None,
     source_name: Optional[str] = None,
     collection: str = DEFAULT_COLLECTION,
-    mime_type: str = "application/pdf",
+    mime_type: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Orchestrate the full pipeline for a single document.
@@ -91,10 +91,11 @@ def run_document(
     log.info("run_document.ingest_done", source_id=source_id, raw_artifact_id=raw_artifact_id)
 
     # ── Stage 2: Parse ────────────────────────────────────────────────────────
+    # mime_type resolves from stored artifact when not explicitly overridden
     parse_result, parsed_doc = parse(
         raw_artifact_id,
         source_id,
-        mime_type=mime_type,
+        mime_type=mime_type,  # None → read from artifact.mime_type
         settings=s,
     )
     parsed_artifact_id = parse_result["artifact_id"]

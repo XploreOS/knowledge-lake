@@ -409,7 +409,7 @@ def ingest_url(
             source = registry_repo.get_source_by_normalized_url(session, norm_url)
             if source is None:
                 raise  # unexpected
-        artifact = storage.put_raw(source.id, data, ext, session)
+        artifact = storage.put_raw(source.id, data, ext, session, mime_type=effective_mime)
         session.flush()
         result = {
             "source_id": source.id,
@@ -512,7 +512,7 @@ def ingest_file(
                 robots_checked=False,  # local uploads don't need robots.txt check
             )
         session.flush()
-        artifact = storage.put_raw(source.id, data, ext, session)
+        artifact = storage.put_raw(source.id, data, ext, session, mime_type=effective_mime)
         session.flush()
         result = {
             "source_id": source.id,
@@ -531,6 +531,9 @@ def _mime_to_ext(mime_type: str) -> str:
         "application/pdf": "pdf",
         "text/html": "html",
         "text/plain": "txt",
+        "text/markdown": "md",
         "application/json": "json",
+        "application/xml": "xml",
+        "text/xml": "xml",
     }
     return _MAP.get(mime_type, "bin")
