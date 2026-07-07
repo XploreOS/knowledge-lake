@@ -322,7 +322,16 @@ def cmd_enrich(
             parsed_metadata = (parsed_artifact.metadata_ if parsed_artifact else None) or {}
 
         parsed_doc = ParsedDoc(text="", sections=[], metadata=parsed_metadata)
-        result = enrich_document(cleaned_artifact_id, source_id, parsed_doc=parsed_doc)
+        domain_system_prompt: str | None = None
+        from knowledge_lake.config.settings import get_settings as _get_settings
+        _s = _get_settings()
+        if _s.domain.domain_name:
+            from knowledge_lake.domains.loader import DomainLoader
+            domain_system_prompt = DomainLoader.from_name(_s.domain.domain_name).render_prompt("enrich.j2")
+        result = enrich_document(
+            cleaned_artifact_id, source_id, parsed_doc=parsed_doc,
+            domain_system_prompt=domain_system_prompt,
+        )
         typer.echo(f"Enriched:")
         typer.echo(f"  status:        {result['status']}")
         typer.echo(f"  artifact_id:   {result.get('artifact_id')}")

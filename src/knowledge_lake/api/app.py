@@ -730,7 +730,15 @@ def enrich_endpoint(body: EnrichRequest) -> EnrichResponse:
             parsed_metadata = (parsed_artifact.metadata_ if parsed_artifact else None) or {}
 
         parsed_doc = ParsedDoc(text="", sections=[], metadata=parsed_metadata)
-        result = enrich_document(body.cleaned_artifact_id, body.source_id, parsed_doc=parsed_doc)
+        domain_system_prompt: str | None = None
+        _enrich_settings = get_settings()
+        if _enrich_settings.domain.domain_name:
+            from knowledge_lake.domains.loader import DomainLoader
+            domain_system_prompt = DomainLoader.from_name(_enrich_settings.domain.domain_name).render_prompt("enrich.j2")
+        result = enrich_document(
+            body.cleaned_artifact_id, body.source_id, parsed_doc=parsed_doc,
+            domain_system_prompt=domain_system_prompt,
+        )
     except ValueError as exc:
         logger.warning("api.enrich.error", error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc

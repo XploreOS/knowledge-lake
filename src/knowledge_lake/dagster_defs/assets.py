@@ -419,7 +419,15 @@ def enrich_document(
 
     log.info("dagster.enrich_document.start", cleaned_artifact_id=cleaned_artifact_id)
 
-    result = enrich_fn(cleaned_artifact_id, source_id, parsed_doc=parsed_doc, settings=settings)
+    domain_system_prompt: str | None = None
+    if settings.domain.domain_name:
+        from knowledge_lake.domains.loader import DomainLoader
+        domain_system_prompt = DomainLoader.from_name(settings.domain.domain_name).render_prompt("enrich.j2")
+
+    result = enrich_fn(
+        cleaned_artifact_id, source_id, parsed_doc=parsed_doc, settings=settings,
+        domain_system_prompt=domain_system_prompt,
+    )
 
     log.info(
         "dagster.enrich_document.complete",
