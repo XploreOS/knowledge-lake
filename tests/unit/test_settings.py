@@ -224,3 +224,48 @@ class TestBedrockPricingIdsMatchLiteLLMConfig:
             "settings.enrich.strong_model_bedrock_id has drifted from "
             "infra/litellm/config.yaml's strong_model mapping (WR-01)"
         )
+
+
+class TestDomainSettings:
+    """DomainSettings nested model loads with correct defaults and env overrides (DOMAIN-01)."""
+
+    def test_default_domain_name_is_none(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.domain.domain_name is None
+
+    def test_default_domains_root_is_domains(self) -> None:
+        from knowledge_lake.config.settings import Settings
+
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.domain.domains_root == "domains"
+
+    def test_domain_name_from_env(self) -> None:
+        import os
+        from unittest.mock import patch as _patch
+
+        from knowledge_lake.config.settings import Settings
+
+        env = {"KLAKE_DOMAIN__DOMAIN_NAME": "healthcare"}
+        with _patch.dict(os.environ, env, clear=False):
+            s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.domain.domain_name == "healthcare"
+
+    def test_domains_root_from_env(self) -> None:
+        import os
+        from unittest.mock import patch as _patch
+
+        from knowledge_lake.config.settings import Settings
+
+        env = {"KLAKE_DOMAIN__DOMAINS_ROOT": "/custom/domains"}
+        with _patch.dict(os.environ, env, clear=False):
+            s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.domain.domains_root == "/custom/domains"
+
+    def test_domain_settings_class_exists(self) -> None:
+        from knowledge_lake.config.settings import DomainSettings
+
+        ds = DomainSettings()
+        assert ds.domain_name is None
+        assert ds.domains_root == "domains"
