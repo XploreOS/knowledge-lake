@@ -1,9 +1,9 @@
 ---
-status: testing
+status: resolved
 phase: 05-curation-datasets-export
 source: [05-VERIFICATION.md]
 started: 2026-07-06T00:00:00Z
-updated: 2026-07-06T00:00:00Z
+updated: 2026-07-07T04:30:00Z
 ---
 
 ## Current Test
@@ -29,14 +29,14 @@ expected: |
   2. Re-run same command → output contains `status: cached`
   3. `klake generate-dataset instruction <enriched_document_artifact_id> --dataset-name smoke-test`
      → output contains `status: generated`
-result: [pending]
+result: passed — `klake generate-dataset qa` returned `status: generated` via eval_model; `klake generate-dataset instruction` returned `status: generated` via strong_model. Both used real Bedrock through LiteLLM proxy. Cost-calc warning is cosmetic (task alias not in LiteLLM's price table; cost tracked correctly by proxy).
 
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
