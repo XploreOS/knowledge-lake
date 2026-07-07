@@ -90,9 +90,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Domain Packs
 
-- [ ] **DOMAIN-01**: Domain packs load from a directory convention (domain.yaml, sources.yaml, taxonomy.yaml, prompts/, validators/) without core code changes
-- [ ] **DOMAIN-02**: Healthcare pack ships with curated seed sources spanning HL7 FHIR, US Core, CMS, HIPAA/OCR, ONC/USCDI, CDC, FDA, NIH/NLM, ICD-10-CM, HCPCS, LOINC, RxNorm, NDC, NPPES, and related public resources
-- [ ] **DOMAIN-03**: Healthcare pack includes enrichment/QA prompts, taxonomy, and a validator module
+- [x] **DOMAIN-01**: Domain packs load from a directory convention (domain.yaml, sources.yaml, taxonomy.yaml, prompts/, validators/) without core code changes
+- [x] **DOMAIN-02**: Healthcare pack ships with curated seed sources spanning HL7 FHIR, US Core, CMS, HIPAA/OCR, ONC/USCDI, CDC, FDA, NIH/NLM, ICD-10-CM, HCPCS, LOINC, RxNorm, NDC, NPPES, and related public resources
+- [x] **DOMAIN-03**: Healthcare pack includes enrichment/QA prompts, taxonomy, and a validator module
 - [ ] **DOMAIN-04**: 5-10 healthcare sources across formats (HTML, PDF, CSV/JSON) flow end-to-end: ingest → parse → clean → chunk → enrich → index → search → export
 
 ## v2 Requirements
@@ -187,9 +187,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXPORT-01 | Phase 5 | Complete |
 | EXPORT-02 | Phase 5 | Complete |
 | EXPORT-03 | Phase 5 | Complete |
-| DOMAIN-01 | Phase 6 | Pending |
-| DOMAIN-02 | Phase 6 | Pending |
-| DOMAIN-03 | Phase 6 | Pending |
+| DOMAIN-01 | Phase 6 | Complete |
+| DOMAIN-02 | Phase 6 | Complete |
+| DOMAIN-03 | Phase 6 | Complete |
 | DOMAIN-04 | Phase 6 | Pending |
 | IFACE-01 | Phase 6 | Pending |
 | IFACE-02 | Phase 6 | Pending |
