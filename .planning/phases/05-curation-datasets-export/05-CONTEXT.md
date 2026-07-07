@@ -123,6 +123,7 @@ Requirements: CURATE-01 through CURATE-03, DATA-01 through DATA-03, EXPORT-01 th
 
 - Full `klake` CLI surface completeness (IFACE-01) and FastAPI OpenAPI completeness (IFACE-02) — formally Phase 6 requirements; this phase adds only the commands/endpoints its own requirements need, not a full audit.
 - Healthcare-specific dataset content/taxonomy — Phase 6 (DOMAIN-02/03) territory; Phase 5's dataset generation is domain-agnostic.
+- **05-AI-SPEC.md Section 5 evaluation infrastructure (added during plan revision, 2026-07-06):** RAGAS faithfulness judge, Promptfoo schema-regression CI, Arize Phoenix OpenTelemetry tracing, the 20-example hand-labeled reference dataset, and a dedicated `tests/eval/` suite are deferred to a future phase — a standalone eval-harness phase, or folded into Phase 6 alongside DOMAIN-03's healthcare-specific reference data. Rationale: AI-SPEC Section 6 classifies these as Offline (Flywheel — sampled/batch) concerns, not blocking guardrails; the two Section 6 items that ARE blocking guardrails (train/eval contamination, lineage completeness) are implemented directly in 05-02-PLAN.md and 05-03-PLAN.md (see 05-02-PLAN.md's "Deferred to a Later Phase" note for the full rationale).
 
 </deferred>
 

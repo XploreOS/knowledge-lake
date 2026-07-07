@@ -487,17 +487,19 @@ def verify_export(settings, export_uri: str) -> int:
 
 **If this table is empty:** N/A — see entries above.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should CURATE-01's quality filters gate exports (hard-exclude failing documents) or only annotate (flag-only, filterable at export time)?**
    - What we know: CONTEXT.md explicitly leaves this to Claude's discretion, "based on the batch-first architecture precedent from Phase 3" (Phase 3's near-dup detection is annotate-only, not a hard gate).
    - What's unclear: whether the healthcare domain pack (Phase 6) will want a stricter gate for pretraining-corpus exports specifically, even if RAG-corpus exports stay annotate-only.
    - Recommendation: default to annotate-only (store `filter_results` + `composite_quality_score` on every `curated_document`, regardless of pass/fail) for MVP, matching the existing Phase 3 precedent, and let EXPORT-02 (pretraining JSONL) apply an explicit, configurable quality-score threshold ONLY at export time (not at curation time) — this keeps the registry as a complete, unfiltered record while giving exports a tunable quality bar.
+   - **Resolved:** Recommendation adopted as-is. 05-01-PLAN.md's `curate_document()` (Task 2) remains annotate-only — every `curated_document` records `filter_results`/`composite_quality_score` regardless of pass/fail, no hard gate at curation time. 05-03-PLAN.md's `export_pretrain_corpus()` (Task 2) applies the gate ONLY at export time via `ExportSettings.min_quality_score_for_pretrain`.
 
 2. **Does DuckDB's Python package need to be added as a project pyproject dependency, or is the `duckdb` CLI binary sufficient for the "queryable via DuckDB" acceptance criterion?**
    - What we know: EXPORT-01's success criterion says "queryable via DuckDB" — this project's CLI/API pattern (`klake export`, `klake query`?) would most naturally use the Python `duckdb` package for in-process verification/query commands, consistent with every other pipeline stage being a Python function.
    - What's unclear: whether the planner wants a `klake query` CLI command backed by the Python package, vs. just documenting the raw `duckdb` CLI usage for operators.
    - Recommendation: add the `duckdb` Python package as a direct dependency (already reflected in Standard Stack above) so the CLI/API layer can expose an in-process query/verify command consistent with the rest of the codebase's Python-first pattern.
+   - **Resolved:** Recommendation adopted as-is. 05-03-PLAN.md Task 2 adds `duckdb==1.5.4` (alongside `polars==1.42.1` and `pyarrow==24.0.0`) as a direct `pyproject.toml` dependency, used in-process by `verify_export()` to query gold-zone Parquet/JSONL via DuckDB's `httpfs` extension.
 
 ## Environment Availability
 
