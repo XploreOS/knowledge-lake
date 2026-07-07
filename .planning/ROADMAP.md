@@ -184,7 +184,13 @@ Plans:
   4. The `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export; FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
   5. All pipeline stages run as Dagster assets/jobs with retries and are observable from the Dagster UI
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — DomainLoader class + healthcare pack content (domain.yaml, sources.yaml, taxonomy.yaml, prompts, validator) (DOMAIN-01, DOMAIN-02, DOMAIN-03)
+- [ ] 06-02-PLAN.md — Domain prompt override in pipeline/enrich.py + DomainSettings (DOMAIN-01, DOMAIN-03)
+- [ ] 06-03-PLAN.md — klake init + klake index CLI, 8 new API endpoints (IFACE-01, IFACE-02, DOMAIN-01)
+- [ ] 06-04-PLAN.md — RetryPolicy on 12 Dagster assets, healthcare_e2e_job, 5-source E2E test (IFACE-03, DOMAIN-04)
 
 ## Progress
 
