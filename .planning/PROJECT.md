@@ -8,80 +8,79 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
+## Current State (v1.0 — shipped 2026-07-07)
+
+- **Version:** v1.0 — Knowledge Lake Framework MVP
+- **Source lines:** ~17,150 Python
+- **Tests:** 324 unit + integration + e2e
+- **Pipeline:** ingest → parse → clean → chunk → enrich → embed → index → curate → generate-dataset → export
+- **CLI commands:** 20 (`klake` Typer app)
+- **API endpoints:** 26 (FastAPI, Swagger at /docs)
+- **Domain packs:** 1 (healthcare, 28 curated sources)
+- **Dagster assets:** 12, all with RetryPolicy
+- **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster requires container rebuild
+
 ## Requirements
 
-### Validated
+### Validated (v1.0)
 
 - ✓ Source registry, document registry, artifact registry with full lineage — Phase 1
-- ✓ Raw/bronze zone with immutable raw storage (SHA256-keyed, WORM policy) — Phase 1
-- ✓ Document parsing via Docling as plugin — Phase 1
-- ✓ Configurable embeddings (local sentence-transformers) — Phase 1
-- ✓ Vector search via Qdrant as a plugin — Phase 1
-- ✓ FastAPI service with health + search + lineage endpoints — Phase 1
-- ✓ Typer CLI (`klake`) for core operations — Phase 1
-- ✓ Dagster pipeline orchestration (assets + resources wired) — Phase 1
-- ✓ S3-compatible object storage (MinIO dev) — Phase 1
+- ✓ Raw/bronze/silver/gold data lake zones with immutable raw storage (SHA256-keyed, WORM policy) — Phase 1
+- ✓ Document parsing via Docling/Unstructured/Tika as swappable plugins — Phases 1, 3
+- ✓ Configurable embeddings (local sentence-transformers or LiteLLM API) — Phases 1, 4
+- ✓ Vector search via Qdrant as a plugin — Phases 1, 4
+- ✓ FastAPI service with full CRUD and pipeline trigger endpoints — Phases 1, 6
+- ✓ Typer CLI (`klake`) for all operations — Phases 1, 6
+- ✓ Dagster pipeline orchestration from day 1 — Phase 1, retries Phase 6
+- ✓ S3-compatible object storage (MinIO dev, AWS S3 production) — Phase 1
 - ✓ PostgreSQL metadata registry — Phase 1
 - ✓ All LLM calls routed through LiteLLM with task-based model aliases — Phase 1
 - ✓ Automated crawling via Crawl4AI, Scrapy, Playwright as swappable plugins — Phase 2
 - ✓ Manual file upload + single-URL ingest with provenance and SHA256 dedup — Phase 2
 - ✓ SearXNG-based source discovery with auto-registration — Phase 2
 - ✓ Robots.txt, rate-limit, SSRF guard, resumable crawl jobs — Phase 2
-
-### Active
-
-*(All v1.0 requirements validated — see Validated section)*
-
-### Validated (Phase 6 complete — 2026-07-07)
-
-- ✓ Domain-agnostic core with pluggable domain packs — Phase 6
-- ✓ Source registry, document registry, artifact registry with full lineage — Phase 1
-- ✓ Raw/bronze/silver/gold data lake zones with immutable raw storage — Phases 1–5
-- ✓ Automated crawling via Crawl4AI, Scrapy, Playwright as plugins — Phase 2
-- ✓ Manual file upload into the knowledge lake — Phase 2
-- ✓ Document parsing via Docling/Unstructured/Tika as plugins — Phase 3
-- ✓ Cleaning, normalization, deduplication pipeline — Phase 3
+- ✓ Multi-format document parsing with quality scoring — Phase 3
+- ✓ Cleaning, normalization, language detection, deduplication pipeline — Phase 3
 - ✓ Section-aware, token-aware, table-aware chunking — Phase 3
-- ✓ LLM-based metadata enrichment through LiteLLM gateway — Phase 4
-- ✓ Configurable embeddings (local sentence-transformers or LiteLLM API) — Phase 4
-- ✓ Vector search via Qdrant as a plugin — Phase 4
-- ✓ Corpus curation for pretraining (DataTrove/NeMo Curator-style filtering) — Phase 5
-- ✓ Dataset generation (fine-tuning, RAG eval, instruction tuning) — Phase 5
-- ✓ Export to Parquet, JSONL, DuckDB — Phase 5
-- ✓ FastAPI service with full CRUD and pipeline trigger endpoints — Phases 1, 6
-- ✓ Typer CLI (`klake`) for all operations — Phases 1, 6
-- ✓ Dagster pipeline orchestration from day 1 — Phase 1, retries Phase 6
-- ✓ S3-compatible object storage (MinIO dev, AWS S3 production) — Phase 1
-- ✓ PostgreSQL metadata registry — Phase 1
+- ✓ LLM-based metadata enrichment through LiteLLM gateway with budget cap — Phase 4
+- ✓ Quality scoring at document and source level — Phases 3, 4
+- ✓ Zero-downtime Qdrant alias-based reindex — Phase 4
+- ✓ Corpus curation for pretraining (DataTrove filtering + corpus-wide MinHash dedup) — Phase 5
+- ✓ Dataset generation (RAG eval Q&A, instruction-tuning) with full lineage — Phase 5
+- ✓ Export to Parquet, JSONL via gold zone (DuckDB queryable) — Phase 5
+- ✓ Domain-agnostic core with pluggable domain packs — Phase 6
 - ✓ Healthcare domain pack with 28 curated seed sources — Phase 6
-- ✓ All LLM calls routed through LiteLLM with task-based model aliases — Phase 1
-- ✓ SearXNG-based source discovery — Phase 2
-- ✓ Quality scoring at document and source level — Phase 3
-- ✓ Language detection — Phase 3
+- ✓ Healthcare enrichment prompts, taxonomy, and validator — Phase 6
+- ✓ 5-source E2E validation (HTML, PDF, CSV) — Phase 6
 - ✓ Resumable, idempotent jobs with retries and rate limits — Phase 6
+
+### Active (v2.0 candidates)
+
+- [ ] RAGAS + Promptfoo + Arize eval harness — deferred from Phase 5
+- [ ] Multi-domain pack support (conflict resolution) — deferred from Phase 6
+- [ ] Hybrid BM25 + dense search (RETR-01) — v2 requirement
+- [ ] Domain pack registry/catalog (versioning, publishing) — future milestone
+- [ ] OpenMetadata/DataHub catalog integration — when catalog features needed
 
 ### Out of Scope
 
-- Real-time streaming ingestion — batch-first for MVP
-- Multi-tenant auth / RBAC — single user/small team for now
-- Admin UI / web dashboard — CLI + API + Swagger only for MVP
-- Neo4j knowledge graph — deferred to Phase 3
-- Argilla/Label Studio human review — deferred to Phase 2-3
-- OpenMetadata/DataHub catalog integration — deferred to Phase 3
-- lakeFS/DVC data versioning — deferred to Phase 3
-- RAGFlow/Dify/AnythingLLM demo UI — deferred to Phase 3
-- Hybrid BM25/OpenSearch retrieval — deferred to Phase 2
-- PHI/PII handling — only in explicitly controlled test environments
-- Mobile or desktop clients
+- Real-time streaming ingestion — batch-first; streaming adds complexity without MVP value
+- Multi-tenant auth / RBAC — single user/small team for v1.0
+- Admin UI / web dashboard — CLI + API + Swagger sufficient; avoids frontend complexity
+- PHI/PII ingestion — only public data; PHI restricted to controlled test environments
+- Crawling private/restricted resources — legal guardrail: robots.txt and licenses respected
+- Custom embedding model training — use off-the-shelf models; training is a downstream concern
+- Mobile/desktop clients — server-side framework only
+- lakeFS/DVC data versioning — raw zone immutability covers the core need for now
 
 ## Context
 
-- Running on DigitalOcean Ubuntu 24.04 droplet with Docker
-- Using AWS Bedrock models through LiteLLM
+- Running on DigitalOcean Ubuntu 24.04 droplet with Docker Compose
+- Using AWS Bedrock models through LiteLLM proxy
 - Healthcare domain is deeply familiar (HL7 FHIR, CMS, HIPAA, ONC, etc.)
-- Closest analogues: DataTrove (pretraining corpus), RAGFlow (RAG), Dagster (orchestration), Docling (parsing)
-- This framework orchestrates those tools rather than competing with them
+- v1.0 shipped 2026-07-02 → 2026-07-07 (5 days, 259 commits, 303 files changed)
 - Plugin architecture: every external tool is replaceable without breaking core registries or lineage
+- Closest analogues: DataTrove (pretraining corpus), RAGFlow (RAG), Dagster (orchestration), Docling (parsing)
 
 ## Constraints
 
@@ -98,34 +97,26 @@ Every domain resource ingested must be traceable from raw source through every t
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Dagster over Prefect for orchestration | Better asset-based model for data pipelines, built-in lineage concepts | Validated Phase 1 — 5 SDAs materialize cleanly |
-| Docling as primary parser | Best balance of format support, quality, and open-source maturity | Validated Phase 1 — parses HIPAA Security Rule PDF with section extraction |
-| S3-compatible storage (not local filesystem) | Production-portable, supports MinIO dev and AWS S3 prod | Validated Phase 1 — content-addressed put_raw + WORM policy working |
-| Plugin architecture for all external tools | Avoid lock-in, enable swapping parsers/crawlers/vector stores | Validated Phase 1 — entry-point resolver + 3 built-ins registered |
-| LiteLLM as sole model gateway | Unified interface for Bedrock, OpenAI, Anthropic, local models | Validated Phase 1 — LiteLLMEmbedder uses embedding_model alias only |
-| PostgreSQL for metadata registry (not OpenMetadata yet) | Simpler for MVP, migrate to catalog tool later | Validated Phase 1 — Alembic migration #1 + self-referencing artifacts node table |
-| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | Validated Phase 5 — batch MinHash dedup + DataTrove filters working |
-| No UI for MVP | CLI + API is sufficient for single user, avoids frontend complexity | Validated Phase 1 — klake CLI + FastAPI /search /lineage working |
-| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | Validated Phase 6 — 28 sources, DomainLoader, 5-source E2E passed |
-| Typer downgraded to <0.25.0 | docling-core has a conflicting dependency on typer | Phase 1 deviation — RESEARCH had 0.26.8 pinned; uv resolved to <0.25.0 |
-| uuid-utils approved (not uuid6) | PyPI legitimacy verified by human gate — github.com/aminalaee/uuid-utils v0.16.2 | Phase 1 — isolated to ids.py for easy stdlib swap in Python 3.14 |
+| Dagster over Prefect for orchestration | Better asset-based model for data pipelines, built-in lineage concepts | ✓ Validated — 12 assets, all retried |
+| Docling as primary parser | Best balance of format support, quality, and open-source maturity | ✓ Validated — multi-format with 6-format fallback chain |
+| S3-compatible storage (not local filesystem) | Production-portable, supports MinIO dev and AWS S3 prod | ✓ Validated — content-addressed put_raw + WORM policy |
+| Plugin architecture for all external tools | Avoid lock-in, enable swapping parsers/crawlers/vector stores | ✓ Validated — entry-point resolver + built-ins registered |
+| LiteLLM as sole model gateway | Unified interface for Bedrock, OpenAI, Anthropic, local models | ✓ Validated — task-based aliases only in business logic |
+| PostgreSQL for metadata registry (not OpenMetadata yet) | Simpler for MVP, migrate to catalog tool later | ✓ Validated — 8 tables, self-referencing lineage graph |
+| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | ✓ Validated — batch MinHash dedup + DataTrove filters |
+| No UI for MVP | CLI + API is sufficient for single user, avoids frontend complexity | ✓ Validated — klake CLI + FastAPI /docs working |
+| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | ✓ Validated — 28 sources, DomainLoader, 5-source E2E passed |
+| Single enrichment call per document (not per-field) | Cost efficiency; structured JSON output covers all fields at once | ✓ Validated — one LiteLLM call per doc, cached by content hash |
+| Budget cap with graceful halt (LlmSpend table) | No surprise runaway costs; fail-closed on budget exhaustion | ✓ Validated — contamination gate + budget cap both enforced |
+| Typer downgraded to <0.25.0 | docling-core has a conflicting dependency on typer | ⚠ Revisit — upgrade when docling drops the pin |
+| uuid-utils approved (not uuid6) | PyPI legitimacy verified by human gate | ✓ — isolated to ids.py for easy stdlib swap in Python 3.14 |
+| Domain convention over plugin entry-points | Zero core code changes per new domain pack | ✓ Validated — `domains/{name}/` convention proven by healthcare pack |
 
 ## Evolution
 
-This document evolves at phase transitions and milestone boundaries.
+**After each phase:** Move validated requirements, log decisions, update context.
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
-
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+**After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-04 after Phase 2 — Ingestion*
+*Last updated: 2026-07-07 after v1.0 milestone*
