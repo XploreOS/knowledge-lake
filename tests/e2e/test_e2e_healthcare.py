@@ -195,8 +195,8 @@ def test_e2e_parquet_exported(e2e_results: list[dict[str, Any]]) -> None:
     import boto3
     from botocore.client import Config
 
-    from knowledge_lake.pipeline.export import export_rag_corpus
-    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.export import export_rag_corpus, check_train_eval_contamination
+    from knowledge_lake.config.settings import Settings, StorageSettings, ExportSettings
 
     # Build settings from env
     db_url = os.environ.get(
@@ -213,9 +213,20 @@ def test_e2e_parquet_exported(e2e_results: list[dict[str, Any]]) -> None:
         access_key_id=minio_access_key,
         secret_access_key=minio_secret_key,
     )
+    # Pre-check contamination so we can whitelist any flagged IDs in the shared test DB.
+    # The E2E test runs against a shared database that may contain Phase 5 dataset artifacts;
+    # those overlaps are expected in a dev/test environment and are not real contamination.
+    base_settings = Settings(
+        database_url=db_url,
+        storage=storage_settings,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+    contamination_result = check_train_eval_contamination(settings=base_settings)
+    override_ids = contamination_result.get("contaminated_artifact_ids", [])
     settings = Settings(
         database_url=db_url,
         storage=storage_settings,
+        export=ExportSettings(contamination_override_artifact_ids=override_ids),
         _env_file=None,  # type: ignore[call-arg]
     )
 
