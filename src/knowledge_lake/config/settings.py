@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -254,6 +254,23 @@ class ExportSettings(BaseModel):
     (05-AI-SPEC.md Section 6: 'unless overlap is deliberate and documented')."""
 
 
+class DomainSettings(BaseModel):
+    """Domain pack configuration (DOMAIN-01).
+
+    Nested under Settings as settings.domain. Environment variable pattern:
+    KLAKE_DOMAIN__DOMAIN_NAME, KLAKE_DOMAIN__DOMAINS_ROOT.
+    """
+
+    domain_name: Optional[str] = None
+    """Active domain pack name (e.g. 'healthcare'). None = no domain pack loaded.
+    Set via KLAKE_DOMAIN__DOMAIN_NAME env var. (D-01, D-02)"""
+
+    domains_root: str = "domains"
+    """Path to the domains/ directory relative to the working directory,
+    or an absolute path. Override via KLAKE_DOMAIN__DOMAINS_ROOT env var
+    for containerised deployments (Pitfall 1)."""
+
+
 class IndexSettings(BaseModel):
     """Vector index / alias configuration (INDEX-02, D-06).
 
@@ -374,6 +391,9 @@ class Settings(BaseSettings):
 
     export: ExportSettings = Field(default_factory=ExportSettings)
     """Gold-zone export configuration (EXPORT-01..03)."""
+
+    domain: DomainSettings = Field(default_factory=DomainSettings)
+    """Domain pack configuration (DOMAIN-01)."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 
