@@ -187,9 +187,17 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 06-01-PLAN.md — DomainLoader class + healthcare pack content (domain.yaml, sources.yaml, taxonomy.yaml, prompts, validator) (DOMAIN-01, DOMAIN-02, DOMAIN-03)
 - [ ] 06-02-PLAN.md — Domain prompt override in pipeline/enrich.py + DomainSettings (DOMAIN-01, DOMAIN-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-03-PLAN.md — klake init + klake index CLI, 8 new API endpoints (IFACE-01, IFACE-02, DOMAIN-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-04-PLAN.md — RetryPolicy on 12 Dagster assets, healthcare_e2e_job, 5-source E2E test (IFACE-03, DOMAIN-04)
 
 ## Progress
