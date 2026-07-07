@@ -33,6 +33,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from knowledge_lake.api.schemas import (
+    ArtifactOut,
     ChunkRequest,
     ChunkResponse,
     CleanRequest,
@@ -43,9 +44,12 @@ from knowledge_lake.api.schemas import (
     CurateRequest,
     CurateResponse,
     CuratedDocumentOut,
+    DatasetOut,
     DiscoverOut,
     DiscoverRequest,
     DiscoverResultItem,
+    DomainLoadRequest,
+    DomainLoadResponse,
     EnrichRequest,
     EnrichResponse,
     ExportRequest,
@@ -60,6 +64,7 @@ from knowledge_lake.api.schemas import (
     SearchHit,
     SearchParams,
     SourceCreate,
+    SourceListItem,
     SourceOut,
     UploadOut,
 )
@@ -95,6 +100,10 @@ def _safe_upload_path(raw: str) -> Path:
 # Collection names must be alphanumeric with underscores/hyphens, max 64 chars (WR-04).
 # Rejects arbitrary strings that could enumerate Qdrant collections or cause confusion.
 _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+# Domain names: letter-first, alphanumeric + hyphen/underscore, 1-64 chars.
+# Applied to /domains/load body.name (T-06-08) and /domains/{name}/sources path param (T-06-09).
+_DOMAIN_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1019,3 +1028,428 @@ def export_endpoint(body: ExportRequest) -> ExportResponse:
         row_count=result["row_count"],
         skipped_dangling_lineage=result.get("skipped_dangling_lineage"),
     )
+
+
+# ── D-07 API gap audit: 8 additive endpoints ─────────────────────────────────
+# Group 1: Sources (GET /sources, GET /sources/{source_id})
+# Group 2: Documents (GET /documents, GET /documents/{artifact_id})
+# Group 3: Datasets (GET /datasets, GET /datasets/{dataset_id})
+# Group 4: Domains (POST /domains/load, GET /domains/{name}/sources)
+# All queries use SQLAlchemy ORM select() — never raw SQL (T-06-11 injection prevention).
+# Domain names validated against _DOMAIN_NAME_RE before any path construction (T-06-08/09).
+
+
+@app.get(
+    "/sources",
+    response_model=list[SourceListItem],
+    tags=["registry"],
+    summary="List registered sources with optional domain filter",
+    status_code=200,
+)
+def list_sources_endpoint(
+    domain: Optional[str] = Query(
+        default=None,
+        description="Filter by domain classification (e.g. 'healthcare').",
+        max_length=64,
+    ),
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum results (1–200)."),
+    offset: int = Query(default=0, ge=0, description="Pagination offset."),
+) -> list[SourceListItem]:
+    """List all registered sources with pagination and optional domain filter (D-07 gap audit).
+
+    Domain filter is applied in Python against Source.config['domain'] to remain
+    DB-agnostic (same SQLite/Postgres behaviour as list_curated_documents_by_dedup_status).
+
+    Security (T-06-11 / ASVS V5):
+        - All queries use ORM select() — no raw SQL.
+        - domain/limit/offset are validated by Pydantic before reaching the handler.
+    """
+    from sqlalchemy import select
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Source
+
+    with get_session() as session:
+        stmt = select(Source).order_by(Source.created_at.desc()).limit(limit).offset(offset)
+        sources = list(session.execute(stmt).scalars())
+
+    result: list[SourceListItem] = []
+    for src in sources:
+        src_domain = (src.config or {}).get("domain") if src.config else None
+        if domain is not None and src_domain != domain:
+            continue
+        result.append(
+            SourceListItem(
+                source_id=src.id,
+                name=src.name,
+                url=src.url,
+                source_type=src.source_type,
+                license_type=src.license_type,
+                domain=src_domain,
+                created_at=src.created_at.isoformat() if src.created_at else "",
+            )
+        )
+    return result
+
+
+@app.get(
+    "/sources/{source_id}",
+    response_model=SourceListItem,
+    tags=["registry"],
+    summary="Get a single source by ID",
+    status_code=200,
+    responses={404: {"description": "Source not found"}},
+)
+def get_source_endpoint(source_id: str) -> SourceListItem:
+    """Return a single source registry entry by its ID or 404 (D-07 gap audit).
+
+    Security (T-06-11 / ASVS V5):
+        - session.get() uses parameterised primary-key lookup — no injection.
+    """
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Source
+
+    with get_session() as session:
+        src = session.get(Source, source_id)
+        if src is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source {source_id!r} not found.",
+            )
+        src_domain = (src.config or {}).get("domain") if src.config else None
+        return SourceListItem(
+            source_id=src.id,
+            name=src.name,
+            url=src.url,
+            source_type=src.source_type,
+            license_type=src.license_type,
+            domain=src_domain,
+            created_at=src.created_at.isoformat() if src.created_at else "",
+        )
+
+
+@app.get(
+    "/documents",
+    response_model=list[ArtifactOut],
+    tags=["registry"],
+    summary="List artifact documents with optional type and source filters",
+    status_code=200,
+)
+def list_documents_endpoint(
+    artifact_type: Optional[str] = Query(
+        default=None,
+        description="Filter by artifact type (e.g. 'raw_document', 'parsed_document').",
+        max_length=64,
+    ),
+    source_id: Optional[str] = Query(
+        default=None,
+        description="Filter by source registry ID.",
+        max_length=64,
+    ),
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum results (1–200)."),
+    offset: int = Query(default=0, ge=0, description="Pagination offset."),
+) -> list[ArtifactOut]:
+    """List artifacts (documents) with pagination and optional type/source filters (D-07 gap audit).
+
+    Security (T-06-11 / ASVS V5):
+        - All filter parameters are bound via ORM — no string interpolation.
+    """
+    from sqlalchemy import select
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Artifact
+
+    with get_session() as session:
+        stmt = select(Artifact).order_by(Artifact.created_at.desc())
+        if artifact_type is not None:
+            stmt = stmt.where(Artifact.artifact_type == artifact_type)
+        if source_id is not None:
+            stmt = stmt.where(Artifact.source_id == source_id)
+        stmt = stmt.limit(limit).offset(offset)
+        artifacts = list(session.execute(stmt).scalars())
+
+    return [
+        ArtifactOut(
+            id=a.id,
+            artifact_type=a.artifact_type,
+            source_id=a.source_id,
+            parent_artifact_id=a.parent_artifact_id,
+            content_hash=a.content_hash,
+            created_at=a.created_at.isoformat() if a.created_at else "",
+            storage_uri=a.storage_uri,
+            mime_type=a.mime_type,
+        )
+        for a in artifacts
+    ]
+
+
+@app.get(
+    "/documents/{artifact_id}",
+    response_model=ArtifactOut,
+    tags=["registry"],
+    summary="Get a single artifact document by ID",
+    status_code=200,
+    responses={404: {"description": "Artifact not found"}},
+)
+def get_document_endpoint(artifact_id: str) -> ArtifactOut:
+    """Return a single artifact registry entry by its ID or 404 (D-07 gap audit).
+
+    Security (T-06-11 / ASVS V5):
+        - session.get() uses parameterised primary-key lookup — no injection.
+    """
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Artifact
+
+    with get_session() as session:
+        artifact = session.get(Artifact, artifact_id)
+        if artifact is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Artifact {artifact_id!r} not found.",
+            )
+        return ArtifactOut(
+            id=artifact.id,
+            artifact_type=artifact.artifact_type,
+            source_id=artifact.source_id,
+            parent_artifact_id=artifact.parent_artifact_id,
+            content_hash=artifact.content_hash,
+            created_at=artifact.created_at.isoformat() if artifact.created_at else "",
+            storage_uri=artifact.storage_uri,
+            mime_type=artifact.mime_type,
+        )
+
+
+@app.get(
+    "/datasets",
+    response_model=list[DatasetOut],
+    tags=["datasets"],
+    summary="List curated datasets with pagination",
+    status_code=200,
+)
+def list_datasets_endpoint(
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum results (1–200)."),
+    offset: int = Query(default=0, ge=0, description="Pagination offset."),
+) -> list[DatasetOut]:
+    """List all registered datasets with pagination (D-07 gap audit).
+
+    Security (T-06-11 / ASVS V5):
+        - limit/offset validated by Pydantic ge/le bounds before reaching DB.
+        - ORM select() — no raw SQL.
+    """
+    from sqlalchemy import select
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Dataset
+
+    with get_session() as session:
+        stmt = (
+            select(Dataset)
+            .order_by(Dataset.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        datasets = list(session.execute(stmt).scalars())
+
+    return [
+        DatasetOut(
+            dataset_id=ds.id,
+            name=ds.name,
+            created_at=ds.created_at.isoformat() if ds.created_at else "",
+            row_count=ds.example_count or 0,
+        )
+        for ds in datasets
+    ]
+
+
+@app.get(
+    "/datasets/{dataset_id}",
+    response_model=DatasetOut,
+    tags=["datasets"],
+    summary="Get a single dataset by ID",
+    status_code=200,
+    responses={404: {"description": "Dataset not found"}},
+)
+def get_dataset_endpoint(dataset_id: str) -> DatasetOut:
+    """Return a single dataset registry entry by its ID or 404 (D-07 gap audit).
+
+    Security (T-06-11 / ASVS V5):
+        - session.get() uses parameterised primary-key lookup — no injection.
+    """
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Dataset
+
+    with get_session() as session:
+        ds = session.get(Dataset, dataset_id)
+        if ds is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset {dataset_id!r} not found.",
+            )
+        return DatasetOut(
+            dataset_id=ds.id,
+            name=ds.name,
+            created_at=ds.created_at.isoformat() if ds.created_at else "",
+            row_count=ds.example_count or 0,
+        )
+
+
+def _register_domain_sources(name: str) -> dict:
+    """Shared helper: load a domain pack and register its crawl-type sources.
+
+    Returns a dict with loaded_count, skipped_count, upload_required_count keys.
+    Used by both POST /domains/load and klake init --domain to avoid duplicating
+    the registration logic (D-02: no behavior re-implementation).
+
+    Raises FileNotFoundError if the domain pack does not exist.
+    """
+    from pathlib import Path
+
+    from sqlalchemy.exc import IntegrityError
+
+    from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.domains.loader import DomainLoader
+    from knowledge_lake.pipeline.ingest import normalize_url
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.repo import get_source_by_normalized_url
+
+    settings = get_settings()
+    _domains_path = Path(settings.domain.domains_root).resolve()
+    root = _domains_path.parent if _domains_path.name == "domains" else _domains_path
+
+    loader = DomainLoader.from_name(name, root=root)
+
+    loaded_count = 0
+    skipped_count = 0
+    upload_required_count = 0
+
+    for entry in loader.sources:
+        if entry.ingest_type == "upload":
+            upload_required_count += 1
+            continue
+
+        try:
+            with get_session() as session:
+                try:
+                    norm_url = normalize_url(entry.url)
+                except Exception:
+                    norm_url = entry.url
+
+                existing = get_source_by_normalized_url(session, norm_url)
+                if existing is not None:
+                    skipped_count += 1
+                    continue
+
+                registry_repo.create_source(
+                    session,
+                    name=entry.name,
+                    source_type=entry.source_type,
+                    url=entry.url,
+                    normalized_url=norm_url,
+                    license_type=entry.license,
+                    config={
+                        "domain": name,
+                        "tags": entry.tags,
+                        "crawl_config": entry.crawl_config,
+                        "ingest_type": entry.ingest_type,
+                    },
+                )
+                session.commit()
+                loaded_count += 1
+        except IntegrityError:
+            skipped_count += 1
+
+    return {
+        "loaded_count": loaded_count,
+        "skipped_count": skipped_count,
+        "upload_required_count": upload_required_count,
+    }
+
+
+@app.post(
+    "/domains/load",
+    response_model=DomainLoadResponse,
+    tags=["domains"],
+    summary="Load a domain pack and register its seed sources",
+    status_code=200,
+)
+def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
+    """Load a domain pack by name and bulk-register its crawl-type sources (DOMAIN-01).
+
+    Upload-type sources are counted but not auto-registered. Existing sources
+    are silently skipped (URL dedup). Returns counts for all categories.
+
+    Security (T-06-08 / ASVS V5):
+        - body.name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' by Pydantic pattern
+          in DomainLoadRequest BEFORE this handler runs — path traversal blocked at schema level.
+        - Domain name is also validated against _DOMAIN_NAME_RE below for defence-in-depth.
+        - DomainLoader validates the name again internally (T-06-01 in loader.py).
+    """
+    # Defence-in-depth: validate again even though Pydantic pattern already checked (T-06-08).
+    if not _DOMAIN_NAME_RE.fullmatch(body.name):
+        raise HTTPException(status_code=422, detail="Invalid domain name format.")
+
+    logger.info("api.domains.load", name=body.name)
+
+    try:
+        result = _register_domain_sources(body.name)
+    except FileNotFoundError as exc:
+        logger.warning("api.domains.load.not_found", name=body.name, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    logger.info(
+        "api.domains.load.complete",
+        name=body.name,
+        loaded_count=result["loaded_count"],
+        skipped_count=result["skipped_count"],
+        upload_required_count=result["upload_required_count"],
+    )
+    return DomainLoadResponse(
+        name=body.name,
+        loaded_count=result["loaded_count"],
+        skipped_count=result["skipped_count"],
+        upload_required_count=result["upload_required_count"],
+    )
+
+
+@app.get(
+    "/domains/{name}/sources",
+    response_model=list[dict],
+    tags=["domains"],
+    summary="List sources.yaml entries for a domain pack",
+    status_code=200,
+    responses={
+        404: {"description": "Domain pack not found"},
+        422: {"description": "Invalid domain name format"},
+    },
+)
+def list_domain_sources_endpoint(name: str) -> list[dict]:
+    """Return the list of SourceEntry dicts from sources.yaml for the named domain pack (DOMAIN-01).
+
+    No DB access — reads the domain pack's sources.yaml directly via DomainLoader.
+    Returns 404 if the domain pack does not exist.
+
+    Security (T-06-09 / ASVS V5):
+        - name validated against _DOMAIN_NAME_RE before calling DomainLoader.from_name().
+        - DomainLoader.from_name() validates the name again internally (T-06-01).
+        - Double validation provides defence-in-depth against path traversal.
+    """
+    from pathlib import Path
+
+    from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.domains.loader import DomainLoader
+
+    # Validate domain name before constructing any filesystem path (T-06-09).
+    if not _DOMAIN_NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=422, detail="Invalid domain name format.")
+
+    logger.info("api.domains.sources", name=name)
+
+    settings = get_settings()
+    _domains_path = Path(settings.domain.domains_root).resolve()
+    root = _domains_path.parent if _domains_path.name == "domains" else _domains_path
+
+    try:
+        loader = DomainLoader.from_name(name, root=root)
+    except FileNotFoundError as exc:
+        logger.warning("api.domains.sources.not_found", name=name, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return [s.model_dump() for s in loader.sources]

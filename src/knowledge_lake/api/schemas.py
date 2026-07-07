@@ -554,3 +554,90 @@ class DiscoverOut(BaseModel):
     results: list[DiscoverResultItem] = Field(
         description="Per-result status with source IDs."
     )
+
+
+# ── Registry list/get schemas (D-07 gap audit — 8 new endpoints) ─────────────
+
+
+class SourceListItem(BaseModel):
+    """A single source registry entry for GET /sources and GET /sources/{source_id}.
+
+    Surfaced by the 8-endpoint gap audit (D-07). Contains the key display fields
+    for operators browsing registered sources; no credentials or internal keys.
+    """
+
+    source_id: str = Field(description="Source registry ID (src_...).")
+    name: str = Field(description="Human-readable source name.")
+    url: Optional[str] = Field(default=None, description="Canonical source URL.")
+    source_type: str = Field(description="Kind of source: 'web', 'upload', 'crawler', etc.")
+    license_type: Optional[str] = Field(default=None, description="SPDX license identifier.")
+    domain: Optional[str] = Field(
+        default=None,
+        description="Domain classification extracted from Source.config['domain'].",
+    )
+    created_at: str = Field(description="ISO-8601 creation timestamp.")
+
+
+class ArtifactOut(BaseModel):
+    """A single artifact entry for GET /documents and GET /documents/{artifact_id}.
+
+    Returns the registry metadata for a document artifact of any type.
+    """
+
+    id: str = Field(description="Artifact registry ID (type-prefixed UUIDv7).")
+    artifact_type: str = Field(description="Node type: raw_document, parsed_document, chunk, etc.")
+    source_id: Optional[str] = Field(default=None, description="Source registry ID (src_...).")
+    parent_artifact_id: Optional[str] = Field(
+        default=None,
+        description="Parent artifact ID (None for root raw_document).",
+    )
+    content_hash: str = Field(description="SHA-256 hash of the artifact bytes.")
+    created_at: str = Field(description="ISO-8601 creation timestamp.")
+    storage_uri: Optional[str] = Field(
+        default=None,
+        description="S3 URI where the artifact bytes are stored.",
+    )
+    mime_type: Optional[str] = Field(default=None, description="MIME type of the artifact.")
+
+
+class DatasetOut(BaseModel):
+    """A single dataset entry for GET /datasets and GET /datasets/{dataset_id}.
+
+    Returns the registry metadata for a curated dataset.
+    """
+
+    dataset_id: str = Field(description="Dataset registry ID (dst_...).")
+    name: str = Field(description="Human-readable, unique dataset name.")
+    created_at: str = Field(description="ISO-8601 creation timestamp.")
+    row_count: int = Field(
+        default=0,
+        description="Number of examples in the dataset (0 until exported).",
+    )
+
+
+class DomainLoadRequest(BaseModel):
+    """Request body for POST /domains/load — load a domain pack and register its sources.
+
+    Security (T-06-08 / ASVS V5):
+        - name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' via Pydantic pattern.
+        - Pattern blocks path traversal attempts (e.g. '../etc', 'foo/../bar').
+    """
+
+    name: str = Field(
+        ...,
+        description="Domain pack name to load (e.g. 'healthcare').",
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+    )
+
+
+class DomainLoadResponse(BaseModel):
+    """Response body for POST /domains/load."""
+
+    name: str = Field(description="Domain pack name that was loaded.")
+    loaded_count: int = Field(description="Number of new sources registered.")
+    skipped_count: int = Field(description="Number of sources already in the registry (dedup).")
+    upload_required_count: int = Field(
+        description="Number of upload-type sources that require manual download first.",
+    )
