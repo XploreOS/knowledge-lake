@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Parse, Clean & Chunk** - Multi-format parsing with fallback chain, torture-test validation, cleaning/dedup, and structure-aware chunking (completed 2026-07-05)
 - [x] **Phase 4: Enrichment, Embedding & Search** - LiteLLM enrichment with caching and budget caps, configurable embeddings, Qdrant indexing, semantic search with citations (completed 2026-07-06)
 - [x] **Phase 5: Curation, Datasets & Export** - Corpus quality filtering, dataset generation with lineage, and Parquet/JSONL/DuckDB exports (completed 2026-07-06)
-- [ ] **Phase 6: Healthcare Domain Pack & Full-Surface Validation** - Healthcare pack with seed sources, complete CLI/API/Dagster surface, and 5-10 real sources verified end-to-end
+- [x] **Phase 6: Healthcare Domain Pack & Full-Surface Validation** - Healthcare pack with seed sources, complete CLI/API/Dagster surface, and 5-10 real sources verified end-to-end (completed 2026-07-07)
 
 ## Phase Details
 
@@ -184,7 +184,7 @@ Plans:
   4. The `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export; FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
   5. All pipeline stages run as Dagster assets/jobs with retries and are observable from the Dagster UI
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -198,7 +198,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-04-PLAN.md — RetryPolicy on 12 Dagster assets, healthcare_e2e_job, 5-source E2E test (IFACE-03, DOMAIN-04)
+- [x] 06-04-PLAN.md — RetryPolicy on 12 Dagster assets, healthcare_e2e_job, 5-source E2E test (IFACE-03, DOMAIN-04)
 
 ## Progress
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 3/3 | Complete    | 2026-07-06 |
 | 5. Curation, Datasets & Export | 3/3 | Complete    | 2026-07-06 |
-| 6. Healthcare Domain Pack & Full-Surface Validation | 3/4 | In Progress|  |
+| 6. Healthcare Domain Pack & Full-Surface Validation | 4/4 | Complete   | 2026-07-07 |
 
 ## Coverage
 

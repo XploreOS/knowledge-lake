@@ -86,14 +86,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **IFACE-01**: `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export
 - [x] **IFACE-02**: FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
-- [ ] **IFACE-03**: Pipeline stages run as Dagster assets/jobs with retries, observable from the Dagster UI
+- [x] **IFACE-03**: Pipeline stages run as Dagster assets/jobs with retries, observable from the Dagster UI
 
 ### Domain Packs
 
 - [x] **DOMAIN-01**: Domain packs load from a directory convention (domain.yaml, sources.yaml, taxonomy.yaml, prompts/, validators/) without core code changes
 - [x] **DOMAIN-02**: Healthcare pack ships with curated seed sources spanning HL7 FHIR, US Core, CMS, HIPAA/OCR, ONC/USCDI, CDC, FDA, NIH/NLM, ICD-10-CM, HCPCS, LOINC, RxNorm, NDC, NPPES, and related public resources
 - [x] **DOMAIN-03**: Healthcare pack includes enrichment/QA prompts, taxonomy, and a validator module
-- [ ] **DOMAIN-04**: 5-10 healthcare sources across formats (HTML, PDF, CSV/JSON) flow end-to-end: ingest → parse → clean → chunk → enrich → index → search → export
+- [x] **DOMAIN-04**: 5-10 healthcare sources across formats (HTML, PDF, CSV/JSON) flow end-to-end: ingest → parse → clean → chunk → enrich → index → search → export
 
 ## v2 Requirements
 
@@ -190,10 +190,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOMAIN-01 | Phase 6 | Complete |
 | DOMAIN-02 | Phase 6 | Complete |
 | DOMAIN-03 | Phase 6 | Complete |
-| DOMAIN-04 | Phase 6 | Pending |
+| DOMAIN-04 | Phase 6 | Complete |
 | IFACE-01 | Phase 6 | Complete |
 | IFACE-02 | Phase 6 | Complete |
-| IFACE-03 | Phase 6 | Pending |
+| IFACE-03 | Phase 6 | Complete |
 
 **Coverage:**
 
