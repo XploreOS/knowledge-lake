@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import structlog
-from dagster import Config, asset
+from dagster import AssetSelection, Backoff, Config, RetryPolicy, asset, define_asset_job
 
 from knowledge_lake.dagster_defs.resources import (
     LiteLLMResource,
@@ -52,6 +52,17 @@ log = structlog.get_logger(__name__)
 
 # Default collection — same as the CLI default
 DEFAULT_COLLECTION = "klake_chunks"
+
+# ── Shared RetryPolicy constants ──────────────────────────────────────────────
+
+# Pipeline assets: transient failures (network, DB lock) warrant 2 retries with
+# exponential backoff (IFACE-03, RESEARCH.md Pattern 3).
+_PIPELINE_RETRY = RetryPolicy(max_retries=2, delay=1, backoff=Backoff.EXPONENTIAL)
+
+# Export assets: TrainEvalContaminationError is a business-logic failure — not
+# transient. Only 1 retry with linear delay to surface persistent issues quickly
+# (T-06-12 threat mitigation).
+_EXPORT_RETRY = RetryPolicy(max_retries=1, delay=2)
 
 
 # ── Asset configs ─────────────────────────────────────────────────────────────
@@ -94,6 +105,7 @@ class IngestConfig(Config):
         "Calls pipeline.ingest.ingest_file / ingest_url — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def ingest_raw_document(
     config: IngestConfig,
@@ -182,6 +194,7 @@ def ingest_raw_document(
         "Calls pipeline.parse.parse — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def parsed_document(
     ingest_raw_document: dict[str, Any],
@@ -248,6 +261,7 @@ def parsed_document(
         "Calls pipeline.clean.clean — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def clean_document(
     parsed_document: dict[str, Any],
@@ -317,6 +331,7 @@ def clean_document(
         "Calls pipeline.chunk.chunk — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def chunk_document(
     clean_document: dict[str, Any],
@@ -365,6 +380,7 @@ def chunk_document(
         "pipeline.enrich.enrich_document — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def enrich_document(
     clean_document: dict[str, Any],
@@ -419,6 +435,7 @@ def enrich_document(
         "Calls pipeline.embed.embed — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
     """Embed stage: chunk texts → dense vectors.
@@ -460,6 +477,7 @@ def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
         "Calls pipeline.index.index — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def index_chunks(
     embed_chunks: dict[str, Any],
@@ -538,6 +556,7 @@ class GenerateDatasetConfig(Config):
         "pipeline.datasets.generate_instruction_example — no logic duplicated (D-02)."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def generate_dataset(
     config: GenerateDatasetConfig,
@@ -607,6 +626,7 @@ def generate_dataset(
         "Calls pipeline.curate.curate_document — no logic duplicated."
     ),
     group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
 )
 def curate_document_asset(
     clean_document: dict[str, Any],
@@ -663,6 +683,7 @@ def curate_document_asset(
         "Calls pipeline.export.export_rag_corpus — no logic duplicated (D-02)."
     ),
     group_name="export",
+    retry_policy=_EXPORT_RETRY,
 )
 def export_rag_corpus(
     postgres: PostgresResource,
@@ -706,6 +727,7 @@ def export_rag_corpus(
         "Calls pipeline.export.export_pretrain_corpus — no logic duplicated (D-02)."
     ),
     group_name="export",
+    retry_policy=_EXPORT_RETRY,
 )
 def export_pretrain_corpus(
     postgres: PostgresResource,
@@ -757,6 +779,7 @@ class ExportFinetuneConfig(Config):
         "Calls pipeline.export.export_finetune_dataset — no logic duplicated (D-02)."
     ),
     group_name="export",
+    retry_policy=_EXPORT_RETRY,
 )
 def export_finetune_dataset(
     config: ExportFinetuneConfig,
@@ -795,3 +818,28 @@ def export_finetune_dataset(
         skipped_dangling=result.get("skipped_dangling_lineage"),
     )
     return result
+
+
+# ── Healthcare E2E Job (DOMAIN-04) ────────────────────────────────────────────
+
+# Selects exactly the 7 core pipeline assets for the E2E validation job.
+# curate_document_asset and generate_dataset are NOT included — see Pitfall 6
+# (RESEARCH.md): including dataset-generation assets in the core E2E job
+# would require valid source_artifact_id config for those assets which is
+# separate from the ingest-to-index pipeline being validated. T-06-14 mitigation.
+healthcare_e2e_job = define_asset_job(
+    name="healthcare_e2e_job",
+    selection=AssetSelection.assets(
+        ingest_raw_document,
+        parsed_document,
+        clean_document,
+        chunk_document,
+        enrich_document,
+        embed_chunks,
+        index_chunks,
+    ),
+    description=(
+        "Full pipeline job for healthcare E2E validation (DOMAIN-04). "
+        "Materializes the core ingest-to-index chain over 5 healthcare sources."
+    ),
+)

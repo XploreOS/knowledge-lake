@@ -44,6 +44,7 @@ from knowledge_lake.dagster_defs.assets import (
     export_pretrain_corpus,
     export_rag_corpus,
     generate_dataset,
+    healthcare_e2e_job,
     index_chunks,
     ingest_raw_document,
     parsed_document,
@@ -78,6 +79,7 @@ defs = Definitions(
         export_pretrain_corpus,
         export_finetune_dataset,
     ],
+    jobs=[healthcare_e2e_job],
     resources={
         "postgres": PostgresResource(
             database_url=EnvVar("KLAKE_DATABASE_URL"),
