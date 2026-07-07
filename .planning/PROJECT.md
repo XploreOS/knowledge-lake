@@ -30,31 +30,35 @@ Every domain resource ingested must be traceable from raw source through every t
 
 ### Active
 
-- [ ] Domain-agnostic core with pluggable domain packs
-- [ ] Source registry, document registry, artifact registry with full lineage
-- [ ] Raw/bronze/silver/gold data lake zones with immutable raw storage
-- [ ] Automated crawling via Crawl4AI, Scrapy, Playwright as plugins
-- [ ] Manual file upload into the knowledge lake
-- [ ] Document parsing via Docling/Unstructured/Tika as plugins
-- [ ] Cleaning, normalization, deduplication pipeline
-- [ ] Section-aware, token-aware, table-aware chunking
-- [ ] LLM-based metadata enrichment through LiteLLM gateway
-- [ ] Configurable embeddings (local sentence-transformers or LiteLLM API)
-- [ ] Vector search via Qdrant as a plugin
-- [ ] Corpus curation for pretraining (DataTrove/NeMo Curator-style filtering)
-- [ ] Dataset generation (fine-tuning, RAG eval, instruction tuning, classification, entity extraction)
-- [ ] Export to Parquet, JSONL, DuckDB
-- [ ] FastAPI service with full CRUD and pipeline trigger endpoints
-- [ ] Typer CLI (`klake`) for all operations
-- [ ] Dagster pipeline orchestration from day 1
-- [ ] S3-compatible object storage (MinIO dev, AWS S3 production)
-- [ ] PostgreSQL metadata registry
-- [ ] Healthcare domain pack with 25+ authoritative source seeds
-- [ ] All LLM calls routed through LiteLLM with task-based model aliases
-- [ ] SearXNG-based source discovery
-- [ ] Quality scoring at document and source level
-- [ ] Language detection
-- [ ] Resumable, idempotent jobs with retries and rate limits
+*(All v1.0 requirements validated — see Validated section)*
+
+### Validated (Phase 6 complete — 2026-07-07)
+
+- ✓ Domain-agnostic core with pluggable domain packs — Phase 6
+- ✓ Source registry, document registry, artifact registry with full lineage — Phase 1
+- ✓ Raw/bronze/silver/gold data lake zones with immutable raw storage — Phases 1–5
+- ✓ Automated crawling via Crawl4AI, Scrapy, Playwright as plugins — Phase 2
+- ✓ Manual file upload into the knowledge lake — Phase 2
+- ✓ Document parsing via Docling/Unstructured/Tika as plugins — Phase 3
+- ✓ Cleaning, normalization, deduplication pipeline — Phase 3
+- ✓ Section-aware, token-aware, table-aware chunking — Phase 3
+- ✓ LLM-based metadata enrichment through LiteLLM gateway — Phase 4
+- ✓ Configurable embeddings (local sentence-transformers or LiteLLM API) — Phase 4
+- ✓ Vector search via Qdrant as a plugin — Phase 4
+- ✓ Corpus curation for pretraining (DataTrove/NeMo Curator-style filtering) — Phase 5
+- ✓ Dataset generation (fine-tuning, RAG eval, instruction tuning) — Phase 5
+- ✓ Export to Parquet, JSONL, DuckDB — Phase 5
+- ✓ FastAPI service with full CRUD and pipeline trigger endpoints — Phases 1, 6
+- ✓ Typer CLI (`klake`) for all operations — Phases 1, 6
+- ✓ Dagster pipeline orchestration from day 1 — Phase 1, retries Phase 6
+- ✓ S3-compatible object storage (MinIO dev, AWS S3 production) — Phase 1
+- ✓ PostgreSQL metadata registry — Phase 1
+- ✓ Healthcare domain pack with 28 curated seed sources — Phase 6
+- ✓ All LLM calls routed through LiteLLM with task-based model aliases — Phase 1
+- ✓ SearXNG-based source discovery — Phase 2
+- ✓ Quality scoring at document and source level — Phase 3
+- ✓ Language detection — Phase 3
+- ✓ Resumable, idempotent jobs with retries and rate limits — Phase 6
 
 ### Out of Scope
 
@@ -100,9 +104,9 @@ Every domain resource ingested must be traceable from raw source through every t
 | Plugin architecture for all external tools | Avoid lock-in, enable swapping parsers/crawlers/vector stores | Validated Phase 1 — entry-point resolver + 3 built-ins registered |
 | LiteLLM as sole model gateway | Unified interface for Bedrock, OpenAI, Anthropic, local models | Validated Phase 1 — LiteLLMEmbedder uses embedding_model alias only |
 | PostgreSQL for metadata registry (not OpenMetadata yet) | Simpler for MVP, migrate to catalog tool later | Validated Phase 1 — Alembic migration #1 + self-referencing artifacts node table |
-| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | — Pending (Phase 5) |
+| DataTrove-style curation over custom filters | Proven at scale for pretraining corpus preparation | Validated Phase 5 — batch MinHash dedup + DataTrove filters working |
 | No UI for MVP | CLI + API is sufficient for single user, avoids frontend complexity | Validated Phase 1 — klake CLI + FastAPI /search /lineage working |
-| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | — Pending (Phase 6) |
+| Healthcare first domain pack | Deeply familiar domain, rich public data, high value for RAG/fine-tuning | Validated Phase 6 — 28 sources, DomainLoader, 5-source E2E passed |
 | Typer downgraded to <0.25.0 | docling-core has a conflicting dependency on typer | Phase 1 deviation — RESEARCH had 0.26.8 pinned; uv resolved to <0.25.0 |
 | uuid-utils approved (not uuid6) | PyPI legitimacy verified by human gate — github.com/aminalaee/uuid-utils v0.16.2 | Phase 1 — isolated to ids.py for easy stdlib swap in Python 3.14 |
 
