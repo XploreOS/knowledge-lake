@@ -43,6 +43,7 @@ from knowledge_lake.api.schemas import (
     CrawlStateOut,
     CurateRequest,
     CurateResponse,
+    DedupeResponse,
     CuratedDocumentOut,
     DatasetOut,
     DiscoverOut,
@@ -794,6 +795,45 @@ def curate_endpoint(body: CurateRequest) -> CurateResponse:
         cached=result.get("cached", False),
         quality_score=result.get("quality_score"),
         dedup_status=dedup_status,
+    )
+
+
+@app.post(
+    "/curate/dedupe",
+    response_model=DedupeResponse,
+    tags=["curation"],
+    summary="Run corpus-wide MinHash batch deduplication over all cleaned_document artifacts (CURATE-02)",
+    status_code=200,
+)
+def dedupe_endpoint() -> DedupeResponse:
+    """Build one MinHash LSH index over ALL cleaned_document artifacts in a single pass.
+
+    Corpus-wide deduplication (CURATE-02): classifies each artifact as 'unique' or
+    'near_dup' and updates the dedup_status field on its curated_document child.
+    Equivalent to `klake dedupe` in the CLI — calls pipeline.curate.batch_dedup_corpus()
+    with no per-call options (runs over the full corpus).
+
+    Security (ASVS V5): no user input; read-only artifact scan + targeted metadata update.
+    """
+    from knowledge_lake.pipeline.curate import batch_dedup_corpus
+
+    logger.info("api.dedupe.start")
+    try:
+        result = batch_dedup_corpus()
+    except Exception as exc:
+        logger.error("api.dedupe.error", error=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    logger.info(
+        "api.dedupe.complete",
+        total=result.get("total"),
+        unique=result.get("unique"),
+        near_dup=result.get("near_dup"),
+    )
+    return DedupeResponse(
+        total=result.get("total", 0),
+        unique=result.get("unique", 0),
+        near_dup=result.get("near_dup", 0),
+        skipped_no_curation=result.get("skipped_no_curation", 0),
     )
 
 

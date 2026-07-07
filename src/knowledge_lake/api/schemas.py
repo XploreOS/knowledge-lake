@@ -455,6 +455,17 @@ class CuratedDocumentOut(BaseModel):
     created_at: str = Field(description="ISO-8601 creation timestamp.")
 
 
+class DedupeResponse(BaseModel):
+    """Response body for POST /curate/dedupe — corpus-wide MinHash batch dedup result (CURATE-02)."""
+
+    total: int = Field(description="Total cleaned_document artifacts scanned.")
+    unique: int = Field(description="Artifacts classified as unique (no near-duplicate found).")
+    near_dup: int = Field(description="Artifacts classified as near-duplicate.")
+    skipped_no_curation: int = Field(
+        description="Artifacts skipped because no curated_document child exists yet."
+    )
+
+
 class ReindexResponse(BaseModel):
     """Response body for POST /reindex — zero-downtime alias reindex result (INDEX-02)."""
 
