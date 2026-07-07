@@ -1,0 +1,258 @@
+# Healthcare domain pack — 28 curated source entries (DOMAIN-02, D-03)
+# Grouped by category: standards_bodies, federal_cms, hhs_ocr, onc, cdc, fda, nih_nlm, nppes, clinical_guidelines, research
+#
+# ingest_type values:
+#   crawl  — automatically crawled by the framework
+#   upload — requires manual bulk file download (flag during klake init)
+#
+# Sources with requires_registration: true need free user registration before download.
+
+# ── Standards bodies (4) ──────────────────────────────────────────────────────
+
+- name: "HL7 FHIR R4 Specification"
+  url: "https://build.fhir.org/"
+  source_type: "html"
+  license: "open"
+  tags: ["fhir", "standards", "hl7", "interoperability"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "US Core Implementation Guide"
+  url: "https://www.hl7.org/fhir/us/core/"
+  source_type: "html"
+  license: "open"
+  tags: ["fhir", "us-core", "hl7", "interoperability", "uscdi"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "SMART on FHIR"
+  url: "https://docs.smarthealthit.org/"
+  source_type: "html"
+  license: "open"
+  tags: ["fhir", "smart", "oauth2", "interoperability", "standards"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "CDA/C-CDA HL7 Implementation Guide"
+  url: "https://build.fhir.org/ig/HL7/CDA-core-sd/"
+  source_type: "html"
+  license: "open"
+  tags: ["cda", "c-cda", "hl7", "interoperability", "standards"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Federal agencies — CMS (4) ────────────────────────────────────────────────
+
+- name: "CMS Conditions of Participation"
+  url: "https://www.cms.gov/medicare/provider-enrollment-and-certification/certificationandcomplianc"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["cms", "conditions-of-participation", "regulation", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "HCPCS Level II Code System"
+  url: "https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["hcpcs", "coding", "cms", "billing", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "Medicare Coverage Database"
+  url: "https://www.cms.gov/medicare-coverage-database/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["medicare", "coverage", "cms", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "CMS Medicare Portal"
+  url: "https://www.cms.gov/medicare"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["medicare", "cms", "federal", "benefits"]
+  crawl_config: {depth: 1, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Federal agencies — HHS/OCR (2) ───────────────────────────────────────────
+
+- name: "HIPAA Security Rule"
+  url: "https://www.hhs.gov/hipaa/for-professionals/security/laws-regulations/index.html"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["hipaa", "security-rule", "hhs", "regulation", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "HIPAA Privacy Rule"
+  url: "https://www.hhs.gov/hipaa/for-professionals/privacy/laws-regulations/index.html"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["hipaa", "privacy-rule", "hhs", "regulation", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Federal agencies — ONC (2) ────────────────────────────────────────────────
+
+- name: "USCDI v3 (United States Core Data for Interoperability)"
+  url: "https://www.healthit.gov/isa/united-states-core-data-interoperability-uscdi"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["uscdi", "onc", "interoperability", "federal", "standards"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "ONC 21st Century Cures Act Final Rule"
+  url: "https://www.healthit.gov/topic/oncs-cures-act-final-rule"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["onc", "cures-act", "interoperability", "regulation", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Federal agencies — CDC (3) ────────────────────────────────────────────────
+
+- name: "ICD-10-CM Code Set (CMS bulk)"
+  url: "https://www.cms.gov/medicare/coding-billing/icd-10-codes"
+  source_type: "csv"
+  license: "public-domain"
+  tags: ["icd-10", "coding", "cms", "cdc", "clinical-codes", "federal"]
+  crawl_config: {}
+  ingest_type: "upload"
+  # Download ICD-10-CM tabular ZIP from the CMS page; extract CSV files for upload.
+
+- name: "CDC MMWR (Morbidity and Mortality Weekly Report)"
+  url: "https://www.cdc.gov/mmwr/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["cdc", "mmwr", "public-health", "epidemiology", "research"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "CDC WONDER Public Health Data"
+  url: "https://wonder.cdc.gov/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["cdc", "wonder", "public-health", "data", "epidemiology"]
+  crawl_config: {depth: 1, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Federal agencies — FDA (2) ────────────────────────────────────────────────
+
+- name: "DailyMed Drug Label Database"
+  url: "https://dailymed.nlm.nih.gov/dailymed/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["fda", "dailymed", "drugs", "labels", "nlm", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "FDA National Drug Code (NDC) Database"
+  url: "https://www.accessdata.fda.gov/scripts/cder/ndc/"
+  source_type: "csv"
+  license: "public-domain"
+  tags: ["ndc", "fda", "drugs", "coding", "federal"]
+  crawl_config: {}
+  ingest_type: "upload"
+  # Download NDC bulk ZIP from FDA and upload the product.txt / package.txt CSV files.
+
+# ── NIH/NLM (4) ───────────────────────────────────────────────────────────────
+
+- name: "LOINC Clinical Terminology (CSV bulk)"
+  url: "https://loinc.org/downloads/"
+  source_type: "csv"
+  license: "open"
+  tags: ["loinc", "coding", "terminology", "nlm", "clinical-codes"]
+  crawl_config: {}
+  ingest_type: "upload"
+  requires_registration: true
+  # Free LOINC user registration required at loinc.org before downloading.
+
+- name: "RxNorm via NLM RxNav"
+  url: "https://rxnav.nlm.nih.gov/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["rxnorm", "drugs", "nlm", "coding", "terminology"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "MedlinePlus Health Information"
+  url: "https://medlineplus.gov/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["medlineplus", "nlm", "consumer-health", "conditions", "treatments"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "NCI Thesaurus Browser"
+  url: "https://ncit.nci.nih.gov/ncitbrowser/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["nci", "thesaurus", "oncology", "terminology", "coding"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Registry — NPPES (1) ──────────────────────────────────────────────────────
+
+- name: "NPPES NPI Bulk Data File"
+  url: "https://download.cms.gov/nppes/NPI_Files.html"
+  source_type: "csv"
+  license: "public-domain"
+  tags: ["nppes", "npi", "providers", "registry", "cms", "federal"]
+  crawl_config: {}
+  ingest_type: "upload"
+  # Download monthly NPPES NPI bulk CSV file from CMS and upload.
+
+# ── Clinical guidelines (3) ───────────────────────────────────────────────────
+
+- name: "AHRQ Evidence-Based Reports"
+  url: "https://www.ahrq.gov/research/findings/evidence-based-reports/index.html"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["ahrq", "guidelines", "evidence-based", "clinical", "federal"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+  # Note: National Guideline Clearinghouse (NGC) was retired in 2018; use AHRQ evidence reports portal instead.
+
+- name: "AHA Clinical Guidelines"
+  url: "https://www.heart.org/en/professional/quality-improvement"
+  source_type: "html"
+  license: "open"
+  tags: ["aha", "cardiology", "guidelines", "clinical", "heart"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "ACC Clinical Guidelines"
+  url: "https://www.acc.org/guidelines"
+  source_type: "html"
+  license: "open"
+  tags: ["acc", "cardiology", "guidelines", "clinical", "heart"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+# ── Research (3) ──────────────────────────────────────────────────────────────
+
+- name: "PubMed Central Open Access"
+  url: "https://www.ncbi.nlm.nih.gov/pmc/"
+  source_type: "html"
+  license: "CC"
+  tags: ["pubmed", "research", "nlm", "open-access", "biomedical"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "NIH ClinicalTrials.gov"
+  url: "https://clinicaltrials.gov/"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["clinical-trials", "nih", "research", "federal", "studies"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"
+
+- name: "FDA Adverse Event Reporting System (FAERS)"
+  url: "https://www.fda.gov/drugs/questions-and-answers-fdas-adverse-event-reporting-system-faers"
+  source_type: "html"
+  license: "public-domain"
+  tags: ["fda", "faers", "adverse-events", "pharmacovigilance", "drugs"]
+  crawl_config: {depth: 2, rate_limit_rps: 0.5, robots_txt: true}
+  ingest_type: "crawl"

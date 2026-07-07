@@ -1,0 +1,3 @@
+name: healthcare
+version: "1.0.0"
+description: "Healthcare domain pack — HL7/FHIR, CMS, HHS, ONC, CDC, FDA, NIH/NLM, and clinical terminology sources"

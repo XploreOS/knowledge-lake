@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -111,8 +112,16 @@ class DomainLoader:
         )
         if spec is None or spec.loader is None:
             raise ImportError(f"Could not create module spec for {validator_path}")
+        module_name = f"domain_{self.manifest.name}_validator"
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        # Register in sys.modules BEFORE exec_module so that @dataclass decorator
+        # can resolve cls.__module__ during class construction (Python 3.12 requirement).
+        sys.modules[module_name] = mod
+        try:
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        except Exception:
+            sys.modules.pop(module_name, None)
+            raise
         self.validator = mod.HealthcareValidator()
 
     def render_prompt(self, template_name: str, **kwargs: Any) -> str:

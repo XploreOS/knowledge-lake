@@ -1,0 +1,26 @@
+# Healthcare domain taxonomy (DOMAIN-03, D-04)
+# Defines entity types, coding system subtypes, and domain categories.
+
+entity_types:
+  - Condition
+  - Medication
+  - Procedure
+  - ClinicalCode
+  - Regulation
+  - Guideline
+  - Standard
+
+subtypes:
+  ClinicalCode:
+    - ICD10
+    - LOINC
+    - NDC
+    - HCPCS
+    - RxNorm
+
+categories:
+  - clinical_terminology
+  - federal_regulation
+  - interoperability_standard
+  - public_health_data
+  - drug_information

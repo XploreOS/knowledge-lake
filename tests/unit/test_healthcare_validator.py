@@ -17,12 +17,16 @@ except ImportError:
 # We also try to load the validator directly for isolated tests
 try:
     import importlib.util
+    import sys
     from pathlib import Path
 
     _VALIDATOR_PATH = Path(__file__).parent.parent.parent / "domains" / "healthcare" / "validators" / "validate.py"
     if _VALIDATOR_PATH.exists():
-        _spec = importlib.util.spec_from_file_location("healthcare_validator", str(_VALIDATOR_PATH))
+        _MODULE_NAME = "healthcare_validator_test_isolated"
+        _spec = importlib.util.spec_from_file_location(_MODULE_NAME, str(_VALIDATOR_PATH))
         _mod = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
+        # Register in sys.modules BEFORE exec_module so @dataclass can resolve cls.__module__
+        sys.modules[_MODULE_NAME] = _mod
         _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
         HealthcareValidator = _mod.HealthcareValidator
         _StandaloneValidationResult = _mod.ValidationResult
