@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Healthcare Domain Pack & Full-Surface Validation
 status: verifying
-stopped_at: Completed 05-02 (dataset generation — DATA-01, DATA-02, DATA-03)
-last_updated: "2026-07-07T04:32:15.309Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-07-07T05:13:30.446Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
 progress:
@@ -135,7 +135,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-02 (dataset generation — DATA-01, DATA-02, DATA-03)
+**Stopped at:** Phase 6 context gathered
 
-Last session: 2026-07-06T17:46:17.875Z
-Resume file: .planning/phases/05-curation-datasets-export/05-03-PLAN.md
+Last session: 2026-07-07T05:13:30.438Z
+Resume file: .planning/phases/06-healthcare-domain-pack-full-surface-validation/06-CONTEXT.md
