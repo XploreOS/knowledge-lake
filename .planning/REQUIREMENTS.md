@@ -84,8 +84,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Interfaces
 
-- [ ] **IFACE-01**: `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export
-- [ ] **IFACE-02**: FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
+- [x] **IFACE-01**: `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export
+- [x] **IFACE-02**: FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
 - [ ] **IFACE-03**: Pipeline stages run as Dagster assets/jobs with retries, observable from the Dagster UI
 
 ### Domain Packs
@@ -191,8 +191,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOMAIN-02 | Phase 6 | Complete |
 | DOMAIN-03 | Phase 6 | Complete |
 | DOMAIN-04 | Phase 6 | Pending |
-| IFACE-01 | Phase 6 | Pending |
-| IFACE-02 | Phase 6 | Pending |
+| IFACE-01 | Phase 6 | Complete |
+| IFACE-02 | Phase 6 | Complete |
 | IFACE-03 | Phase 6 | Pending |
 
 **Coverage:**

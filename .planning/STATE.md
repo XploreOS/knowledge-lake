@@ -6,14 +6,14 @@ current_phase: 6
 current_phase_name: Healthcare Domain Pack & Full-Surface Validation
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-07-07T06:04:27.422Z"
+last_updated: "2026-07-07T06:12:09.243Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 6 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 25
-  completed_plans: 23
+  completed_plans: 24
   percent: 83
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 ## Current Position
 
 Phase: 6 (Healthcare Domain Pack & Full-Surface Validation) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 6 execution started
 
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05 P02 | 8min | - tasks | - files |
 | Phase 06 P01 | 6m | 3 tasks | 16 files |
 | Phase 06 P02 | 4min | - tasks | - files |
+| Phase 06 P03 | 4m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,7 @@ Recent decisions affecting current work:
 - [Phase ?]: dataset_examples cache key in payload _cache_key for idempotency (examples not Artifact nodes, D-08)
 - [Phase ?]: DomainSettings nested config model under KLAKE_DOMAIN__ env prefix (DOMAIN-01)
 - [Phase ?]: domain_system_prompt is Optional[str]=None kwarg in enrich.py — keeps enrichment side-effect-free (DOMAIN-03)
+- [Phase ?]: domains_root parent resolution: DomainLoader expects project root but settings.domain.domains_root is the domains/ folder path; resolved in CLI and API
 
 ### Pending Todos
 
@@ -141,5 +143,5 @@ Items acknowledged and carried forward from previous milestone close:
 
 **Stopped at:** Phase 6 context gathered
 
-Last session: 2026-07-07T06:03:53.740Z
+Last session: 2026-07-07T06:12:04.028Z
 Resume file: .planning/phases/06-healthcare-domain-pack-full-surface-validation/06-CONTEXT.md

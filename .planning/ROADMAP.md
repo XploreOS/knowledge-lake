@@ -184,7 +184,7 @@ Plans:
   4. The `klake` CLI covers init, add-source, discover, crawl, upload, parse, clean, chunk, enrich, index, search, curate, dedupe, generate-dataset, and export; FastAPI exposes sources, discover, crawl-jobs, uploads, documents, pipeline actions, search, curation, datasets, and exports endpoints with OpenAPI docs
   5. All pipeline stages run as Dagster assets/jobs with retries and are observable from the Dagster UI
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -194,7 +194,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-03-PLAN.md — klake init + klake index CLI, 8 new API endpoints (IFACE-01, IFACE-02, DOMAIN-01)
+- [x] 06-03-PLAN.md — klake init + klake index CLI, 8 new API endpoints (IFACE-01, IFACE-02, DOMAIN-01)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Parse, Clean & Chunk | 3/3 | Complete    | 2026-07-05 |
 | 4. Enrichment, Embedding & Search | 3/3 | Complete    | 2026-07-06 |
 | 5. Curation, Datasets & Export | 3/3 | Complete    | 2026-07-06 |
-| 6. Healthcare Domain Pack & Full-Surface Validation | 2/4 | In Progress|  |
+| 6. Healthcare Domain Pack & Full-Surface Validation | 3/4 | In Progress|  |
 
 ## Coverage
 
