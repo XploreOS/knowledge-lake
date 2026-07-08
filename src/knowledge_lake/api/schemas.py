@@ -84,6 +84,33 @@ class SearchHit(BaseModel):
         default=None, description="LLM-judged quality score in [0, 1] from enrichment."
     )
 
+    # PAYLOAD-02: source provenance fields (Phase 7 — only populated on points indexed
+    # after Phase 7 or after a full reindex; pre-Phase-7 points return None / []).
+    source_id: Optional[str] = Field(
+        default=None, description="Registry source ID for this chunk's source (src_...)."
+    )
+    source_name: Optional[str] = Field(
+        default=None, description="Human-readable source name."
+    )
+    source_url: Optional[str] = Field(
+        default=None, description="Canonical source URL."
+    )
+    format: Optional[str] = Field(
+        default=None,
+        description="Source format label (e.g. 'html', 'pdf', 'csv') from Source.source_type.",
+    )
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Curated source tags from Source.config (distinct from LLM-extracted keywords).",
+    )
+    title: Optional[str] = Field(
+        default=None, description="Document title from enrichment metadata."
+    )
+    organization: Optional[str] = Field(
+        default=None,
+        description="Publishing organization from Source.config (None until sources.yaml carries organization key).",
+    )
+
 
 class LineageNode(BaseModel):
     """A single artifact node in the lineage chain (FOUND-06, FOUND-07).

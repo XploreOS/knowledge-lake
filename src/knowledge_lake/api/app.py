@@ -176,6 +176,23 @@ def search_endpoint(
         le=1.0,
         description="Filter results to quality_score >= this value.",
     ),
+    source_name: Optional[str] = Query(
+        default=None,
+        description="Filter results to this source name.",
+    ),
+    format: Optional[str] = Query(
+        default=None,
+        description="Filter results to this source format (e.g. 'html', 'pdf').",
+    ),
+    source_id: Optional[str] = Query(
+        default=None,
+        description="Filter results to this source ID.",
+    ),
+    tags: Optional[list[str]] = Query(
+        default=None,
+        description="Filter results where payload tags contain any of these values (OR logic).",
+        max_length=64,
+    ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
 
@@ -184,6 +201,7 @@ def search_endpoint(
     Security (T-01-14 / ASVS V5):
         - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.
         - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.
+        - ``tags`` per-element max_length=64 bounds tag string length (T-07-04-01).
         - Empty/whitespace queries return an empty list (not an error).
 
     Args:
@@ -193,6 +211,15 @@ def search_endpoint(
         domain:            Optional filter — payload['domain'] must match exactly.
         document_type:     Optional filter — payload['document_type'] must match exactly.
         min_quality_score: Optional filter — payload['quality_score'] must be >= this value.
+        source_name:       Optional filter — payload['source_name'] must match exactly.
+        format:            Optional filter — payload['format'] must match exactly.
+        source_id:         Optional filter — payload['source_id'] must match exactly.
+        tags:              Optional OR filter — payload['tags'] must contain any of these values.
+
+    D-13 backward-compat note:
+        source_name, format, tags, source_id filters are only effective on points indexed
+        after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points
+        will not match.
 
     Returns:
         A list of SearchHit objects ordered by score descending.
@@ -214,6 +241,10 @@ def search_endpoint(
         domain=domain,
         document_type=document_type,
         min_quality_score=min_quality_score,
+        source_name=source_name,
+        format=format,
+        source_id=source_id,
+        tags=tags,
     )
     hits = search(
         q,
@@ -222,6 +253,10 @@ def search_endpoint(
         domain=domain,
         document_type=document_type,
         min_quality_score=min_quality_score,
+        source_name=source_name,
+        format=format,
+        source_id=source_id,
+        tags=tags,
     )
 
     # Map Hit → SearchHit, extracting citation + enrichment fields from payload
@@ -241,6 +276,13 @@ def search_endpoint(
                 document_type=payload.get("document_type"),
                 keywords=payload.get("keywords", []),
                 quality_score=payload.get("quality_score"),
+                source_id=payload.get("source_id"),
+                source_name=payload.get("source_name"),
+                source_url=payload.get("source_url"),
+                format=payload.get("format"),
+                tags=payload.get("tags", []),
+                title=payload.get("title"),
+                organization=payload.get("organization"),
             )
         )
 
