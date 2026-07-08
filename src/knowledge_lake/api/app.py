@@ -190,8 +190,8 @@ def search_endpoint(
     ),
     tags: Optional[list[str]] = Query(
         default=None,
-        description="Filter results where payload tags contain any of these values (OR logic).",
-        max_length=64,
+        description="Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
+        max_length=64,  # bounds the number of tags in the list
     ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
@@ -201,7 +201,8 @@ def search_endpoint(
     Security (T-01-14 / ASVS V5):
         - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.
         - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.
-        - ``tags`` per-element max_length=64 bounds tag string length (T-07-04-01).
+        - ``tags`` list max_length=64 bounds number of tags; each element is also
+          validated to max 64 characters (T-07-04-01).
         - Empty/whitespace queries return an empty list (not an error).
 
     Args:
@@ -231,6 +232,12 @@ def search_endpoint(
     # Prevents collection enumeration attacks and rejects malformed names early.
     if not _COLLECTION_NAME_RE.fullmatch(collection):
         raise HTTPException(status_code=422, detail="Invalid collection name format.")
+
+    # Validate per-element tag string length (WR-05, T-07-04-01).
+    # FastAPI's Query(max_length=64) on a list bounds the number of elements,
+    # not the length of each element string.  Enforce element length manually.
+    if tags and any(len(t) > 64 for t in tags):
+        raise HTTPException(status_code=422, detail="Tag values must not exceed 64 characters.")
 
     # Delegate entirely to the existing plain function (D-02)
     logger.info(
