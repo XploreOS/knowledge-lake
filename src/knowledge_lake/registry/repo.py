@@ -1166,17 +1166,11 @@ def list_dataset_examples_by_cache_key(
     are NOT Artifact nodes with a UNIQUE(content_hash, artifact_type) constraint).
 
     Returns an empty list if no matches are found.
-    No raw SQL — ORM select with JSON path comparison (T-01-03).
+    No raw SQL — Python-side JSON filter for DB-agnostic behaviour (T-01-03).
     """
-    # SQLAlchemy JSON path query: payload["_cache_key"].as_string() == cache_key
-    # This uses the JSON type's path-based comparison (works on PostgreSQL and
-    # falls back gracefully on SQLite in-memory test databases).
-    from sqlalchemy import cast, String
-    stmt = (
-        select(DatasetExample)
-        .where(
-            cast(DatasetExample.payload["_cache_key"], String) == f'"{cache_key}"'
-        )
-        .limit(1)
-    )
-    return list(session.execute(stmt).scalars())
+    # Use Python-side filtering to avoid SQLAlchemy JSON path operator
+    # differences between PostgreSQL (-> returns quoted JSON fragment) and
+    # SQLite (JSON_EXTRACT returns unquoted value).  Matches the pattern used
+    # by list_curated_documents_by_dedup_status (line 1148).
+    all_examples = list(session.execute(select(DatasetExample)).scalars())
+    return [e for e in all_examples if (e.payload or {}).get("_cache_key") == cache_key][:1]
