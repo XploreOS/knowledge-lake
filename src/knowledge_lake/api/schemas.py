@@ -300,6 +300,57 @@ class CrawlJobOut(BaseModel):
     )
 
 
+# ── Batch crawl schemas (08-06) — CRAWL-02 ────────────────────────────────────
+
+
+class CrawlAllRequest(BaseModel):
+    """Request body for POST /crawl-all — batch-crawl all registered sources.
+
+    CRAWL-02: optional domain filter narrows the source list to only sources
+    whose domain matches.  Omit to crawl all registered sources.
+    """
+
+    domain: Optional[str] = Field(
+        default=None,
+        description="Optional domain filter (e.g. 'healthcare').",
+    )
+
+
+class CrawlAllSourceResult(BaseModel):
+    """Per-source result entry in a CrawlAllOut response.
+
+    CRAWL-02 D-09: each source's crawl is independent — failures on one source
+    are logged and counted but do not abort the batch.
+    """
+
+    source_id: str = Field(description="Source registry ID (src_...).")
+    status: str = Field(description="'ok' if crawl succeeded, 'failed' otherwise.")
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if status is 'failed', else None.",
+    )
+    pages_complete: Optional[int] = Field(
+        default=None,
+        description="Number of pages successfully crawled (None if failed before crawl started).",
+    )
+
+
+class CrawlAllOut(BaseModel):
+    """Response body for POST /crawl-all — batch-crawl summary.
+
+    CRAWL-02 D-09: reports aggregate totals and a per-source result list.
+    A failure on one source is reflected in 'failed' and 'results' but the
+    endpoint still returns 200 with partial results for the remaining sources.
+    """
+
+    total: int = Field(description="Total number of sources attempted.")
+    succeeded: int = Field(description="Number of sources whose crawl completed without error.")
+    failed: int = Field(description="Number of sources whose crawl raised an exception.")
+    results: list[CrawlAllSourceResult] = Field(
+        description="Per-source crawl result list (one entry per source attempted).",
+    )
+
+
 # ── Parse / Clean / Chunk pipeline schemas (03-03) ───────────────────────────
 
 
