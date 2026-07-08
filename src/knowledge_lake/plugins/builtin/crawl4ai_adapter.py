@@ -123,6 +123,7 @@ class Crawl4AIAdapter:
                     status="robots_blocked",
                     html=None,
                     markdown=None,
+                    http_status_code=403,
                 )
             # Other failure
             error_msg = getattr(result, "error_message", None) or "Unknown error"
@@ -133,6 +134,7 @@ class Crawl4AIAdapter:
                 html=None,
                 markdown=None,
                 error=str(error_msg),
+                http_status_code=status_code,
             )
 
         # Success — extract html and markdown
@@ -171,6 +173,7 @@ class Crawl4AIAdapter:
             html=html_bytes,
             markdown=markdown_text,
             fetched_at=fetched_at,
+            http_status_code=getattr(result, "status_code", None),
         )
 
     def fetch_page_sync(self, url: str) -> CrawlPageResult:

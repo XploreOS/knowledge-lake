@@ -448,6 +448,15 @@ class CrawlPageResult:
     fetched_at: str | None = None
     """ISO-8601 timestamp of when the page was fetched (None if not fetched)."""
 
+    http_status_code: int | None = None
+    """HTTP status code from the network response (None if not available).
+
+    Set by adapters that have access to the raw HTTP status (e.g. crawl4ai).
+    Used by the crawl orchestrator to detect 429/403 for adaptive backoff
+    (CRAWL-03, Pitfall 1).  Defaults to None so all existing CrawlPageResult
+    constructions remain valid without modification.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Crawler Plugin Protocol (INGEST-04, D-02)
