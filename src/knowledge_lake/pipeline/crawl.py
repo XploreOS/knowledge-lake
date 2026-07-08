@@ -420,7 +420,12 @@ async def _crawl_loop(
             pages_failed += 1
             # CRAWL-03 (D-10/D-11): Update adaptive backoff state based on HTTP status.
             # 429 Too Many Requests or 403 Forbidden → record error for exponential backoff.
-            # Other failures (e.g. 404, connection error) → reset error count.
+            # M-03 fix: do NOT reset_errors on other failures (e.g. 404, connection
+            # timeout, DNS error).  A single 404 from a host that has accumulated
+            # 429-based backoff state would wipe the error count and zero the delay,
+            # causing the next request to proceed without backoff despite ongoing
+            # rate-limiting.  Only genuine success (result.status == "complete")
+            # resets backoff state — that branch calls limiter.reset_errors(url) below.
             if result.http_status_code in (429, 403):
                 limiter.record_error(url)
                 log.warning(
@@ -429,8 +434,6 @@ async def _crawl_loop(
                     http_status_code=result.http_status_code,
                     backoff_extra=limiter.backoff_extra(url, settings.crawl.rate_limit_seconds),
                 )
-            else:
-                limiter.reset_errors(url)
             continue
 
         # Success: write raw + bronze artifacts with lineage (D-01)
