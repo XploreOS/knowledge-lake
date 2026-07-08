@@ -8,9 +8,13 @@ Implements the full crawl vertical slice (INGEST-04, INGEST-09):
   - Robots-blocked recording (no artifact write for blocked URLs, D-13)
   - Same-domain scope enforcement via tldextract
   - Hash-second dedup at the artifact layer (INGEST-08)
+  - Per-source crawl_config wiring (CRAWL-01): depth override + adaptive backoff
+  - Adaptive backoff on HTTP 429/403 (CRAWL-03)
+  - Batch crawl across all registered sources (CRAWL-02)
 
 Functions:
     crawl_source(source_url, *, crawler=None, settings=None, max_pages=None) -> dict
+    crawl_all_sources(domain=None, settings=None) -> dict
 """
 
 from __future__ import annotations
@@ -92,6 +96,16 @@ async def crawl_source(
     )
     source_id = source_result["source_id"]
 
+    # CRAWL-01 (D-02): Read per-source crawl_config from registry.
+    # get_source_crawl_config returns the inner crawl_config sub-dict (never None).
+    with get_session() as session:
+        source_crawl_config = registry_repo.get_source_crawl_config(session, source_id)
+
+    # CRAWL-01 (D-04): Apply per-source depth override when present.
+    depth_override = source_crawl_config.get("depth")
+    if depth_override is not None:
+        effective_max_pages = int(depth_override)
+
     # Find or create crawl job (resume support: reuse existing incomplete job)
     job_id = _find_or_create_job(source_id, crawler_name, effective_max_pages, source_url)
 
@@ -121,6 +135,7 @@ async def crawl_source(
         seed_domain=seed_domain,
         max_pages=effective_max_pages,
         settings=s,
+        source_config=source_crawl_config,
     )
 
     # Update job status
@@ -246,6 +261,7 @@ async def _crawl_loop(
     seed_domain: str,
     max_pages: int,
     settings: Settings,
+    source_config: Optional[dict] = None,
 ) -> dict[str, int]:
     """BFS crawl loop: fetch pages, extract links, expand queue up to max_pages.
 
@@ -292,8 +308,10 @@ async def _crawl_loop(
             pages_robots_blocked += 1
             continue
 
-        # Rate limit — resolve delay and wait
-        source_config = None
+        # Rate limit — resolve delay and wait.
+        # source_config is the per-source crawl_config sub-dict passed into _crawl_loop.
+        # It is never None here (crawl_source always passes the looked-up dict, which
+        # defaults to {} when absent — CRAWL-01 D-02 fix; see Pitfall 4 in RESEARCH.md).
         delay = resolve_delay(source_config, robots_crawl_delay, settings.crawl.rate_limit_seconds)
         await limiter.wait(url, delay)
 
