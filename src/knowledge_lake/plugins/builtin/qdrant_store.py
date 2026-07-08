@@ -98,6 +98,7 @@ class QdrantVectorStore:
             collection_name=name,
             vectors_config=self._VectorParams(size=dim, distance=dist),
         )
+        self.ensure_payload_indexes(name)
 
     def ensure_aliased_collection(
         self, alias: str, dim: int, distance: str = "Cosine"
