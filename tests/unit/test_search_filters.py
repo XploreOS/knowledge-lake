@@ -11,7 +11,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
+from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, Range
 
 import knowledge_lake.pipeline.search as search_module
 
@@ -90,3 +90,96 @@ class TestSearchCombinedFilters:
         assert len(query_filter.must) == 3
         keys = {c.key for c in query_filter.must}
         assert keys == {"domain", "document_type", "quality_score"}
+
+
+class TestSearchSourceFilters:
+    """Verify search() builds correct FieldConditions for source_name, format,
+    source_id, and tags filter kwargs (D-10, D-11, PAYLOAD-02).
+
+    All tests use the fake_vstore fixture (autouse fake_embedder is active).
+    """
+
+    def test_source_name_filter_builds_field_condition(self, fake_vstore) -> None:
+        """search with source_name builds a FieldCondition with MatchValue."""
+        search_module.search("q", collection="c", source_name="IFM")
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert isinstance(condition, FieldCondition)
+        assert condition.key == "source_name"
+        assert isinstance(condition.match, MatchValue)
+        assert condition.match.value == "IFM"
+
+    def test_format_filter_builds_field_condition(self, fake_vstore) -> None:
+        """search with format builds a FieldCondition with MatchValue."""
+        search_module.search("q", collection="c", format="pdf")
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert condition.key == "format"
+        assert isinstance(condition.match, MatchValue)
+        assert condition.match.value == "pdf"
+
+    def test_source_id_filter_builds_field_condition(self, fake_vstore) -> None:
+        """search with source_id builds a FieldCondition with MatchValue."""
+        search_module.search("q", collection="c", source_id="src_abc123")
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert condition.key == "source_id"
+        assert isinstance(condition.match, MatchValue)
+        assert condition.match.value == "src_abc123"
+
+    def test_tags_single_tag_uses_match_value(self, fake_vstore) -> None:
+        """search with a single tag uses MatchValue (D-11)."""
+        search_module.search("q", collection="c", tags=["fhir"])
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert condition.key == "tags"
+        assert isinstance(condition.match, MatchValue)
+        assert condition.match.value == "fhir"
+
+    def test_tags_multiple_tags_uses_match_any(self, fake_vstore) -> None:
+        """search with multiple tags uses MatchAny (D-11)."""
+        search_module.search("q", collection="c", tags=["fhir", "hl7"])
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert condition.key == "tags"
+        assert isinstance(condition.match, MatchAny)
+        assert set(condition.match.any) == {"fhir", "hl7"}
+
+    def test_search_all_new_filters_combined(self, fake_vstore) -> None:
+        """search with all 4 new filter kwargs produces 4 must conditions."""
+        search_module.search(
+            "q",
+            collection="c",
+            source_name="X",
+            format="html",
+            source_id="src_1",
+            tags=["a", "b"],
+        )
+
+        query_filter = fake_vstore.search.call_args.kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 4
+        keys = {condition.key for condition in query_filter.must}
+        assert keys == {"source_name", "format", "source_id", "tags"}
+
+    def test_backward_compatible_no_new_kwargs(self, fake_vstore) -> None:
+        """search without any new kwargs produces no query_filter (D-13 backward compat)."""
+        search_module.search("q", collection="c")
+
+        call_kwargs = fake_vstore.search.call_args.kwargs
+        assert call_kwargs["query_filter"] is None
