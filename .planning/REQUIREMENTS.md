@@ -13,11 +13,11 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 
 - [x] **PAYLOAD-01**: Every indexed chunk carries an expanded Qdrant payload — `source_id`, `source_name`, `source_url`, `format`, `tags`, `title`, `organization` — assembled at the index-time enrichment join, backward-compatible with existing points.
 - [x] **PAYLOAD-02**: A user can filter search results by `source_name`, `format`, `tags` (array-contains), and `source_id` across both the CLI and the REST API, backed by Qdrant keyword payload indexes on each filterable field.
-- [ ] **CRAWL-01**: A crawl reads per-source `crawl_config` (depth, rate limit) from the source's stored config / `sources.yaml` instead of hard-coded defaults (fixes `crawl_source` passing `source_config=None`; reconciles the `rate_limit_rps` vs `rate_limit_seconds` key mismatch).
-- [ ] **CRAWL-02**: A user can run `klake crawl-all` to batch-crawl every registered source, with an optional `--domain` filter, driven as a loop over the per-source crawl that honors each source's `crawl_config`.
-- [ ] **CRAWL-03**: The crawler applies adaptive rate limiting — exponential backoff on HTTP 429/403 responses and a per-host cooldown — composed as `max(robots crawl-delay, backoff, configured delay)` so it never crawls faster than robots.txt allows.
-- [ ] **ENRICH-07**: LLM enrichment recovers from truncated model output — truncation is detected via the gateway `finish_reason` (not inferred from a parse error), a longest-valid-prefix is extracted, partial results are flagged, and an incomplete result is never cached under the normal content-hash key.
-- [ ] **INGEST-10**: A crawl of an HTML page can follow links to `.pdf`/`.docx` assets and ingest them through the existing single-URL ingest path — with an SSRF guard on every followed link, a bounded link frontier, and dedup between an HTML page and its linked document.
+- [x] **CRAWL-01**: A crawl reads per-source `crawl_config` (depth, rate limit) from the source's stored config / `sources.yaml` instead of hard-coded defaults (fixes `crawl_source` passing `source_config=None`; reconciles the `rate_limit_rps` vs `rate_limit_seconds` key mismatch).
+- [x] **CRAWL-02**: A user can run `klake crawl-all` to batch-crawl every registered source, with an optional `--domain` filter, driven as a loop over the per-source crawl that honors each source's `crawl_config`.
+- [x] **CRAWL-03**: The crawler applies adaptive rate limiting — exponential backoff on HTTP 429/403 responses and a per-host cooldown — composed as `max(robots crawl-delay, backoff, configured delay)` so it never crawls faster than robots.txt allows.
+- [x] **ENRICH-07**: LLM enrichment recovers from truncated model output — truncation is detected via the gateway `finish_reason` (not inferred from a parse error), a longest-valid-prefix is extracted, partial results are flagged, and an incomplete result is never cached under the normal content-hash key.
+- [x] **INGEST-10**: A crawl of an HTML page can follow links to `.pdf`/`.docx` assets and ingest them through the existing single-URL ingest path — with an SSRF guard on every followed link, a bounded link frontier, and dedup between an HTML page and its linked document.
 
 ### MinIO Domain Segmentation
 
@@ -88,11 +88,11 @@ Which phase covers which requirement. Populated during roadmap creation.
 |-------------|-------|--------|
 | PAYLOAD-01 | Phase 7 | Complete |
 | PAYLOAD-02 | Phase 7 | Complete |
-| CRAWL-01 | Phase 8 | Pending |
-| CRAWL-02 | Phase 8 | Pending |
-| CRAWL-03 | Phase 8 | Pending |
-| ENRICH-07 | Phase 8 | Pending |
-| INGEST-10 | Phase 8 | Pending |
+| CRAWL-01 | Phase 8 | Complete |
+| CRAWL-02 | Phase 8 | Complete |
+| CRAWL-03 | Phase 8 | Complete |
+| ENRICH-07 | Phase 8 | Complete |
+| INGEST-10 | Phase 8 | Complete |
 | STORE-01 | Phase 9 | Pending |
 | STORE-02 | Phase 9 | Pending |
 | STORE-03 | Phase 9 | Pending |

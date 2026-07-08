@@ -6,14 +6,14 @@ current_phase: 8
 current_phase_name: Crawl Maturation
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-08T10:05:55.179Z"
+last_updated: "2026-07-08T10:17:39.417Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
+last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 10
+  completed_plans: 5
   percent: 17
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 07 — Metadata Foundation
+**Current focus:** Phase 8 — Crawl Maturation
 
 ## Current Position
 
-Phase: 8 — Crawl Maturation
-Plan: Not started
+Phase: 8 (Crawl Maturation) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-08 — Phase 7 complete, transitioned to Phase 8
+Last activity: 2026-07-08 — Phase 8 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P02 | 4min | 2 tasks | 4 files |
 | Phase 07 P03 | 3min | 2 tasks | 3 files |
 | Phase 07 P04 | 3m | - tasks | - files |
+| Phase 08 P01 | 5m | - tasks | - files |
 
 ### Quick Tasks Completed
 
@@ -150,6 +151,7 @@ Recent decisions affecting current work:
 - [Phase ?]: format kwarg in search() shadows Python builtin but is accepted — builtin not used in function scope, noqa A002 added
 - [Phase ?]: SearchHit carries 7 new provenance fields (PAYLOAD-02)
 - [Phase ?]: tags Query param per-element max_length=64 (T-07-04-01); --tag singular repeatable CLI convention (D-12)
+- [Phase ?]: [Phase 08-01]: xfail(strict=False) stubs with try/except ImportError guard at module scope prevent collection failures before implementation plans add the symbols
 
 ### Pending Todos
 
@@ -186,7 +188,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Phase 8 context gathered
 
-Last session: 2026-07-08T09:30:02.718Z
+Last session: 2026-07-08T10:17:27.142Z
 Resume file: .planning/phases/08-crawl-maturation/08-CONTEXT.md
 
 ## Operator Next Steps
