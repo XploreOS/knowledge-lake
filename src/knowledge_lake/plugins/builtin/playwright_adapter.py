@@ -175,6 +175,7 @@ class PlaywrightAdapter:
                 status="robots_blocked",
                 html=None,
                 markdown=None,
+                http_status_code=None,
             )
 
         # 3. Rate-limit wait — before navigation (T-02-21)
@@ -182,8 +183,10 @@ class PlaywrightAdapter:
         await self._limiter.wait(url, delay)
 
         # 4. Headless Chromium navigation
+        # H-03 fix: _render_page now returns (html, http_status_code) so we can
+        # forward the HTTP status to CrawlPageResult for CRAWL-03 adaptive backoff.
         try:
-            html = await self._render_page(url)
+            html, http_status_code = await self._render_page(url)
         except Exception as exc:
             log.warning("playwright.render_failed", url=url, error=str(exc))
             return CrawlPageResult(
@@ -192,6 +195,7 @@ class PlaywrightAdapter:
                 html=None,
                 markdown=None,
                 error=str(exc),
+                http_status_code=None,
             )
 
         html_bytes = html.encode("utf-8", errors="replace")
@@ -210,6 +214,7 @@ class PlaywrightAdapter:
                 html=None,
                 markdown=None,
                 error=f"Rendered content exceeded {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB cap",
+                http_status_code=http_status_code,
             )
 
         # 6. HTML → markdown
@@ -229,10 +234,17 @@ class PlaywrightAdapter:
             html=html_bytes,
             markdown=markdown_text,
             fetched_at=fetched_at,
+            http_status_code=http_status_code,
         )
 
-    async def _render_page(self, url: str) -> str:
-        """Launch Chromium headless and navigate to url, returning rendered HTML.
+    async def _render_page(self, url: str) -> tuple[str, int | None]:
+        """Launch Chromium headless and navigate to url.
+
+        Returns a ``(html, http_status_code)`` tuple so the caller can
+        forward the HTTP status to CrawlPageResult for CRAWL-03 adaptive
+        backoff (H-03 fix).  ``http_status_code`` is None when the
+        navigation response is unavailable (e.g. redirect chains where
+        Playwright returns None for the final response).
 
         Hardening (T-02-18):
           - downloads disabled via accept_downloads=False
@@ -249,18 +261,21 @@ class PlaywrightAdapter:
                 )
                 page = await context.new_page()
 
-                # Navigate with finite timeout (hostile-page hardening)
-                await page.goto(
+                # Navigate with finite timeout (hostile-page hardening).
+                # page.goto() returns a Response whose .status is the HTTP
+                # status code of the final response (after redirects).
+                response = await page.goto(
                     url,
                     timeout=self._nav_timeout_ms,
                     wait_until="networkidle",
                 )
+                http_status_code: int | None = response.status if response is not None else None
 
                 html = await page.content()
             finally:
                 await browser.close()
 
-        return html
+        return html, http_status_code
 
     def fetch_page_sync(
         self,
