@@ -220,6 +220,12 @@ class QdrantVectorStore:
             self._client.upsert(collection_name=dest, points=batch)
             total += len(batch)
 
+            # Break only when Qdrant returns None as the explicit end-of-scroll
+            # sentinel.  Do NOT use a falsy check (`if not next_offset`) — integer
+            # 0 is a valid offset for integer-ID collections and would cause the
+            # loop to terminate after the first batch.  IDs are currently UUIDs
+            # (strings) so 0 cannot appear, but explicit None comparison future-
+            # proofs the loop against an ID-type change.
             if next_offset is None:
                 break
 
