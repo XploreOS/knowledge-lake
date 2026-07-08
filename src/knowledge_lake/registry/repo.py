@@ -20,6 +20,8 @@ Functions:
     record_llm_spend                — accumulate LLM spend for a scope (ENRICH-05)
     get_enriched_artifact_for_parsed — resolve parsed -> cleaned -> enriched (D-01)
     get_domain_for_source           — read domain from Source.config JSON
+    get_source_crawl_config         — read crawl_config sub-dict from Source.config (CRAWL-01, D-01, D-05)
+    list_sources_for_crawl_all      — list all sources, optionally filtered by domain (CRAWL-02)
     register_vector_collection      — register/flip current physical collection for an alias (INDEX-02)
     get_current_vector_collection   — read the current physical collection for an alias (INDEX-02)
 """
@@ -836,6 +838,68 @@ def get_source(session: Session, source_id: str) -> Optional[Source]:
     Returns None if not found (does not raise).
     """
     return session.get(Source, source_id)
+
+
+def get_source_crawl_config(session: Session, source_id: str) -> dict:
+    """Return the crawl_config sub-dict from Source.config, or {} if absent.
+
+    Mirrors the get_domain_for_source pattern (D-01): same None-guard and
+    session-handling style.
+
+    D-05: returns the inner crawl_config sub-dict (not the outer Source.config),
+    so callers receive keys like 'rate_limit_rps' and 'depth' directly, without
+    needing to traverse the nesting themselves.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_id:
+        Primary key of the Source row to look up.
+
+    Returns
+    -------
+    dict
+        The value of Source.config['crawl_config'], or {} if the source is
+        missing, Source.config is None, or the 'crawl_config' key is absent.
+    """
+    source = session.get(Source, source_id)
+    if source is None or not source.config:
+        return {}
+    return source.config.get("crawl_config", {})
+
+
+def list_sources_for_crawl_all(
+    session: Session,
+    domain: Optional[str] = None,
+) -> list[Source]:
+    """Return all sources ordered by created_at asc, optionally filtered by domain.
+
+    Domain is stored in Source.config['domain'] (same JSON column used by
+    get_domain_for_source and the GET /sources endpoint at api/app.py:1146).
+    Filtering is done Python-side to avoid JSONB-specific SQL and remain
+    database-agnostic (mirrors the api/app.py:1176 pattern confirmed in RESEARCH.md
+    Pattern 6).
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    domain:
+        If provided, only sources where Source.config.get('domain') == domain
+        are returned.  None returns all sources.
+
+    Returns
+    -------
+    list[Source]
+        All matching Source rows, ordered by created_at ascending.
+    """
+    all_sources = list(
+        session.execute(select(Source).order_by(Source.created_at.asc())).scalars()
+    )
+    if domain is None:
+        return all_sources
+    return [s for s in all_sources if (s.config or {}).get("domain") == domain]
 
 
 # ── Vector collection alias registry (INDEX-02, D-06) ───────────────────────
