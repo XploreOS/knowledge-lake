@@ -12,7 +12,7 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 ### Metadata & Crawl Maturation
 
 - [ ] **PAYLOAD-01**: Every indexed chunk carries an expanded Qdrant payload — `source_id`, `source_name`, `source_url`, `format`, `tags`, `title`, `organization` — assembled at the index-time enrichment join, backward-compatible with existing points.
-- [ ] **PAYLOAD-02**: A user can filter search results by `source_name`, `format`, `tags` (array-contains), and `source_id` across both the CLI and the REST API, backed by Qdrant keyword payload indexes on each filterable field.
+- [x] **PAYLOAD-02**: A user can filter search results by `source_name`, `format`, `tags` (array-contains), and `source_id` across both the CLI and the REST API, backed by Qdrant keyword payload indexes on each filterable field.
 - [ ] **CRAWL-01**: A crawl reads per-source `crawl_config` (depth, rate limit) from the source's stored config / `sources.yaml` instead of hard-coded defaults (fixes `crawl_source` passing `source_config=None`; reconciles the `rate_limit_rps` vs `rate_limit_seconds` key mismatch).
 - [ ] **CRAWL-02**: A user can run `klake crawl-all` to batch-crawl every registered source, with an optional `--domain` filter, driven as a loop over the per-source crawl that honors each source's `crawl_config`.
 - [ ] **CRAWL-03**: The crawler applies adaptive rate limiting — exponential backoff on HTTP 429/403 responses and a per-host cooldown — composed as `max(robots crawl-delay, backoff, configured delay)` so it never crawls faster than robots.txt allows.
@@ -45,20 +45,24 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 Acknowledged and tracked, but out of this milestone's scope.
 
 ### Evaluation & Observability
+
 - **EVAL-01**: RAGAS + Promptfoo eval harness for retrieval-quality measurement.
 - **EVAL-02**: Langfuse/Arize observability integration for production monitoring.
 
 ### Client & Domain Packs
+
 - **SDK-01**: Lightweight client SDK package (`klake-client`) wrapping the REST API.
 - **DOMAIN-05**: Multi-domain pack conflict resolution (overlapping sources across packs).
 - **DOMAIN-06**: Domain pack registry/catalog with versioning and publishing.
 
 ### Discovery, UI & Versioning
+
 - **DISCOVER-01**: SearXNG auto-discovery scheduling (periodic source expansion).
 - **UI-02**: Admin UI / crawl analytics dashboard (coverage per source, freshness, failure rates).
 - **VERSION-01**: lakeFS / DVC data versioning for the raw zone.
 
 ### Crawl & Retrieval Enhancements
+
 - **SITEMAP-01**: Sitemap-first crawl strategy (detect and use sitemaps for URL discovery).
 - **QUALITY-01**: Quality-score propagation to search (Qdrant payload filtering to prefer high-quality chunks).
 
@@ -83,7 +87,7 @@ Which phase covers which requirement. Populated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PAYLOAD-01 | Phase 7 | Pending |
-| PAYLOAD-02 | Phase 7 | Pending |
+| PAYLOAD-02 | Phase 7 | Complete |
 | CRAWL-01 | Phase 8 | Pending |
 | CRAWL-02 | Phase 8 | Pending |
 | CRAWL-03 | Phase 8 | Pending |
@@ -103,11 +107,13 @@ Which phase covers which requirement. Populated during roadmap creation.
 | SKILL-03 | Phase 12 | Pending |
 
 **Coverage:**
+
 - v2.0 requirements: 19 total
 - Mapped to phases: 19 ✓
 - Unmapped: 0 ✓
 
 **Phase distribution:**
+
 - Phase 7 (Metadata Foundation): PAYLOAD-01, PAYLOAD-02 — 2
 - Phase 8 (Crawl Maturation): CRAWL-01, CRAWL-02, CRAWL-03, ENRICH-07, INGEST-10 — 5
 - Phase 9 (Storage Segmentation): STORE-01, STORE-02, STORE-03 — 3
