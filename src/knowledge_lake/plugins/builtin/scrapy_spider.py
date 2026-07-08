@@ -8,7 +8,9 @@ Twisted's ReactorNotRestartable limitation (Pitfall 1 — scrapy/scrapy#2941).
 
 JSONL output format (one JSON object per line):
   {"url": "https://...", "status": "complete|failed|robots_blocked",
-   "html_b64": "<base64 of UTF-8 HTML>", "markdown": null, "error": null}
+   "http_status_code": 200, "html_b64": "<base64 of UTF-8 HTML>",
+   "markdown": null, "error": null}
+  (http_status_code is null for robots_blocked and non-HTTP failures)
 
 Security:
   - validate_public_url is called on source_url before starting (T-02-15)
@@ -139,6 +141,9 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
                 {
                     "url": response.url,
                     "status": "complete",
+                    # H-04 fix: include HTTP status so the adapter can forward it
+                    # to CrawlPageResult.http_status_code for CRAWL-03 backoff.
+                    "http_status_code": response.status,
                     "html_b64": html_b64,
                     "markdown": None,
                     "error": None,
@@ -168,10 +173,18 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         def handle_error(self, failure: Any) -> None:
             url = failure.request.url
             log.warning("scrapy_spider.fetch_error", url=url, error=str(failure))
+            # H-04 fix: extract HTTP status from HttpError responses (e.g. 429, 403)
+            # so the adapter can trigger CRAWL-03 adaptive backoff on rate-limited hosts.
+            http_status_code: int | None = None
+            try:
+                http_status_code = failure.value.response.status
+            except AttributeError:
+                pass  # Non-HTTP failure (e.g. DNS error, timeout) — no status available
             _write_result(
                 {
                     "url": url,
                     "status": "failed",
+                    "http_status_code": http_status_code,
                     "html_b64": None,
                     "markdown": None,
                     "error": str(failure.value),

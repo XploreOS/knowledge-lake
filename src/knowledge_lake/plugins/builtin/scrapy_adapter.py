@@ -205,6 +205,9 @@ class ScrapyAdapter:
             url = obj.get("url", "")
             status = obj.get("status", "failed")
             error = obj.get("error")
+            # H-04 fix: read http_status_code from JSONL so the crawl
+            # orchestrator can trigger CRAWL-03 adaptive backoff on 429/403.
+            http_status_code: int | None = obj.get("http_status_code")
 
             # Decode base64-encoded HTML bytes
             html: bytes | None = None
@@ -223,6 +226,7 @@ class ScrapyAdapter:
                         status="robots_blocked",
                         html=None,
                         markdown=None,
+                        http_status_code=None,
                     )
                 )
             elif status == "complete":
@@ -233,6 +237,7 @@ class ScrapyAdapter:
                         html=html,
                         markdown=obj.get("markdown"),
                         fetched_at=fetched_at,
+                        http_status_code=http_status_code,
                     )
                 )
             else:
@@ -243,6 +248,7 @@ class ScrapyAdapter:
                         html=None,
                         markdown=None,
                         error=error,
+                        http_status_code=http_status_code,
                     )
                 )
 
