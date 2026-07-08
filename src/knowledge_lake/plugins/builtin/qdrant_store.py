@@ -4,6 +4,9 @@ Wraps qdrant-client 1.18 to provide:
   - ensure_collection(): idempotently create a named collection with cosine distance
   - ensure_aliased_collection(): idempotently bootstrap the first versioned
     collection behind a stable alias (D-06, INDEX-02)
+  - ensure_payload_indexes(): create KEYWORD payload indexes for the 7 filterable
+    fields (domain, document_type, source_name, format, source_id, tags, keywords)
+    so filtered searches never trigger a full-collection scan (D-07, D-09, PAYLOAD-02)
   - reindex(): zero-downtime reindex — new physical collection, populate, then
     atomically repoint the alias in a single update_collection_aliases() call
   - copy_all_points(): scroll+upsert all points between two collections
@@ -133,7 +136,42 @@ class QdrantVectorStore:
                 )
             ]
         )
+        self.ensure_payload_indexes(physical)
         return (physical, True)
+
+    def ensure_payload_indexes(self, collection: str) -> None:
+        """Create KEYWORD payload indexes for all filterable metadata fields (D-07, D-09, PAYLOAD-02).
+
+        Indexes the 7 fields that support filtered searches so Qdrant can use an
+        index rather than a full-collection scan. Safe to call multiple times —
+        Qdrant is idempotent on existing indexes.
+
+        CRITICAL: always pass the physical collection name (e.g. "klake_chunks_v1"),
+        never the alias (Pitfall 1 from RESEARCH.md).
+
+        Args:
+            collection: Physical collection name to index (never the alias).
+        """
+        from qdrant_client.models import PayloadSchemaType
+
+        _KEYWORD_FIELDS = [
+            "domain",
+            "document_type",
+            "source_name",
+            "format",
+            "source_id",
+            "tags",
+            "keywords",
+        ]
+
+        for field in _KEYWORD_FIELDS:
+            self._client.create_payload_index(
+                collection_name=collection,
+                field_name=field,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+
+        log.info("qdrant_store.ensure_payload_indexes", collection=collection)
 
     def _next_version_name(self, alias: str) -> str:
         """Return the next ``f"{alias}_vN"`` name after the highest existing version."""
@@ -213,6 +251,7 @@ class QdrantVectorStore:
         )
 
         upsert_fn(next_physical)
+        self.ensure_payload_indexes(next_physical)
 
         from qdrant_client.models import (
             CreateAlias,
