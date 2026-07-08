@@ -20,6 +20,16 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Dagster assets:** 12, all with RetryPolicy
 - **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster requires container rebuild
 
+## Current Milestone: v2.0 Agent-Ready Lake
+
+**Goal:** Mature the v1.0 pipeline into an agent-consumable, self-maintaining knowledge lake — richer searchable metadata, domain-segmented storage, MCP/skill interfaces for AI agents, scheduled re-crawls, and hybrid retrieval.
+
+**Target features:**
+- **Metadata & Crawl Maturation** — expanded Qdrant payload + search filters, per-source crawl config, `crawl-all` batch command, adaptive rate limiting, partial-JSON enrichment recovery, PDF/doc ingest from crawled pages
+- **MinIO Domain Segmentation** — domain/source-scoped S3 keys, object tagging on every write, gold-zone segmentation by domain and dataset type
+- **AI Agent Skills** — MCP server (stdio + SSE), `klake mcp` command, Claude Code skills, static OpenAPI + OpenAI-format tool definitions
+- **Crawl Scheduling + Hybrid Search** — Dagster re-crawl sensor, content-hash change detection, hybrid BM25 + dense search with RRF fusion, configurable search mode
+
 ## Requirements
 
 ### Validated (v1.0)
@@ -54,13 +64,38 @@ Every domain resource ingested must be traceable from raw source through every t
 - ✓ 5-source E2E validation (HTML, PDF, CSV) — Phase 6
 - ✓ Resumable, idempotent jobs with retries and rate limits — Phase 6
 
-### Active (v2.0 candidates)
+### Active (v2.0 — see REQUIREMENTS.md for full text)
 
-- [ ] RAGAS + Promptfoo + Arize eval harness — deferred from Phase 5
-- [ ] Multi-domain pack support (conflict resolution) — deferred from Phase 6
-- [ ] Hybrid BM25 + dense search (RETR-01) — v2 requirement
-- [ ] Domain pack registry/catalog (versioning, publishing) — future milestone
-- [ ] OpenMetadata/DataHub catalog integration — when catalog features needed
+**Metadata & Crawl Maturation**
+- [ ] PAYLOAD-01: Expanded Qdrant chunk payload (source_id, source_name, source_url, format, tags, title, organization)
+- [ ] PAYLOAD-02: Search filters for source_name, format, tags, source_id (API + CLI)
+- [ ] CRAWL-01: Per-source crawl_config (depth, rate_limit_rps) from sources.yaml
+- [ ] CRAWL-02: `klake crawl-all` batch crawl with optional --domain filter
+- [ ] CRAWL-03: Adaptive rate limiting (backoff on 429/403, per-host cooldown)
+- [ ] ENRICH-01: Partial JSON recovery on truncated LLM output
+- [ ] INGEST-01: PDF/doc ingest from crawled page links
+
+**MinIO Domain Segmentation**
+- [ ] STORE-01: Domain/source-scoped S3 keys with `_unclassified` fallback
+- [ ] STORE-02: S3 object tags on every write (domain, source_name, format, artifact_type)
+- [ ] STORE-03: Gold-zone domain segmentation (rag_corpus / pretrain / finetune)
+
+**AI Agent Skills**
+- [ ] MCP-01: MCP server (stdio + SSE) exposing lake operations
+- [ ] MCP-02: `klake mcp` (stdio) and `klake mcp --sse --port 3001`
+- [ ] SKILL-01: Claude Code skills (build-corpus, search-knowledge, add-source, export-dataset)
+- [ ] SKILL-02: Static OpenAPI export (`klake openapi` + docs/openapi.json)
+- [ ] SKILL-03: OpenAI-format tool definitions from Pydantic schemas
+
+**Crawl Scheduling + Hybrid Search**
+- [ ] SCHED-01: Dagster sensor for periodic re-crawl (crawl_schedule)
+- [ ] SCHED-02: Content-hash change detection (skip unchanged)
+- [ ] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion)
+- [ ] RETR-02: Configurable search mode (hybrid | dense | sparse)
+
+### Deferred to v2.1
+
+- EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-01/02 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-01 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy), QUALITY-01 (quality-score search propagation)
 
 ### Out of Scope
 
@@ -119,4 +154,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-07 after v1.0 milestone*
+*Last updated: 2026-07-08 after v2.0 milestone start*
