@@ -312,7 +312,15 @@ async def _crawl_loop(
         # source_config is the per-source crawl_config sub-dict passed into _crawl_loop.
         # It is never None here (crawl_source always passes the looked-up dict, which
         # defaults to {} when absent — CRAWL-01 D-02 fix; see Pitfall 4 in RESEARCH.md).
-        delay = resolve_delay(source_config, robots_crawl_delay, settings.crawl.rate_limit_seconds)
+        # CRAWL-03 (D-12): backoff_extra is computed from the limiter BEFORE resolve_delay
+        # so any cooldown/error state from the previous response is applied to this fetch.
+        backoff_extra = limiter.backoff_extra(url, settings.crawl.rate_limit_seconds)
+        delay = resolve_delay(
+            source_config,
+            robots_crawl_delay,
+            settings.crawl.rate_limit_seconds,
+            backoff_extra=backoff_extra,
+        )
         await limiter.wait(url, delay)
 
         # Fetch via adapter
@@ -337,6 +345,19 @@ async def _crawl_loop(
         if result.status == "failed":
             _record_state(job_id, url, "failed", error=result.error)
             pages_failed += 1
+            # CRAWL-03 (D-10/D-11): Update adaptive backoff state based on HTTP status.
+            # 429 Too Many Requests or 403 Forbidden → record error for exponential backoff.
+            # Other failures (e.g. 404, connection error) → reset error count.
+            if result.http_status_code in (429, 403):
+                limiter.record_error(url)
+                log.warning(
+                    "crawl.backoff_applied",
+                    url=url,
+                    http_status_code=result.http_status_code,
+                    backoff_extra=limiter.backoff_extra(url, settings.crawl.rate_limit_seconds),
+                )
+            else:
+                limiter.reset_errors(url)
             continue
 
         # Success: write raw + bronze artifacts with lineage (D-01)
@@ -357,6 +378,8 @@ async def _crawl_loop(
             bronze_artifact_id=bronze_id,
         )
         pages_complete += 1
+        # CRAWL-03: Reset backoff error state on successful fetch.
+        limiter.reset_errors(url)
 
         # Extract and enqueue discovered links (BFS link-following)
         if result.html and pages_total < max_pages:
