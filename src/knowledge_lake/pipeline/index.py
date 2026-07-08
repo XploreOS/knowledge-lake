@@ -16,6 +16,17 @@ Plus the enrichment-derived filterable fields (D-07, INDEX-01):
 These four fields degrade gracefully to null/empty when no enrichment has run
 yet for the document — enrichment is never a hard blocker to indexing (D-01).
 
+Plus the source-metadata fields (PAYLOAD-01, D-01..D-04):
+  source_id      — Artifact.source_id (foreign key to the source registry row)
+  source_name    — Source.name (human-readable source name)
+  source_url     — Source.url, or None if not set
+  format         — Source.source_type (short format label: 'html', 'pdf', 'csv')
+  tags           — Source.config['tags'] (list[str]), degrades to []
+  title          — enriched_document metadata_['title'], or None
+  organization   — Source.config['organization'], or None
+All 7 fields degrade gracefully to None/[] when source row is absent or config
+is empty (D-03). Only populated on chunks indexed after Phase 7 (D-13).
+
 ``collection`` remains the alias name applications pass unchanged; only the
 resolution layer underneath changed to an alias-backed physical collection via
 ensure_aliased_collection()/reindex() (D-06, INDEX-02).
@@ -84,16 +95,32 @@ def index(
             )
             session.flush()
 
-    # Resolve domain (Source.config['domain']) and the sibling enrichment
-    # (parsed_document -> cleaned_document -> enriched_document) once per
-    # index() call, not once per chunk (INDEX-01, D-07).
+    # Resolve domain (Source.config['domain']), the sibling enrichment
+    # (parsed_document -> cleaned_document -> enriched_document), and the
+    # Source row (name/url/source_type/config) once per index() call —
+    # not once per chunk (INDEX-01, D-01, PAYLOAD-01).
     with get_session() as session:
         parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
+        source_id_val = parsed_artifact.source_id if parsed_artifact is not None else None
         domain = (
-            registry_repo.get_domain_for_source(session, parsed_artifact.source_id)
-            if parsed_artifact is not None
+            registry_repo.get_domain_for_source(session, source_id_val)
+            if source_id_val is not None
             else None
         )
+
+        # Fetch the Source row for the 7 new source-metadata payload fields (PAYLOAD-01, D-02).
+        # Extract scalar values inside the session block to avoid DetachedInstanceError.
+        source = (
+            registry_repo.get_source(session, source_id_val)
+            if source_id_val is not None
+            else None
+        )
+        _sc = (source.config or {}) if source is not None else {}
+        source_name = source.name if source is not None else None
+        source_url = source.url if source is not None else None
+        fmt = source.source_type if source is not None else None  # D-04: source_type IS the format label
+        tags = _sc.get("tags", [])
+        organization = _sc.get("organization")
 
         enriched = registry_repo.get_enriched_artifact_for_parsed(session, parsed_artifact_id)
         if enriched is not None:
@@ -102,6 +129,9 @@ def index(
         else:
             enrichment_metadata = {}
             quality_score = None
+
+    # title comes from enrichment_metadata (resolved inside session, safe to access here).
+    title = enrichment_metadata.get("title")
 
     # Build VectorPoints with citation + enrichment payload.
     # Qdrant requires point IDs to be unsigned integers or bare UUIDs —
@@ -123,6 +153,15 @@ def index(
             "document_type": enrichment_metadata.get("document_type"),
             "keywords": enrichment_metadata.get("keywords", []),
             "quality_score": quality_score,
+            # PAYLOAD-01: 7 new source-metadata fields (D-01..D-04, D-13).
+            # Populated only on chunks indexed after Phase 7; degrade to None/[].
+            "source_id": source_id_val,
+            "source_name": source_name,
+            "source_url": source_url,
+            "format": fmt,
+            "tags": tags,
+            "title": title,
+            "organization": organization,
         }
         points.append(
             VectorPoint(

@@ -203,6 +203,44 @@ class TestEnsureAliasedCollectionRegistration:
         register_spy.assert_not_called()
 
 
+class TestPayloadNewFieldsStub:
+    """RED-state stub: asserts that the 7 new source-metadata fields exist in the payload.
+    Will fail until get_source() + index.py join extension are implemented (Task 1 GREEN).
+    """
+
+    def test_payload_contains_source_name_field(self, session, fake_vstore) -> None:
+        source = registry_repo.create_source(
+            session,
+            name="Stub Source",
+            source_type="html",
+            config={"domain": "healthcare", "tags": ["test"]},
+        )
+        raw = registry_repo.create_raw_artifact(
+            session,
+            source_id=source.id,
+            content_hash="stub_raw",
+            storage_uri="s3://b/raw/stub_raw.pdf",
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="stub_parsed",
+            storage_uri="s3://b/silver/stub_parsed.json",
+        )
+        session.commit()
+
+        index_module.index([_one_chunk()], [[0.1] * 4], dim=4, parsed_artifact_id=parsed.id)
+        payload = _captured_payload(fake_vstore)
+        assert "source_name" in payload
+        assert "format" in payload
+        assert "tags" in payload
+        assert "title" in payload
+        assert "organization" in payload
+        assert "source_url" in payload
+        assert "source_id" in payload
+
+
 class TestEmptyChunksShortCircuit:
     def test_empty_chunks_returns_empty_list_without_touching_vstore(
         self, session, fake_vstore

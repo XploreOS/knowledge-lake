@@ -830,6 +830,14 @@ def get_domain_for_source(session: Session, source_id: str) -> Optional[str]:
     return source.config.get("domain")
 
 
+def get_source(session: Session, source_id: str) -> Optional[Source]:
+    """Fetch a Source by its primary key.
+
+    Returns None if not found (does not raise).
+    """
+    return session.get(Source, source_id)
+
+
 # ── Vector collection alias registry (INDEX-02, D-06) ───────────────────────
 
 
