@@ -1147,8 +1147,11 @@ def list_sources_endpoint(
 ) -> list[SourceListItem]:
     """List all registered sources with pagination and optional domain filter (D-07 gap audit).
 
-    Domain filter is applied in Python against Source.config['domain'] to remain
-    DB-agnostic (same SQLite/Postgres behaviour as list_curated_documents_by_dedup_status).
+    When a domain filter is active, all matching rows are fetched first (Python-side
+    filter for DB-agnosticism, same pattern as list_curated_documents_by_dedup_status)
+    and then LIMIT/OFFSET are applied to the filtered set so pagination counts are
+    correct.  Without a domain filter, LIMIT/OFFSET are pushed to the DB for
+    efficiency.
 
     Security (T-06-11 / ASVS V5):
         - All queries use ORM select() — no raw SQL.
@@ -1159,14 +1162,25 @@ def list_sources_endpoint(
     from knowledge_lake.registry.models import Source
 
     with get_session() as session:
-        stmt = select(Source).order_by(Source.created_at.desc()).limit(limit).offset(offset)
-        sources = list(session.execute(stmt).scalars())
+        if domain is not None:
+            # Fetch all rows and filter in Python so LIMIT/OFFSET apply to the
+            # filtered result set (avoids post-LIMIT domain filtering which breaks
+            # pagination semantics — WR-01).
+            all_sources = list(
+                session.execute(select(Source).order_by(Source.created_at.desc())).scalars()
+            )
+            filtered = [
+                s for s in all_sources
+                if (s.config or {}).get("domain") == domain
+            ]
+            sources = filtered[offset : offset + limit]
+        else:
+            stmt = select(Source).order_by(Source.created_at.desc()).limit(limit).offset(offset)
+            sources = list(session.execute(stmt).scalars())
 
     result: list[SourceListItem] = []
     for src in sources:
         src_domain = (src.config or {}).get("domain") if src.config else None
-        if domain is not None and src_domain != domain:
-            continue
         result.append(
             SourceListItem(
                 source_id=src.id,
