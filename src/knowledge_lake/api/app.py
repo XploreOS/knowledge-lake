@@ -269,7 +269,7 @@ def search_endpoint(
                 score=hit.score,
                 document=payload.get("document", ""),
                 section_path=payload.get("section_path", ""),
-                page=int(payload.get("page", 1)),
+                page=int(payload.get("page") or 1),
                 chunk_id=payload.get("chunk_id", hit.id),
                 text=payload.get("text", ""),
                 domain=payload.get("domain"),
