@@ -45,7 +45,13 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   2. A user can filter search results by `source_name`, `format`, `tags` (array-contains), and `source_id` from both the CLI and the REST API.
   3. Each filterable field is backed by a Qdrant keyword payload index (array-keyword for `tags`), so filtered search never triggers a full-collection scan.
   4. Filters are documented as only fully effective on points indexed after this phase (or after a reindex), matching the backward-compatibility contract.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Wave 0 test scaffold: test_qdrant_payload_indexes.py (RED state)
+- [ ] 07-02-PLAN.md — Payload expansion: get_source() in repo.py, 7 new payload fields in index.py, register_source() tags fix (PAYLOAD-01)
+- [ ] 07-03-PLAN.md — Search backend: ensure_payload_indexes() in qdrant_store.py, search() 4 new filter kwargs + MatchAny (PAYLOAD-02)
+- [ ] 07-04-PLAN.md — CLI/API surface: SearchHit 7 new fields, search endpoint 4 new params, CLI 4 new flags (PAYLOAD-01, PAYLOAD-02)
 
 ### Phase 8: Crawl Maturation
 **Goal**: Crawls honor per-source configuration, adapt politely to server pushback, harvest linked documents, run in batch, and survive truncated enrichment output.
@@ -113,7 +119,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Metadata Foundation | 0/? | Not started | - |
+| 7. Metadata Foundation | 0/4 | Not started | - |
 | 8. Crawl Maturation | 0/? | Not started | - |
 | 9. Storage Segmentation | 0/? | Not started | - |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
