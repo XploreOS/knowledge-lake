@@ -499,6 +499,44 @@ def cmd_crawl(
         raise typer.Exit(code=1)
 
 
+@app.command(name="crawl-all")
+def cmd_crawl_all(
+    domain: Optional[str] = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="Filter to sources matching this domain (e.g. 'healthcare'). Crawls all sources if omitted.",
+    ),
+) -> None:
+    """Batch-crawl all registered sources into the lake.
+
+    Loops over all sources (optionally filtered by --domain), running per-source
+    crawl in sequence.  Per-source failures are logged and counted but do not
+    abort the batch (CRAWL-02 D-07/D-09).
+    """
+    import asyncio
+
+    from knowledge_lake.pipeline.crawl import crawl_all_sources
+
+    try:
+        result = asyncio.run(crawl_all_sources(domain=domain))
+        typer.echo("Crawl-all complete:")
+        typer.echo(f"  total:     {result['total']}")
+        typer.echo(f"  succeeded: {result['succeeded']}")
+        typer.echo(f"  failed:    {result['failed']}")
+        for entry in result.get("results", []):
+            status = entry.get("status", "unknown")
+            source_id = entry.get("source_id", "")
+            error = entry.get("error")
+            if error:
+                typer.echo(f"  {source_id}: {status} — {error}")
+            else:
+                typer.echo(f"  {source_id}: {status}")
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+
 @app.command(name="ingest-url")
 def cmd_ingest_url(
     url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),
