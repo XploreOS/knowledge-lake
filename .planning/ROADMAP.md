@@ -80,10 +80,18 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 08-01-PLAN.md — Wave 0 test scaffold: xfail stubs for all 5 requirements (CRAWL-01/02/03, ENRICH-07, INGEST-10)
 - [ ] 08-02-PLAN.md — Infrastructure layer: repo.py helpers, ratelimit.py adaptive PerHostLimiter, CrawlPageResult http_status_code (CRAWL-01/03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-03-PLAN.md — crawl.py core: fix source_config=None bug, adaptive backoff, crawl_all_sources() (CRAWL-01/02/03)
 - [ ] 08-04-PLAN.md — enrich.py: ENRICH-07 partial-JSON recovery via finish_reason + prefix extraction
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 08-05-PLAN.md — crawl.py INGEST-10: linked-doc post-bronze ingestion with SSRF guard and bounded frontier
 - [ ] 08-06-PLAN.md — CLI + API surface: klake crawl-all command, POST /crawl-all endpoint, CrawlAllOut schemas (CRAWL-02)
 
