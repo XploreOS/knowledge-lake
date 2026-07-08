@@ -377,15 +377,34 @@ def enrich_document(
 
     cost = sum(attempt_costs)
 
+    # D-16: partial results use a separate cache key so they are never returned
+    # as a cache hit for a complete enrichment request.  The complete-enrichment
+    # lookup (Step 3 and the re-check at the top of Step 5) always uses the plain
+    # synthetic_hash — never the partial key — enforcing isolation by key discipline.
+    partial_synthetic_hash = f"partial:{synthetic_hash}" if is_partial else synthetic_hash
+    effective_cache_key = partial_synthetic_hash  # alias used throughout Step 5
+
+    # D-18: log a warning for partial enrichment — no retry inside enrich_document.
+    if is_partial:
+        log.warning(
+            "enrich.partial_result",
+            cleaned_artifact_id=cleaned_artifact_id,
+            content_hash=content_hash,
+            finish_reason="length",
+        )
+
     # Step 5: Re-check cache (guards a concurrent identical run) then write.
     # A concurrent enrich_document() call for the same cleaned artifact can
     # also miss both cache checks and race this insert — catch the resulting
     # UNIQUE(content_hash, artifact_type) IntegrityError and treat it as a
     # cache hit rather than letting it propagate as an unhandled 500 (WR-02).
+    # For partial results, the re-check uses partial_synthetic_hash; for complete
+    # results it uses synthetic_hash — the complete lookup (Step 3) never checked
+    # the partial key, so a cached partial never blocks a new complete enrichment.
     try:
         with get_session() as session:
             existing = registry_repo.get_artifact_by_hash(
-                session, synthetic_hash, "enriched_document"
+                session, effective_cache_key, "enriched_document"
             )
             if existing is not None:
                 return {
@@ -393,6 +412,7 @@ def enrich_document(
                     "cached": True,
                     "status": "cached",
                     "quality_score": existing.quality_score,
+                    "is_partial": is_partial,
                 }
 
             registry_repo.record_llm_spend(session, scope="global", cost_usd=cost)
@@ -407,7 +427,7 @@ def enrich_document(
                 session,
                 source_id=source_id,
                 parent_artifact_id=cleaned_artifact_id,
-                content_hash=synthetic_hash,
+                content_hash=effective_cache_key,
                 metadata=enriched_metadata,
                 quality_score=result.quality_score,
             )
@@ -418,16 +438,17 @@ def enrich_document(
                 "status": "enriched",
                 "quality_score": result.quality_score,
                 "cost_usd": cost,
+                "is_partial": is_partial,
             }
     except IntegrityError:
         log.info(
             "enrich.cache_race_lost",
             cleaned_artifact_id=cleaned_artifact_id,
-            synthetic_hash=synthetic_hash,
+            synthetic_hash=effective_cache_key,
         )
         with get_session() as session:
             existing = registry_repo.get_artifact_by_hash(
-                session, synthetic_hash, "enriched_document"
+                session, effective_cache_key, "enriched_document"
             )
             if existing is None:
                 # No concurrent writer's artifact to fall back to (e.g. its
@@ -442,6 +463,7 @@ def enrich_document(
                 "cached": True,
                 "status": "cached",
                 "quality_score": existing.quality_score,
+                "is_partial": is_partial,
             }
 
     log.info(
