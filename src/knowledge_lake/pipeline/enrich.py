@@ -125,6 +125,51 @@ def _strip_json_fences(content: str) -> str:
     return stripped
 
 
+def _extract_longest_valid_prefix(content: str) -> str:
+    """Return the longest prefix of *content* that closes the outermost JSON object.
+
+    Implements the balanced-brace scan algorithm from RESEARCH.md Pattern 4 (D-15).
+    Walks forward character-by-character tracking nesting depth, in-string state,
+    and escape sequences so that brace characters embedded inside string values are
+    not counted as delimiters.  Records the index of each ``}`` that returns depth
+    to 0 (i.e. closes the outermost object); returns ``content[:last_close + 1]``
+    so any trailing garbage (non-JSON after a complete object) is stripped.
+
+    When no balanced closing brace is found (truly truncated mid-object), returns
+    *content* unchanged — the caller must decide whether to attempt validation on
+    the raw content or treat it as unrecoverable.
+
+    Security note (T-08-04-01): the returned prefix is always passed through
+    ``EnrichmentResult.model_validate_json()`` so Pydantic schema bounds still
+    apply — attacker-influenced content cannot smuggle extra fields via this path.
+    """
+    depth = 0
+    last_close = -1
+    in_string = False
+    escape = False
+    for i, ch in enumerate(content):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                last_close = i
+    if last_close == -1:
+        return content  # no balanced close found — return unchanged
+    return content[: last_close + 1]
+
+
 def _build_enrichment_prompt(
     excerpt: str, deterministic: dict, domain_system_prompt: Optional[str] = None
 ) -> tuple[str, str]:

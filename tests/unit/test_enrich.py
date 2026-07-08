@@ -408,26 +408,72 @@ def test_llm_call_failure_is_skipped_not_raised(
     assert result["artifact_id"] is None
 
 
-# ── Phase 8: Partial enrichment stubs (ENRICH-07) ────────────────────────────
+# ── Phase 8: _extract_longest_valid_prefix unit tests (ENRICH-07 D-15) ───────
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
-def test_partial_enrichment(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
-    """When LiteLLM response has finish_reason='length' with truncated JSON,
-    enrich_document returns status='enriched' with is_partial=True in the result dict.
-    """
-    # Build a mock response with finish_reason='length' and truncated JSON content
-    truncated_payload = '{"summary": "truncated..."'  # intentionally malformed/truncated
+def test_prefix_complete_balanced_json() -> None:
+    """Complete balanced JSON is returned unchanged."""
+    content = '{"a": 1, "b": 2}'
+    assert enrich_module._extract_longest_valid_prefix(content) == content
+
+
+def test_prefix_no_balanced_close() -> None:
+    """Genuinely truncated JSON with no balanced closing brace returns original."""
+    content = '{"a": 1, "b": "truncated'
+    assert enrich_module._extract_longest_valid_prefix(content) == content
+
+
+def test_prefix_strips_trailing_garbage() -> None:
+    """Trailing garbage after a balanced JSON object is stripped."""
+    content = '{"a": 1}extra garbage'
+    assert enrich_module._extract_longest_valid_prefix(content) == '{"a": 1}'
+
+
+def test_prefix_last_outermost_object_when_multiple() -> None:
+    """Returns up to (and including) the last complete outermost object."""
+    content = '{"outer": {"inner": 1}} junk {"incomplete":'
+    assert enrich_module._extract_longest_valid_prefix(content) == '{"outer": {"inner": 1}}'
+
+
+def test_prefix_empty_string() -> None:
+    """Empty string returns empty string."""
+    assert enrich_module._extract_longest_valid_prefix("") == ""
+
+
+def test_prefix_string_embedded_braces_not_counted() -> None:
+    """Brace characters inside string values are not counted as nesting delimiters."""
+    content = '{"key": "value with } brace inside"} trailing'
+    assert enrich_module._extract_longest_valid_prefix(content) == '{"key": "value with } brace inside"}'
+
+
+# ── Phase 8: Partial enrichment tests (ENRICH-07) ────────────────────────────
+
+# Realistic "truncated" payload: a valid EnrichmentResult JSON followed by
+# trailing garbage that simulates the LLM generating noise past the token limit.
+# _extract_longest_valid_prefix finds the balanced closing brace and strips the
+# garbage, leaving a valid prefix that model_validate_json can accept.
+_PARTIAL_PAYLOAD = json.dumps(VALID_PAYLOAD) + " [truncated by token limit...]"
+
+_FINISH_REASON_NONE = None  # sentinel for the non-length path mock helper
+
+
+def _mock_partial_response(payload: str, finish_reason: str = "length") -> MagicMock:
     resp = MagicMock()
     resp.choices = [
         MagicMock(
-            message=MagicMock(content=truncated_payload),
-            finish_reason="length",
+            message=MagicMock(content=payload),
+            finish_reason=finish_reason,
         )
     ]
     resp.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+    return resp
 
-    mock_completion = MagicMock(return_value=resp)
+
+def test_partial_enrichment(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
+    """When LiteLLM response has finish_reason='length' with a truncated-but-recoverable
+    JSON payload, enrich_document returns status='enriched' with is_partial=True.
+    """
+    mock_completion = MagicMock(return_value=_mock_partial_response(_PARTIAL_PAYLOAD))
     with patch("litellm.completion", mock_completion):
         result = enrich_module.enrich_document(
             seeded["cleaned_artifact_id"],
@@ -440,7 +486,6 @@ def test_partial_enrichment(engine, seeded, fake_storage, parsed_doc, test_setti
     assert result.get("is_partial") is True
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
 def test_partial_cache_key(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
     """When finish_reason='length', the enriched artifact is stored under a
     content_hash starting with 'partial:' not the normal synthetic hash.
@@ -449,17 +494,7 @@ def test_partial_cache_key(engine, seeded, fake_storage, parsed_doc, test_settin
 
     from knowledge_lake.registry import repo as registry_repo
 
-    truncated_payload = '{"summary": "truncated..."'
-    resp = MagicMock()
-    resp.choices = [
-        MagicMock(
-            message=MagicMock(content=truncated_payload),
-            finish_reason="length",
-        )
-    ]
-    resp.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
-
-    mock_completion = MagicMock(return_value=resp)
+    mock_completion = MagicMock(return_value=_mock_partial_response(_PARTIAL_PAYLOAD))
     with patch("litellm.completion", mock_completion):
         result = enrich_module.enrich_document(
             seeded["cleaned_artifact_id"],
@@ -475,25 +510,20 @@ def test_partial_cache_key(engine, seeded, fake_storage, parsed_doc, test_settin
         assert artifact.content_hash.startswith("partial:")
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
 def test_partial_not_returned_as_complete(
     engine, seeded, fake_storage, parsed_doc, test_settings
 ) -> None:
     """After a partial enrichment, calling enrich_document again for the same
     content returns status != 'cached' (partial is not a cache hit for complete).
     """
-    truncated_payload = '{"summary": "truncated..."'
-    resp_partial = MagicMock()
-    resp_partial.choices = [
+    resp_partial = _mock_partial_response(_PARTIAL_PAYLOAD, finish_reason="length")
+    resp_complete = MagicMock()
+    resp_complete.choices = [
         MagicMock(
-            message=MagicMock(content=truncated_payload),
-            finish_reason="length",
+            message=MagicMock(content=json.dumps(VALID_PAYLOAD)),
+            finish_reason="stop",
         )
     ]
-    resp_partial.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
-
-    resp_complete = MagicMock()
-    resp_complete.choices = [MagicMock(message=MagicMock(content=json.dumps(VALID_PAYLOAD)))]
     resp_complete.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
 
     with patch("litellm.completion", MagicMock(return_value=resp_partial)):
