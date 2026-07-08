@@ -784,7 +784,11 @@ async def crawl_all_sources(
     for source_url, source_id_val in source_pairs:
         try:
             result = await crawl_source(source_url, settings=s)
-            results.append({"source_id": source_id_val, "status": "ok", **result})
+            # M-04 fix: spread result first, then explicitly override source_id and
+            # status so the caller-supplied source_id_val wins over any 'source_id'
+            # key that crawl_source() returns (which can differ when register_source
+            # URL-deduplicates to a pre-existing source with a different ID).
+            results.append({**result, "source_id": source_id_val, "status": "ok"})
             succeeded += 1
         except Exception as exc:
             log.warning(
