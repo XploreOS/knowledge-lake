@@ -5,15 +5,15 @@ milestone_name: — Agent-Ready Lake
 current_phase: 8
 current_phase_name: Crawl Maturation
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-08T10:17:39.417Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-07-08T10:25:52.117Z"
 last_activity: 2026-07-08
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
   percent: 17
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 8 (Crawl Maturation) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-08 — Phase 8 execution started
 
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P03 | 3min | 2 tasks | 3 files |
 | Phase 07 P04 | 3m | - tasks | - files |
 | Phase 08 P01 | 5m | - tasks | - files |
+| Phase 08 P02 | 15 | 3 tasks | 5 files |
 
 ### Quick Tasks Completed
 
@@ -152,6 +153,9 @@ Recent decisions affecting current work:
 - [Phase ?]: SearchHit carries 7 new provenance fields (PAYLOAD-02)
 - [Phase ?]: tags Query param per-element max_length=64 (T-07-04-01); --tag singular repeatable CLI convention (D-12)
 - [Phase ?]: [Phase 08-01]: xfail(strict=False) stubs with try/except ImportError guard at module scope prevent collection failures before implementation plans add the symbols
+- [Phase ?]: get_source_crawl_config returns inner crawl_config sub-dict not full Source.config (D-05)
+- [Phase ?]: resolve_delay extended with backoff_extra and rate_limit_rps support; rate_limit_seconds wins when both present (D-03)
+- [Phase ?]: PerHostLimiter extended with adaptive backoff state; CrawlPageResult gains http_status_code field
 
 ### Pending Todos
 
@@ -186,9 +190,9 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 context gathered
+**Stopped at:** Completed 08-02-PLAN.md
 
-Last session: 2026-07-08T10:17:27.142Z
+Last session: 2026-07-08T10:25:52.108Z
 Resume file: .planning/phases/08-crawl-maturation/08-CONTEXT.md
 
 ## Operator Next Steps
