@@ -77,7 +77,7 @@ Plans:
   4. A crawl of an HTML page can follow links to `.pdf`/`.docx` assets and ingest them through the existing single-URL ingest path, with an SSRF guard on every followed link, a bounded link frontier, and dedup between an HTML page and its linked document.
   5. Truncated LLM enrichment is detected via the gateway `finish_reason` (not inferred from a parse error), a longest-valid-prefix is recovered and flagged partial, and an incomplete result is never cached under the normal content-hash key.
 
-**Plans**: 3/6 plans executed
+**Plans**: 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -88,7 +88,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 08-03-PLAN.md — crawl.py core: fix source_config=None bug, adaptive backoff, crawl_all_sources() (CRAWL-01/02/03)
-- [ ] 08-04-PLAN.md — enrich.py: ENRICH-07 partial-JSON recovery via finish_reason + prefix extraction
+- [x] 08-04-PLAN.md — enrich.py: ENRICH-07 partial-JSON recovery via finish_reason + prefix extraction
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -162,7 +162,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
-| 8. Crawl Maturation | 3/6 | In Progress|  |
+| 8. Crawl Maturation | 4/6 | In Progress|  |
 | 9. Storage Segmentation | 0/? | Not started | - |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
