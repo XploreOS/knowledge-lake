@@ -82,31 +82,39 @@ Which phase covers which requirement. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PAYLOAD-01 | TBD | Pending |
-| PAYLOAD-02 | TBD | Pending |
-| CRAWL-01 | TBD | Pending |
-| CRAWL-02 | TBD | Pending |
-| CRAWL-03 | TBD | Pending |
-| ENRICH-07 | TBD | Pending |
-| INGEST-10 | TBD | Pending |
-| STORE-01 | TBD | Pending |
-| STORE-02 | TBD | Pending |
-| STORE-03 | TBD | Pending |
-| MCP-01 | TBD | Pending |
-| MCP-02 | TBD | Pending |
-| SKILL-01 | TBD | Pending |
-| SKILL-02 | TBD | Pending |
-| SKILL-03 | TBD | Pending |
-| SCHED-01 | TBD | Pending |
-| SCHED-02 | TBD | Pending |
-| RETR-01 | TBD | Pending |
-| RETR-03 | TBD | Pending |
+| PAYLOAD-01 | Phase 7 | Pending |
+| PAYLOAD-02 | Phase 7 | Pending |
+| CRAWL-01 | Phase 8 | Pending |
+| CRAWL-02 | Phase 8 | Pending |
+| CRAWL-03 | Phase 8 | Pending |
+| ENRICH-07 | Phase 8 | Pending |
+| INGEST-10 | Phase 8 | Pending |
+| STORE-01 | Phase 9 | Pending |
+| STORE-02 | Phase 9 | Pending |
+| STORE-03 | Phase 9 | Pending |
+| RETR-01 | Phase 10 | Pending |
+| RETR-03 | Phase 10 | Pending |
+| SCHED-01 | Phase 11 | Pending |
+| SCHED-02 | Phase 11 | Pending |
+| MCP-01 | Phase 12 | Pending |
+| MCP-02 | Phase 12 | Pending |
+| SKILL-01 | Phase 12 | Pending |
+| SKILL-02 | Phase 12 | Pending |
+| SKILL-03 | Phase 12 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 19 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19 ✓
+- Unmapped: 0 ✓
+
+**Phase distribution:**
+- Phase 7 (Metadata Foundation): PAYLOAD-01, PAYLOAD-02 — 2
+- Phase 8 (Crawl Maturation): CRAWL-01, CRAWL-02, CRAWL-03, ENRICH-07, INGEST-10 — 5
+- Phase 9 (Storage Segmentation): STORE-01, STORE-02, STORE-03 — 3
+- Phase 10 (Hybrid Retrieval): RETR-01, RETR-03 — 2 *(live migration)*
+- Phase 11 (Crawl Scheduling): SCHED-01, SCHED-02 — 2 *(live migration)*
+- Phase 12 (Agent Surfaces): MCP-01, MCP-02, SKILL-01, SKILL-02, SKILL-03 — 5
 
 ---
 *Requirements defined: 2026-07-08*
-*Last updated: 2026-07-08 after v2.0 requirements definition*
+*Last updated: 2026-07-08 after v2.0 roadmap creation (Phases 7-12 mapped, 19/19 coverage)*

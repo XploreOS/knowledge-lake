@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Agent-Ready Lake
 status: planning
-last_updated: "2026-07-08T04:34:03.813Z"
+last_updated: "2026-07-08T00:00:00.000Z"
 last_activity: 2026-07-08
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,23 +17,25 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-02)
+See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 6 — Healthcare Domain Pack & Full-Surface Validation
+**Current focus:** Phase 7 — Metadata Foundation (v2.0 Agent-Ready Lake)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-08 — Milestone v2.0 started
+Phase: 7 of 12 (Metadata Foundation) — 1 of 6 in the v2.0 milestone
+Plan: — (roadmap complete, phase not yet planned)
+Status: Ready to plan
+Last activity: 2026-07-08 — v2.0 roadmap created (Phases 7-12, 19/19 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 25
+- Total plans completed: 25 (v1.0)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -86,6 +88,9 @@ Last activity: 2026-07-08 — Milestone v2.0 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Roadmap v2.0]: Adopted the research's dependency-ordered 6-phase structure (Phases 7-12) over theme grouping — each split is a hard code-level dependency (payload→filters, sparse-infra→hybrid, schedule-columns→sensor, crawl-config/PDF→crawl-all, MCP last). 6 phases sits at the top of the "standard" granularity band, justified because every boundary is load-bearing.
+- [Roadmap v2.0]: Phases 7/8/9 are mutually independent and parallelizable; Phase 10 gates on 7, Phase 11 gates on 8, Phase 12 gates on 8 plus all service functions it wraps.
+- [Roadmap v2.0]: Two phases carry LIVE-DATA MIGRATIONS flagged for `--research-phase` — Phase 10 (Qdrant unnamed→named-vector recreate + re-embed) and Phase 11 (additive Source schedule/hash columns). Phase 12 (Agents) also flagged for a Streamable-HTTP/stdout-isolation spike.
 - [Roadmap]: Vertical MVP structure — Phase 1 is a thin end-to-end spike (one doc: ingest → parse → chunk → embed → index → search) to avoid over-engineering Dagster before proving flow (research Pitfall #1)
 - [Roadmap]: IFACE-01/02/03 (full CLI/API/Dagster surface) mapped to Phase 6 — interfaces grow incrementally each phase but are only verifiable as complete once all stages exist
 - [Roadmap]: SearXNG discovery (INGEST-07) kept in Phase 2 with ingestion rather than deferred to the domain pack phase
@@ -136,25 +141,36 @@ None yet.
 
 ### Blockers/Concerns
 
+**v2.0 (carry into planning):**
+- [Phase 10 — Hybrid, LIVE MIGRATION]: Qdrant unnamed→named-vector collection recreate requires re-embedding old points to synthesize sparse vectors (pure copy insufficient). Verify `query_points`/`FusionQuery`/`SparseVectorParams`/`Modifier.IDF` against installed qdrant-client 1.18 and confirm running Qdrant server ≥ 1.10 before migrating. Validate the reindex on a collection copy first. → `--research-phase`.
+- [Phase 11 — Scheduling, LIVE MIGRATION]: Additive Alembic 0009 (crawl_schedule/last_crawled_at/last_content_hash); change-gate must hash normalized silver text, not raw bytes (WORM/spend thrash). Sensor needs deterministic run_key + cursor watermark. → `--research-phase`.
+- [Phase 12 — Agents]: structlog writes to stdout = the MCP stdio JSON-RPC channel; first-task stdout-lockdown shim + self-test (stdio-only) before any tool logic. Back `--sse` with MCP Streamable HTTP (legacy HTTP+SSE deprecated). Single shared tool registry across stdio/http/openapi/openai. Confirm `streamable_http_app()`/lifespan against installed mcp 1.28.x. → `--research-phase` (Streamable-HTTP/stdout-isolation spike).
+- [Phase 8 — Crawl]: reconcile `crawl_config` key mismatch (`rate_limit_rps` stored vs `rate_limit_seconds` read); adaptive delay = `max(robots, backoff, config)`; SSRF guard + bounded frontier on every followed link.
+- [Phase 9 — Storage]: keep `get_artifact_by_hash` no-op ordered before key construction; forward-only, never rewrite WORM raw keys; `_unclassified` must be a real routed segment.
+
+**v1.0 (historical):**
 - [Phase 3]: Parser quality on real healthcare PDFs unvalidated — torture-test corpus (PARSE-05) gates bulk ingestion; needs deeper research at planning time
 - [Phase 4]: LiteLLM budget enforcement behavior under burst load unverified; Qdrant collection aliasing patterns need research
 - [Phase 5 RESOLVED]: DataTrove integration pattern resolved — call .filter(doc) directly on in-memory Document objects; skip LocalPipelineExecutor/file I/O entirely (curate.py)
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| Eval & Observability | EVAL-01 (RAGAS+Promptfoo), EVAL-02 (Langfuse/Arize) | Deferred | v2.0 planning |
+| Client & Domain Packs | SDK-01 (klake-client), DOMAIN-05/06 (conflict resolution, pack registry) | Deferred | v2.0 planning |
+| Discovery / UI / Versioning | DISCOVER-01 (auto-discovery scheduling), UI-02 (admin dashboard), VERSION-01 (lakeFS/DVC) | Deferred | v2.0 planning |
+| Crawl & Retrieval | SITEMAP-01 (sitemap-first crawl), QUALITY-01 (quality-score search propagation) | Deferred | v2.0 planning |
 
 ## Session Continuity
 
-**Stopped at:** Phase 6 context gathered
+**Stopped at:** v2.0 roadmap created — Phases 7-12 written, 19/19 requirements mapped
 
-Last session: 2026-07-07T13:41:34.968Z
-Resume file: .planning/phases/06-healthcare-domain-pack-full-surface-validation/06-CONTEXT.md
+Last session: 2026-07-08
+Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first v2.0 phase with `/gsd-plan-phase 7`
