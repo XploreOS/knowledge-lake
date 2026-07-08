@@ -381,7 +381,9 @@ def enrich_document(
     # as a cache hit for a complete enrichment request.  The complete-enrichment
     # lookup (Step 3 and the re-check at the top of Step 5) always uses the plain
     # synthetic_hash — never the partial key — enforcing isolation by key discipline.
-    partial_synthetic_hash = f"partial:{synthetic_hash}" if is_partial else synthetic_hash
+    # H-01 fix: "partial:" prefix (8 chars) + hash must fit String(64).  Truncate
+    # the hash component to 55 chars so the composite key is exactly 63 chars ≤ 64.
+    partial_synthetic_hash = f"partial:{synthetic_hash[:55]}" if is_partial else synthetic_hash
     effective_cache_key = partial_synthetic_hash  # alias used throughout Step 5
 
     # D-18: log a warning for partial enrichment — no retry inside enrich_document.
