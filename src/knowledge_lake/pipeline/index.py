@@ -93,7 +93,14 @@ def index(
             registry_repo.register_vector_collection(
                 session, alias_name=collection, physical_collection=physical, dim=dim
             )
-            session.flush()
+            # ORDERING INVARIANT: commit the alias registration row HERE, before
+            # vstore.upsert runs in the separate session block below.  This guarantees
+            # that even if the Qdrant upsert raises (e.g. server timeout), the alias
+            # row is already durable in Postgres.  A future refactor must NOT move
+            # vstore.upsert inside this session block — doing so would roll back the
+            # alias registration on any Qdrant failure and cause ensure_aliased_collection
+            # to create "v2" on the next call instead of reusing "v1".
+            session.commit()
 
     # Resolve domain (Source.config['domain']), the sibling enrichment
     # (parsed_document -> cleaned_document -> enriched_document), and the
