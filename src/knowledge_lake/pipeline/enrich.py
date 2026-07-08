@@ -259,7 +259,15 @@ def _call_llm_for_enrichment(
     finish_reason = response.choices[0].finish_reason
     if finish_reason == "length":
         prefix_content = _extract_longest_valid_prefix(content)
-        result = EnrichmentResult.model_validate_json(prefix_content)  # raises ValidationError if unrecoverable
+        # H-02 fix: catch ValidationError from failed prefix recovery and re-raise
+        # as ValueError, which tenacity does NOT retry (only RuntimeError and
+        # ValidationError are in the retry set).  This prevents 3× LLM budget burn
+        # on truly unrecoverable truncation.  The caller's broad except-Exception
+        # block handles ValueError and returns status="skipped_enrichment_failed".
+        try:
+            result = EnrichmentResult.model_validate_json(prefix_content)
+        except ValidationError as exc:
+            raise ValueError(f"partial enrichment has no recoverable prefix: {exc}") from exc
         return result, response, True
 
     result = EnrichmentResult.model_validate_json(content)
