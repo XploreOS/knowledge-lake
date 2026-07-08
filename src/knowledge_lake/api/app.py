@@ -38,6 +38,9 @@ from knowledge_lake.api.schemas import (
     ChunkResponse,
     CleanRequest,
     CleanResponse,
+    CrawlAllOut,
+    CrawlAllRequest,
+    CrawlAllSourceResult,
     CrawlJobCreate,
     CrawlJobOut,
     CrawlStateOut,
@@ -584,6 +587,54 @@ def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
         crawler=job.crawler or "",
         status=job.status or "unknown",
         states=states,
+    )
+
+
+@app.post(
+    "/crawl-all",
+    response_model=CrawlAllOut,
+    tags=["crawl"],
+    summary="Batch-crawl all registered sources",
+    status_code=200,
+)
+async def crawl_all_endpoint(
+    domain: Optional[str] = Query(None, description="Filter by domain (e.g. 'healthcare'). Crawls all sources if omitted."),
+) -> CrawlAllOut:
+    """Batch-crawl all registered sources into the lake (CRAWL-02 D-08/D-09).
+
+    Loops over all sources (optionally filtered by domain), running per-source
+    crawl in sequence.  Per-source failures are logged and counted but do not
+    abort the batch — a summary is always returned (D-09).
+
+    Security (T-08-06-02):
+        domain is passed as a Python-side string filter to list_sources_for_crawl_all;
+        no SQL injection risk (SQLAlchemy ORM, Python-side equality check).
+    """
+    from knowledge_lake.pipeline.crawl import crawl_all_sources
+
+    logger.info("api.crawl_all.start", domain=domain)
+
+    try:
+        raw = await crawl_all_sources(domain=domain)
+    except Exception as exc:
+        logger.error("api.crawl_all.unexpected_error", error=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    results = [
+        CrawlAllSourceResult(
+            source_id=entry.get("source_id", ""),
+            status=entry.get("status", "failed"),
+            error=entry.get("error"),
+            pages_complete=entry.get("pages_complete"),
+        )
+        for entry in raw.get("results", [])
+    ]
+
+    return CrawlAllOut(
+        total=raw.get("total", 0),
+        succeeded=raw.get("succeeded", 0),
+        failed=raw.get("failed", 0),
+        results=results,
     )
 
 
