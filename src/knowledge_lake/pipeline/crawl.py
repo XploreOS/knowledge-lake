@@ -36,11 +36,45 @@ from knowledge_lake.pipeline.ingest import normalize_url, register_source, valid
 from knowledge_lake.plugins.resolver import get_crawler
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.repo import list_sources_for_crawl_all as _repo_list_sources_for_crawl_all
 from knowledge_lake.storage.s3 import StorageBackend
 
 log = structlog.get_logger(__name__)
 
 _LINK_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+
+
+def list_sources_for_crawl_all(domain: Optional[str] = None) -> list[Any]:
+    """Session-aware wrapper: return all sources (optionally filtered by domain).
+
+    This module-level wrapper exists so tests can patch
+    ``knowledge_lake.pipeline.crawl.list_sources_for_crawl_all`` without
+    needing to also inject a SQLAlchemy session.  Production callers should
+    use this function (or call the underlying repo function directly with a
+    session).
+
+    Returns a list of ``_SourceRow`` namedtuple-like objects with ``url`` and
+    ``id`` attributes, materialised inside the session to prevent
+    ``DetachedInstanceError`` on lazy-loaded attributes after session close.
+
+    Parameters
+    ----------
+    domain:
+        Optional domain filter.  None returns all sources.
+
+    Returns
+    -------
+    list
+        Objects with ``.url`` and ``.id`` attributes, ready to iterate outside
+        the session context.
+    """
+    from collections import namedtuple  # local import avoids module-level namespace pollution
+    _SourceRow = namedtuple("_SourceRow", ["url", "id"])
+    with get_session() as session:
+        sources = _repo_list_sources_for_crawl_all(session, domain=domain)
+        # Materialise url and id while the session is still open to prevent
+        # DetachedInstanceError when SQLAlchemy lazy-loads after session close.
+        return [_SourceRow(url=src.url, id=src.id) for src in sources]
 
 
 async def crawl_source(
@@ -528,3 +562,76 @@ def _name_from_url(url: str) -> str:
     """Derive a human-readable source name from a URL."""
     parsed = urlparse(url)
     return parsed.netloc or "crawl-source"
+
+
+async def crawl_all_sources(
+    domain: Optional[str] = None,
+    settings: Optional[Settings] = None,
+) -> dict[str, Any]:
+    """Crawl all registered sources sequentially, optionally filtered by domain.
+
+    Implements CRAWL-02 (D-06/D-07/D-09):
+      - Sequential loop, no parallelism for v2.0 (D-06)
+      - Each source failure is caught, logged, and counted without aborting the batch (D-09)
+      - Returns a summary dict with total, succeeded, failed, and per-source results
+
+    Parameters
+    ----------
+    domain:
+        Optional domain filter (e.g. 'healthcare'). If None, all sources are crawled.
+    settings:
+        Settings override. Uses get_settings() if None.
+
+    Returns
+    -------
+    dict with keys:
+        total (int): number of sources attempted
+        succeeded (int): number of sources crawled successfully
+        failed (int): number of sources that raised an exception
+        results (list): per-source result dicts with at least source_id and status
+    """
+    s = settings or get_settings()
+
+    # Fetch all sources (optionally filtered by domain) from the registry.
+    # list_sources_for_crawl_all is a module-level wrapper so tests can patch it
+    # without needing to inject a SQLAlchemy session (CRAWL-02, D-06).
+    # It returns Source ORM objects in production; tests may return dicts.
+    raw_sources = list_sources_for_crawl_all(domain=domain)
+
+    # Materialise (url, id) pairs from whatever the source list returns.
+    # Production: Source ORM objects with .url and .id attributes.
+    # Tests: plain dicts (patched mock return value) — handled via isinstance check.
+    source_pairs: list[tuple[Any, Any]] = []
+    for src in raw_sources:
+        if isinstance(src, dict):
+            source_pairs.append((src["url"], src["id"]))
+        else:
+            source_pairs.append((src.url, src.id))
+
+    total = len(source_pairs)
+    succeeded = 0
+    failed = 0
+    results: list[dict[str, Any]] = []
+
+    for source_url, source_id_val in source_pairs:
+        try:
+            result = await crawl_source(source_url, settings=s)
+            results.append({"source_id": source_id_val, "status": "ok", **result})
+            succeeded += 1
+        except Exception as exc:
+            log.warning(
+                "crawl_all.source_failed",
+                source_id=source_id_val,
+                error=str(exc),
+            )
+            results.append(
+                {"source_id": source_id_val, "status": "failed", "error": str(exc)}
+            )
+            failed += 1
+
+    return {
+        "total": total,
+        "succeeded": succeeded,
+        "failed": failed,
+        "results": results,
+    }
