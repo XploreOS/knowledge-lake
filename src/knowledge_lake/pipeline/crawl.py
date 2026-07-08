@@ -1,6 +1,6 @@
 """Crawl orchestrator: drive a crawl job from seed URL to raw+bronze artifacts.
 
-Implements the full crawl vertical slice (INGEST-04, INGEST-09):
+Implements the full crawl vertical slice (INGEST-04, INGEST-09, INGEST-10):
   - SSRF re-validation of every URL before fetch (T-02-09, Pitfall 2)
   - Two-artifact-per-page write: raw HTML + bronze markdown (D-01 lineage)
   - Resume from pending crawl_states on re-run (D-03)
@@ -11,19 +11,22 @@ Implements the full crawl vertical slice (INGEST-04, INGEST-09):
   - Per-source crawl_config wiring (CRAWL-01): depth override + adaptive backoff
   - Adaptive backoff on HTTP 429/403 (CRAWL-03)
   - Batch crawl across all registered sources (CRAWL-02)
+  - Linked-document ingestion (.pdf/.docx hrefs from HTML pages, INGEST-10)
 
 Functions:
     crawl_source(source_url, *, crawler=None, settings=None, max_pages=None) -> dict
     crawl_all_sources(domain=None, settings=None) -> dict
+    _extract_linked_docs(html, base_url) -> list[str]
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime
+import functools
 import re
 from collections import deque
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from urllib.parse import urljoin, urlparse, urldefrag
 
 import structlog
@@ -32,7 +35,7 @@ import tldextract
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.crawl.ratelimit import PerHostLimiter, resolve_delay
 from knowledge_lake.crawl.robots import fetch_robots
-from knowledge_lake.pipeline.ingest import normalize_url, register_source, validate_public_url
+from knowledge_lake.pipeline.ingest import normalize_url, register_source, validate_public_url, ingest_url
 from knowledge_lake.plugins.resolver import get_crawler
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
@@ -42,6 +45,12 @@ from knowledge_lake.storage.s3 import StorageBackend
 log = structlog.get_logger(__name__)
 
 _LINK_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+
+# INGEST-10 (D-19/D-20): Linked-document ingestion constants.
+# MAX_LINKED_DOCS_PER_PAGE caps the number of linked .pdf/.docx URLs followed per HTML page.
+# LINKED_DOC_EXTENSIONS is the set of file extensions that trigger linked-doc ingestion.
+MAX_LINKED_DOCS_PER_PAGE: int = 10
+LINKED_DOC_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx"})
 
 
 def list_sources_for_crawl_all(domain: Optional[str] = None) -> list[Any]:
@@ -478,6 +487,79 @@ def _extract_links(html: bytes, base_url: str, seed_domain: str) -> list[str]:
             links.append(absolute)
 
     return links
+
+
+def _extract_linked_docs(
+    html: Union[bytes, str],
+    base_url: str,
+) -> list[str]:
+    """Extract .pdf and .docx hrefs from raw HTML, returning absolute URLs.
+
+    INGEST-10 (D-19/D-20): Linked-document extraction runs after the parent HTML
+    page has been written as a bronze artifact. Only LINKED_DOC_EXTENSIONS are
+    returned; .html and all other extensions are excluded.
+
+    Key differences from _extract_links:
+      - Does NOT apply a same-domain filter (.pdf/.docx on external domains are
+        valid follows — RESEARCH.md anti-pattern note, D-19).
+      - Returns LINKED_DOC_EXTENSIONS only (.pdf, .docx).
+      - Applies the MAX_LINKED_DOCS_PER_PAGE cap on the returned list.
+      - Handles both bytes and str input for flexibility.
+
+    SSRF validation is NOT applied here — the caller must call validate_public_url
+    on every URL before issuing any HTTP request (D-21, T-08-05-01).
+
+    Args:
+        html:      Raw HTML content (bytes or str). Bytes are decoded utf-8
+                   with errors='replace'.
+        base_url:  Absolute base URL of the page (used to resolve relative hrefs).
+
+    Returns:
+        List of absolute URLs (deduplicated within the page, capped at
+        MAX_LINKED_DOCS_PER_PAGE).
+    """
+    if not html:
+        return []
+
+    if isinstance(html, bytes):
+        try:
+            text = html.decode("utf-8", errors="replace")
+        except Exception:
+            return []
+    else:
+        text = html
+
+    links: list[str] = []
+    seen_in_page: set[str] = set()
+
+    for match in _LINK_RE.finditer(text):
+        href = match.group(1).strip()
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            continue
+
+        # Resolve relative URLs against base_url
+        absolute = urljoin(base_url, href)
+        # Strip fragment
+        absolute, _ = urldefrag(absolute)
+
+        # Only http/https
+        parsed = urlparse(absolute)
+        if parsed.scheme not in ("http", "https"):
+            continue
+
+        # Only LINKED_DOC_EXTENSIONS — no same-domain filter (D-19)
+        path_lower = parsed.path.lower()
+        import os.path as _osp
+        ext = _osp.splitext(path_lower)[1]
+        if ext not in LINKED_DOC_EXTENSIONS:
+            continue
+
+        if absolute not in seen_in_page:
+            seen_in_page.add(absolute)
+            links.append(absolute)
+
+    # Apply cap here so callers always get a bounded list (D-20)
+    return links[:MAX_LINKED_DOCS_PER_PAGE]
 
 
 def _write_artifacts(
