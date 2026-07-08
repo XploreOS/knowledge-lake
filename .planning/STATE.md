@@ -1,10 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: Agent-Ready Lake
+milestone_name: — Agent-Ready Lake
+current_phase: 7
+current_phase_name: Metadata Foundation
 status: planning
-last_updated: "2026-07-08T00:00:00.000Z"
+stopped_at: Phase 7 context gathered
+last_updated: "2026-07-08T05:24:04.288Z"
 last_activity: 2026-07-08
+last_activity_desc: v2.0 roadmap created (Phases 7-12, 19/19 requirements mapped)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -142,6 +146,7 @@ None yet.
 ### Blockers/Concerns
 
 **v2.0 (carry into planning):**
+
 - [Phase 10 — Hybrid, LIVE MIGRATION]: Qdrant unnamed→named-vector collection recreate requires re-embedding old points to synthesize sparse vectors (pure copy insufficient). Verify `query_points`/`FusionQuery`/`SparseVectorParams`/`Modifier.IDF` against installed qdrant-client 1.18 and confirm running Qdrant server ≥ 1.10 before migrating. Validate the reindex on a collection copy first. → `--research-phase`.
 - [Phase 11 — Scheduling, LIVE MIGRATION]: Additive Alembic 0009 (crawl_schedule/last_crawled_at/last_content_hash); change-gate must hash normalized silver text, not raw bytes (WORM/spend thrash). Sensor needs deterministic run_key + cursor watermark. → `--research-phase`.
 - [Phase 12 — Agents]: structlog writes to stdout = the MCP stdio JSON-RPC channel; first-task stdout-lockdown shim + self-test (stdio-only) before any tool logic. Back `--sse` with MCP Streamable HTTP (legacy HTTP+SSE deprecated). Single shared tool registry across stdio/http/openapi/openai. Confirm `streamable_http_app()`/lifespan against installed mcp 1.28.x. → `--research-phase` (Streamable-HTTP/stdout-isolation spike).
@@ -149,6 +154,7 @@ None yet.
 - [Phase 9 — Storage]: keep `get_artifact_by_hash` no-op ordered before key construction; forward-only, never rewrite WORM raw keys; `_unclassified` must be a real routed segment.
 
 **v1.0 (historical):**
+
 - [Phase 3]: Parser quality on real healthcare PDFs unvalidated — torture-test corpus (PARSE-05) gates bulk ingestion; needs deeper research at planning time
 - [Phase 4]: LiteLLM budget enforcement behavior under burst load unverified; Qdrant collection aliasing patterns need research
 - [Phase 5 RESOLVED]: DataTrove integration pattern resolved — call .filter(doc) directly on in-memory Document objects; skip LocalPipelineExecutor/file I/O entirely (curate.py)
@@ -166,10 +172,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** v2.0 roadmap created — Phases 7-12 written, 19/19 requirements mapped
+**Stopped at:** Phase 7 context gathered
 
-Last session: 2026-07-08
-Resume file: None
+Last session: 2026-07-08T05:24:04.278Z
+Resume file: .planning/phases/07-metadata-foundation/07-CONTEXT.md
 
 ## Operator Next Steps
 
