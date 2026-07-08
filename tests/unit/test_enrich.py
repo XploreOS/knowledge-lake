@@ -406,3 +406,110 @@ def test_llm_call_failure_is_skipped_not_raised(
 
     assert result["status"] == "skipped_enrichment_failed"
     assert result["artifact_id"] is None
+
+
+# ── Phase 8: Partial enrichment stubs (ENRICH-07) ────────────────────────────
+
+
+@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
+def test_partial_enrichment(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
+    """When LiteLLM response has finish_reason='length' with truncated JSON,
+    enrich_document returns status='enriched' with is_partial=True in the result dict.
+    """
+    # Build a mock response with finish_reason='length' and truncated JSON content
+    truncated_payload = '{"summary": "truncated..."'  # intentionally malformed/truncated
+    resp = MagicMock()
+    resp.choices = [
+        MagicMock(
+            message=MagicMock(content=truncated_payload),
+            finish_reason="length",
+        )
+    ]
+    resp.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    mock_completion = MagicMock(return_value=resp)
+    with patch("litellm.completion", mock_completion):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert result["status"] == "enriched"
+    assert result.get("is_partial") is True
+
+
+@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
+def test_partial_cache_key(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
+    """When finish_reason='length', the enriched artifact is stored under a
+    content_hash starting with 'partial:' not the normal synthetic hash.
+    """
+    from sqlalchemy.orm import Session as _Session
+
+    from knowledge_lake.registry import repo as registry_repo
+
+    truncated_payload = '{"summary": "truncated..."'
+    resp = MagicMock()
+    resp.choices = [
+        MagicMock(
+            message=MagicMock(content=truncated_payload),
+            finish_reason="length",
+        )
+    ]
+    resp.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    mock_completion = MagicMock(return_value=resp)
+    with patch("litellm.completion", mock_completion):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert result.get("artifact_id") is not None
+    with _Session(engine) as check_session:
+        artifact = registry_repo.get_artifact(check_session, result["artifact_id"])
+        assert artifact is not None
+        assert artifact.content_hash.startswith("partial:")
+
+
+@pytest.mark.xfail(strict=False, reason="Phase 8 ENRICH-07 — not yet implemented")
+def test_partial_not_returned_as_complete(
+    engine, seeded, fake_storage, parsed_doc, test_settings
+) -> None:
+    """After a partial enrichment, calling enrich_document again for the same
+    content returns status != 'cached' (partial is not a cache hit for complete).
+    """
+    truncated_payload = '{"summary": "truncated..."'
+    resp_partial = MagicMock()
+    resp_partial.choices = [
+        MagicMock(
+            message=MagicMock(content=truncated_payload),
+            finish_reason="length",
+        )
+    ]
+    resp_partial.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    resp_complete = MagicMock()
+    resp_complete.choices = [MagicMock(message=MagicMock(content=json.dumps(VALID_PAYLOAD)))]
+    resp_complete.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+
+    with patch("litellm.completion", MagicMock(return_value=resp_partial)):
+        enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    with patch("litellm.completion", MagicMock(return_value=resp_complete)):
+        second = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert second["status"] != "cached"
