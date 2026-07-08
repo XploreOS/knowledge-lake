@@ -495,17 +495,13 @@ All claims in this research were verified directly from the installed codebase a
 
 **This table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`--tag` vs `--tags` CLI flag name**
-   - What we know: `--tag` (repeatable) follows the convention for multi-value collection CLI flags.
-   - What's unclear: User preference for singular vs plural.
-   - Recommendation: Use `--tag` (repeatable) as `--tag fhir --tag hl7` is conventional in Unix CLIs; note this in Claude's Discretion from CONTEXT.md.
+   - RESOLVED: `--tag` (repeatable) chosen per Claude's Discretion (CONTEXT.md). Implemented in Plan 04 as `--tag` with `multiple=True`. Convention: `klake search --tag fhir --tag hl7`.
 
 2. **Whether `ensure_payload_indexes()` should also index `keywords` (the LLM-extracted array field)**
-   - What we know: `keywords` is currently unindexed; PAYLOAD-02 only requires indexing `source_name`, `format`, `source_id`, `tags`.
-   - What's unclear: Whether to opportunistically index `keywords` in the same call.
-   - Recommendation: Index it — zero extra cost, same KEYWORD type, and it makes the existing `keywords` field also scan-free. Add to the `_KEYWORD_FIELDS` list but leave out of the PAYLOAD-02 success criteria.
+   - RESOLVED: `keywords` added opportunistically to `_KEYWORD_FIELDS` in Plan 03. Zero extra cost, same `KEYWORD` type, makes the existing `keywords` field scan-free. Out of PAYLOAD-02 success criteria but included in the implementation.
 
 ## Environment Availability
 

@@ -38,11 +38,13 @@ created: 2026-07-08
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 07-01-01 | 01 | 1 | PAYLOAD-01 | unit | `uv run pytest tests/unit/test_index_payload.py -x -q` | ✅ | ⬜ pending |
-| 07-01-02 | 01 | 1 | PAYLOAD-01 | unit | `uv run pytest tests/unit/test_index_payload.py -x -q` | ✅ | ⬜ pending |
-| 07-02-01 | 02 | 1 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_search_filters.py -x -q` | ✅ | ⬜ pending |
-| 07-02-02 | 02 | 1 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_search_filters.py -x -q` | ✅ | ⬜ pending |
-| 07-02-03 | 02 | 2 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_qdrant_payload_indexes.py -x -q` | ❌ W0 | ⬜ pending |
+| 07-01-T1 | 01 | 1 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_qdrant_payload_indexes.py -x -q` | ❌ W0 | ⬜ pending |
+| 07-02-T1 | 02 | 1 | PAYLOAD-01 | unit | `uv run pytest tests/unit/test_index_payload.py -x -q` | ✅ | ⬜ pending |
+| 07-02-T2 | 02 | 1 | PAYLOAD-01 | unit | `uv run pytest tests/unit/test_index_payload.py -x -q` | ✅ | ⬜ pending |
+| 07-03-T1 | 03 | 2 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_qdrant_payload_indexes.py -x -q` | ❌ W0 | ⬜ pending |
+| 07-03-T2 | 03 | 2 | PAYLOAD-02 | unit | `uv run pytest tests/unit/test_search_filters.py -x -q` | ✅ | ⬜ pending |
+| 07-04-T1 | 04 | 3 | PAYLOAD-01, PAYLOAD-02 | unit | `uv run pytest tests/unit/ -x -q` | ✅ | ⬜ pending |
+| 07-04-T2 | 04 | 3 | PAYLOAD-01, PAYLOAD-02 | unit | `uv run pytest tests/unit/ -x -q` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
