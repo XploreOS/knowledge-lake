@@ -301,19 +301,10 @@ class CrawlJobOut(BaseModel):
 
 
 # ── Batch crawl schemas (08-06) — CRAWL-02 ────────────────────────────────────
-
-
-class CrawlAllRequest(BaseModel):
-    """Request body for POST /crawl-all — batch-crawl all registered sources.
-
-    CRAWL-02: optional domain filter narrows the source list to only sources
-    whose domain matches.  Omit to crawl all registered sources.
-    """
-
-    domain: Optional[str] = Field(
-        default=None,
-        description="Optional domain filter (e.g. 'healthcare').",
-    )
+# M-01 fix: CrawlAllRequest was dead code — the /crawl-all endpoint reads
+# `domain` as a Query parameter, not a request body.  Clients POSTing
+# {"domain": "healthcare"} would have silently received domain=None.
+# Removed; the endpoint contract is now documented via its Query annotation.
 
 
 class CrawlAllSourceResult(BaseModel):

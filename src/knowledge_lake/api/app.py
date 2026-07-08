@@ -39,7 +39,6 @@ from knowledge_lake.api.schemas import (
     CleanRequest,
     CleanResponse,
     CrawlAllOut,
-    CrawlAllRequest,
     CrawlAllSourceResult,
     CrawlJobCreate,
     CrawlJobOut,
