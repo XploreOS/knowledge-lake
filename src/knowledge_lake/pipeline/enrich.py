@@ -201,12 +201,17 @@ def _build_enrichment_prompt(
 )
 def _call_llm_for_enrichment(
     system_prompt: str, user_prompt: str, settings: Settings, attempt_costs: list[float]
-) -> tuple[EnrichmentResult, object]:
+) -> tuple[EnrichmentResult, object, bool]:
     """Make the single LiteLLM completion call and validate the JSON response.
 
     Always routes through the "cheap_model" task alias — never a hardcoded
     provider model ID (CLAUDE.md constraint). Retries up to 3 attempts total
     on a RuntimeError (gateway failure) or ValidationError (malformed JSON).
+
+    Returns a 3-tuple ``(result, response, is_partial)`` where ``is_partial``
+    is True when ``finish_reason == "length"`` (D-14) and prefix recovery
+    succeeds (D-15).  The truncation path returns immediately — tenacity never
+    fires for it because no exception is raised (Pitfall 2 / D-18).
 
     ``attempt_costs`` is a caller-owned accumulator list: every response that
     is actually received from LiteLLM (i.e. a real, billable Bedrock call)
@@ -243,8 +248,22 @@ def _call_llm_for_enrichment(
     attempt_costs.append(compute_call_cost(response, settings))
 
     content = _strip_json_fences(response.choices[0].message.content or "")
+
+    # D-14 / D-15 / Pitfall 2: check finish_reason BEFORE model_validate_json.
+    # If finish_reason == "length", the model was cut off at the token limit — do
+    # NOT let ValidationError propagate to tenacity (that would burn extra budget
+    # on a pointless retry).  Instead, extract the longest valid JSON prefix and
+    # attempt validation on it.  If prefix validation succeeds, return with
+    # is_partial=True.  If it fails, re-raise the ValidationError immediately
+    # (caller's outer except handles it gracefully — no tenacity involvement).
+    finish_reason = response.choices[0].finish_reason
+    if finish_reason == "length":
+        prefix_content = _extract_longest_valid_prefix(content)
+        result = EnrichmentResult.model_validate_json(prefix_content)  # raises ValidationError if unrecoverable
+        return result, response, True
+
     result = EnrichmentResult.model_validate_json(content)
-    return result, response
+    return result, response, False
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -347,7 +366,7 @@ def enrich_document(
     # ones that were retried after a ValidationError) — see WR-03.
     attempt_costs: list[float] = []
     try:
-        result, _response = _call_llm_for_enrichment(system_prompt, user_prompt, s, attempt_costs)
+        result, _response, is_partial = _call_llm_for_enrichment(system_prompt, user_prompt, s, attempt_costs)
     except Exception as exc:  # noqa: BLE001 — never let an LLM failure raise (D-05)
         log.warning(
             "enrich.llm_call_failed",
