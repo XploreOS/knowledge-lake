@@ -77,7 +77,7 @@ Plans:
   4. A crawl of an HTML page can follow links to `.pdf`/`.docx` assets and ingest them through the existing single-URL ingest path, with an SSRF guard on every followed link, a bounded link frontier, and dedup between an HTML page and its linked document.
   5. Truncated LLM enrichment is detected via the gateway `finish_reason` (not inferred from a parse error), a longest-valid-prefix is recovered and flagged partial, and an incomplete result is never cached under the normal content-hash key.
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -93,7 +93,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 08-05-PLAN.md — crawl.py INGEST-10: linked-doc post-bronze ingestion with SSRF guard and bounded frontier
-- [ ] 08-06-PLAN.md — CLI + API surface: klake crawl-all command, POST /crawl-all endpoint, CrawlAllOut schemas (CRAWL-02)
+- [x] 08-06-PLAN.md — CLI + API surface: klake crawl-all command, POST /crawl-all endpoint, CrawlAllOut schemas (CRAWL-02)
 
 ### Phase 9: Storage Segmentation
 
@@ -162,7 +162,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
-| 8. Crawl Maturation | 5/6 | In Progress|  |
+| 8. Crawl Maturation | 6/6 | Complete   | 2026-07-08 |
 | 9. Storage Segmentation | 0/? | Not started | - |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
