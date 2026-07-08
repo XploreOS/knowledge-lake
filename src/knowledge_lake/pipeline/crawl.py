@@ -148,9 +148,33 @@ async def crawl_source(
         source_crawl_config = registry_repo.get_source_crawl_config(session, source_id)
 
     # CRAWL-01 (D-04): Apply per-source depth override when present.
+    # M-02 fix: validate that depth_override is a positive integer.
+    # A value of 0 would silently make pages_total < max_pages (0 < 0 = False)
+    # and exit immediately with zero pages crawled and no error.
     depth_override = source_crawl_config.get("depth")
     if depth_override is not None:
-        effective_max_pages = int(depth_override)
+        try:
+            parsed_depth = int(depth_override)
+        except (ValueError, TypeError):
+            log.warning(
+                "crawl.depth_override_invalid",
+                source_id=source_id,
+                depth_override=depth_override,
+                reason="non-integer value; using global default",
+                effective_max_pages=effective_max_pages,
+            )
+            parsed_depth = None
+        if parsed_depth is not None:
+            if parsed_depth <= 0:
+                log.warning(
+                    "crawl.depth_override_invalid",
+                    source_id=source_id,
+                    depth_override=parsed_depth,
+                    reason="depth must be > 0; using global default",
+                    effective_max_pages=effective_max_pages,
+                )
+            else:
+                effective_max_pages = parsed_depth
 
     # Find or create crawl job (resume support: reuse existing incomplete job)
     job_id = _find_or_create_job(source_id, crawler_name, effective_max_pages, source_url)
