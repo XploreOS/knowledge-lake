@@ -646,10 +646,31 @@ def cmd_search(
     min_quality_score: Optional[float] = typer.Option(
         None, "--min-quality-score", help="Filter results to quality_score >= this value."
     ),
+    source_name: Optional[str] = typer.Option(
+        None, "--source-name", help="Filter results to this source name."
+    ),
+    format: Optional[str] = typer.Option(
+        None, "--format", help="Filter results to this source format (e.g. 'html', 'pdf')."
+    ),
+    source_id: Optional[str] = typer.Option(
+        None, "--source-id", help="Filter results to this source ID."
+    ),
+    tag: Optional[list[str]] = typer.Option(
+        None, "--tag",
+        help="Filter results to chunks tagged with this tag (repeatable: --tag a --tag b uses OR logic)."
+    ),
 ) -> None:
     """Embed a query and return the top-K matching chunks with citation.
 
-    Each result shows score, section, page, and a text snippet.
+    Each result shows score, section, page, chunk text snippet, and source provenance fields.
+
+    New filter flags (Phase 7 PAYLOAD-02):
+        --source-name, --format, --source-id, --tag (repeatable).
+
+    D-13 backward-compat note:
+        source_name, format, tags, source_id filters are only effective on points indexed
+        after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points
+        will not match.
     """
     from knowledge_lake.pipeline.search import search
 
@@ -660,6 +681,10 @@ def cmd_search(
         domain=domain,
         document_type=document_type,
         min_quality_score=min_quality_score,
+        source_name=source_name,
+        format=format,
+        source_id=source_id,
+        tags=tag,  # CLI param is named 'tag' (list[str]); search() expects 'tags'
     )
 
     if not hits:
@@ -679,6 +704,12 @@ def cmd_search(
         typer.echo(f"      domain:       {payload.get('domain', '?')}")
         typer.echo(f"      document_type:{payload.get('document_type', '?')}")
         typer.echo(f"      quality_score:{payload.get('quality_score', '?')}")
+        typer.echo(f"      source_name:  {payload.get('source_name', '?')}")
+        typer.echo(f"      source_id:    {payload.get('source_id', '?')}")
+        typer.echo(f"      format:       {payload.get('format', '?')}")
+        typer.echo(f"      tags:         {payload.get('tags', [])}")
+        typer.echo(f"      organization: {payload.get('organization', '?')}")
+        typer.echo(f"      title:        {payload.get('title', '?')}")
         text_snippet = (payload.get("text") or "")[:120].replace("\n", " ")
         if text_snippet:
             typer.echo(f"      text:         {text_snippet!r}")
