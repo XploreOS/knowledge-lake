@@ -174,21 +174,22 @@ def _call_llm_for_enrichment(
     import litellm  # noqa: PLC0415 — lazy import, avoids proxy dependency in unit tests
 
     try:
+        model_alias = settings.enrich.model_alias
         response = litellm.completion(
             # "openai/" declares the wire protocol the LiteLLM proxy speaks
             # (OpenAI-compatible), NOT the actual model provider — the proxy
-            # resolves the "cheap_model" task alias to whatever backend model
+            # resolves the task alias to whatever backend model
             # infra/litellm/config.yaml maps it to (Bedrock/Anthropic in dev).
             # Without this prefix litellm.completion() cannot infer a provider
             # from api_base alone and raises before any request is sent.
-            model="openai/cheap_model",
+            model=f"openai/{model_alias}",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             api_base=settings.litellm_url,
             api_key=settings.litellm_api_key,
-            max_tokens=512,
+            max_tokens=settings.enrich.max_tokens,
             temperature=0.0,
         )
     except Exception as exc:  # noqa: BLE001 — re-raised as RuntimeError for tenacity

@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import logging
+import re
+from collections import deque
 from typing import Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urldefrag
 
+import structlog
 import tldextract
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -32,7 +34,9 @@ from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.storage.s3 import StorageBackend
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
+
+_LINK_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 
 
 async def crawl_source(
@@ -243,7 +247,7 @@ async def _crawl_loop(
     max_pages: int,
     settings: Settings,
 ) -> dict[str, int]:
-    """Async crawl loop: process URLs with rate limiting and artifact writes.
+    """BFS crawl loop: fetch pages, extract links, expand queue up to max_pages.
 
     Returns stats dict with page counts.
     """
@@ -255,10 +259,12 @@ async def _crawl_loop(
 
     storage = StorageBackend(settings.storage)
 
-    for url in urls:
-        if pages_total >= max_pages:
-            break
+    # BFS queue and visited set for link-following
+    queue: deque[str] = deque(urls)
+    seen: set[str] = {normalize_url(u) for u in urls}
 
+    while queue and pages_total < max_pages:
+        url = queue.popleft()
         pages_total += 1
 
         # SSRF re-validation on every URL (T-02-09, Pitfall 2)
@@ -275,7 +281,7 @@ async def _crawl_loop(
             url_domain = _registrable_domain(url)
             if url_domain != seed_domain:
                 log.info("crawl.cross_domain_skip", url=url, domain=url_domain)
-                pages_total -= 1  # undo the pre-loop increment; skip doesn't count
+                pages_total -= 1
                 continue
 
         # Check robots.txt locally (our own Protego policy)
@@ -287,7 +293,7 @@ async def _crawl_loop(
             continue
 
         # Rate limit — resolve delay and wait
-        source_config = None  # Could be enhanced with per-source overrides
+        source_config = None
         delay = resolve_delay(source_config, robots_crawl_delay, settings.crawl.rate_limit_seconds)
         await limiter.wait(url, delay)
 
@@ -295,7 +301,6 @@ async def _crawl_loop(
         try:
             result = await adapter.fetch_page(url)
         except ValueError as exc:
-            # SSRF validation inside the adapter caught something
             log.warning("crawl.adapter_ssrf_blocked", url=url, error=str(exc))
             _record_state(job_id, url, "failed", error=str(exc))
             pages_failed += 1
@@ -335,12 +340,69 @@ async def _crawl_loop(
         )
         pages_complete += 1
 
+        # Extract and enqueue discovered links (BFS link-following)
+        if result.html and pages_total < max_pages:
+            discovered = _extract_links(result.html, url, seed_domain)
+            for link in discovered:
+                norm = normalize_url(link)
+                if norm not in seen:
+                    seen.add(norm)
+                    queue.append(link)
+
     return {
         "pages_complete": pages_complete,
         "pages_robots_blocked": pages_robots_blocked,
         "pages_failed": pages_failed,
         "pages_total": pages_total,
     }
+
+
+def _extract_links(html: bytes, base_url: str, seed_domain: str) -> list[str]:
+    """Extract same-domain HTTP(S) links from raw HTML.
+
+    Filters out fragments, non-http schemes, and cross-domain links.
+    Returns deduplicated absolute URLs.
+    """
+    try:
+        text = html.decode("utf-8", errors="replace")
+    except Exception:
+        return []
+
+    links: list[str] = []
+    seen_in_page: set[str] = set()
+
+    for match in _LINK_RE.finditer(text):
+        href = match.group(1).strip()
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            continue
+
+        # Resolve relative URLs
+        absolute = urljoin(base_url, href)
+        # Strip fragment
+        absolute, _ = urldefrag(absolute)
+
+        # Only http/https
+        parsed = urlparse(absolute)
+        if parsed.scheme not in ("http", "https"):
+            continue
+
+        # Same-domain check
+        link_domain = _registrable_domain(absolute)
+        if link_domain != seed_domain:
+            continue
+
+        # Skip common non-content extensions
+        path_lower = parsed.path.lower()
+        if path_lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".svg", ".css", ".js",
+                                ".ico", ".woff", ".woff2", ".ttf", ".eot", ".mp4",
+                                ".mp3", ".zip", ".gz", ".tar", ".exe")):
+            continue
+
+        if absolute not in seen_in_page:
+            seen_in_page.add(absolute)
+            links.append(absolute)
+
+    return links
 
 
 def _write_artifacts(
@@ -359,8 +421,8 @@ def _write_artifacts(
         return None, None
 
     with get_session() as session:
-        # Write raw HTML artifact
-        raw_artifact = storage.put_raw(source_id, html, "html", session)
+        # Write raw HTML artifact with correct mime_type
+        raw_artifact = storage.put_raw(source_id, html, "html", session, mime_type="text/html")
         session.flush()
         raw_id = raw_artifact.id
 

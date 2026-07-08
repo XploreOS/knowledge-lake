@@ -19,15 +19,15 @@ Unreachable-robots policy:
 
 from __future__ import annotations
 
-import logging
 from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
+import structlog
 from protego import Protego
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class RobotsPolicy:

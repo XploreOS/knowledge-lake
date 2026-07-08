@@ -147,6 +147,14 @@ class EnrichSettings(BaseModel):
     cache_enabled: bool = True
     """Enable or disable enrichment result caching keyed by prompt_version."""
 
+    max_tokens: int = 4096
+    """Maximum output tokens for the enrichment LLM call. Domain prompts with
+    richer schemas (protocols, biomarkers, supplements) need more output budget."""
+
+    model_alias: str = "cheap_model"
+    """LiteLLM task alias for enrichment calls. Use 'strong_model' for domain
+    prompts that require more output capacity or higher accuracy."""
+
     excerpt_chars: int = 4000
     """Bounds the cleaned-document excerpt sent to the LLM — cost and
     prompt-injection surface control (AI-SPEC Section 4)."""

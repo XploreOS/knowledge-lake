@@ -174,8 +174,8 @@ def cmd_discover(
 def cmd_parse(
     raw_artifact_id: str = typer.Argument(..., help="ID of the raw_document artifact to parse."),
     source_id: str = typer.Argument(..., help="Source ID that owns the raw artifact."),
-    mime_type: str = typer.Option(
-        "application/pdf", "--mime", "-m", help="MIME type of the raw document."
+    mime_type: Optional[str] = typer.Option(
+        None, "--mime", "-m", help="MIME type override. Auto-detected from artifact if omitted."
     ),
 ) -> None:
     """Parse a raw_document artifact into a parsed_document artifact.
@@ -505,8 +505,8 @@ def cmd_ingest_url(
     source_name: Optional[str] = typer.Option(
         None, "--source", "-s", help="Human-readable source name."
     ),
-    mime_type: str = typer.Option(
-        "application/pdf", "--mime", "-m", help="MIME type of the document."
+    mime_type: Optional[str] = typer.Option(
+        None, "--mime", "-m", help="MIME type override. Auto-detected from HTTP Content-Type if omitted."
     ),
     collection: str = typer.Option(
         "klake_chunks", "--collection", "-c", help="Qdrant collection to index into."
@@ -534,6 +534,100 @@ def cmd_ingest_url(
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command(name="process-crawled")
+def cmd_process_crawled(
+    source_id: Optional[str] = typer.Option(
+        None, "--source", "-s", help="Process only raw docs from this source ID."
+    ),
+    limit: int = typer.Option(
+        100, "--limit", "-l", help="Maximum number of documents to process."
+    ),
+    collection: str = typer.Option(
+        "klake_chunks", "--collection", "-c", help="Qdrant collection to index into."
+    ),
+) -> None:
+    """Process crawled raw_document artifacts through parse→chunk→embed→index.
+
+    Finds all raw_document artifacts that have no corresponding parsed_document
+    child and runs the full pipeline on each. Useful after bulk crawling to
+    convert raw HTML into searchable vector chunks.
+    """
+    from knowledge_lake.pipeline.parse import parse
+    from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.pipeline.embed import embed
+    from knowledge_lake.pipeline.index import index
+    from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.registry.models import Artifact
+    from sqlalchemy import select, and_
+    from sqlalchemy.orm import aliased
+
+    with get_session() as session:
+        # Find raw_documents that have no parsed_document child
+        # A parsed child has parent_artifact_id pointing to the raw doc
+        ParsedChild = aliased(Artifact)
+        has_parsed_child = (
+            select(ParsedChild.id)
+            .where(
+                and_(
+                    ParsedChild.parent_artifact_id == Artifact.id,
+                    ParsedChild.artifact_type == "parsed_document",
+                )
+            )
+            .correlate(Artifact)
+            .exists()
+        )
+
+        stmt = (
+            select(Artifact)
+            .where(Artifact.artifact_type == "raw_document")
+            .where(~has_parsed_child)
+        )
+        if source_id:
+            stmt = stmt.where(Artifact.source_id == source_id)
+        stmt = stmt.order_by(Artifact.created_at.desc()).limit(limit)
+
+        unprocessed = session.execute(stmt).scalars().all()
+        raw_docs = [(a.id, a.source_id, a.storage_uri, a.mime_type) for a in unprocessed]
+
+    if not raw_docs:
+        typer.echo("No unprocessed raw documents found.")
+        return
+
+    typer.echo(f"Found {len(raw_docs)} raw documents to process.")
+
+    processed = 0
+    failed = 0
+    total_chunks = 0
+
+    for raw_id, src_id, storage_uri, stored_mime in raw_docs:
+        # Detect mime from storage URI if not set
+        mime = stored_mime
+        if not mime or mime == "application/octet-stream":
+            mime = _detect_mime_from_uri(storage_uri or "")
+
+        try:
+            parse_result, parsed_doc = parse(raw_id, src_id, mime_type=mime)
+            parsed_id = parse_result["artifact_id"]
+
+            chunks_list = chunk(parsed_id, src_id, parsed_doc)
+            if not chunks_list:
+                processed += 1
+                continue
+
+            vectors, dim = embed(chunks_list)
+            index(chunks_list, vectors, dim, parsed_id, collection=collection)
+
+            processed += 1
+            total_chunks += len(chunks_list)
+            typer.echo(f"  [{processed}/{len(raw_docs)}] {raw_id[:20]}… → {len(chunks_list)} chunks")
+        except Exception as exc:
+            failed += 1
+            typer.echo(f"  [FAIL] {raw_id[:20]}… — {exc}", err=True)
+
+    typer.echo(f"\nProcess complete: {processed} docs, {total_chunks} chunks indexed, {failed} failed.")
 
 
 @app.command(name="search")

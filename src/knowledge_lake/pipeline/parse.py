@@ -67,8 +67,12 @@ def parse(
             raise ValueError(
                 f"parse: raw_artifact {raw_artifact_id!r} has no storage_uri"
             )
-        # Resolve effective mime_type: caller override > stored artifact > fallback
-        effective_mime = mime_type or raw_artifact.mime_type or "application/pdf"
+        # Resolve effective mime_type: caller override > stored artifact > URI extension > fallback
+        stored_mime = raw_artifact.mime_type
+        if stored_mime in (None, "application/octet-stream"):
+            from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
+            stored_mime = _detect_mime_from_uri(storage_uri)
+        effective_mime = mime_type or stored_mime or "application/pdf"
 
     mime_type = effective_mime  # rebind for use below
     log.info("parse.start", raw_artifact_id=raw_artifact_id, mime_type=mime_type)

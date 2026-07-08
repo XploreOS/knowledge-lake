@@ -373,12 +373,15 @@ def ingest_url(
                 session, existing_source.id
             )
             if existing_artifact:
+                stored_mime = existing_artifact.mime_type
+                if not stored_mime or stored_mime == "application/octet-stream":
+                    stored_mime = _detect_mime_from_uri(existing_artifact.storage_uri)
                 result = {
                     "source_id": existing_source.id,
                     "artifact_id": existing_artifact.id,
                     "storage_uri": existing_artifact.storage_uri,
                     "content_hash": existing_artifact.content_hash,
-                    "mime_type": existing_artifact.mime_type or "application/octet-stream",
+                    "mime_type": stored_mime,
                 }
                 log.info("ingest_url.dedup_hit", **result)
                 return result
@@ -537,3 +540,21 @@ def _mime_to_ext(mime_type: str) -> str:
         "text/xml": "xml",
     }
     return _MAP.get(mime_type, "bin")
+
+
+_EXT_TO_MIME = {
+    "html": "text/html",
+    "htm": "text/html",
+    "pdf": "application/pdf",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "json": "application/json",
+    "xml": "application/xml",
+    "csv": "text/csv",
+}
+
+
+def _detect_mime_from_uri(storage_uri: str) -> str:
+    """Detect MIME type from the file extension in a storage URI."""
+    ext = storage_uri.rsplit(".", 1)[-1].lower() if "." in storage_uri else ""
+    return _EXT_TO_MIME.get(ext, "application/octet-stream")

@@ -88,14 +88,15 @@ def run_document(
 
     source_id = ingest_result["source_id"]
     raw_artifact_id = ingest_result["artifact_id"]
+    resolved_mime = mime_type or ingest_result.get("mime_type")
     log.info("run_document.ingest_done", source_id=source_id, raw_artifact_id=raw_artifact_id)
 
     # ── Stage 2: Parse ────────────────────────────────────────────────────────
-    # mime_type resolves from stored artifact when not explicitly overridden
+    # Use mime from caller override, then ingest result, then artifact fallback
     parse_result, parsed_doc = parse(
         raw_artifact_id,
         source_id,
-        mime_type=mime_type,  # None → read from artifact.mime_type
+        mime_type=resolved_mime,
         settings=s,
     )
     parsed_artifact_id = parse_result["artifact_id"]
