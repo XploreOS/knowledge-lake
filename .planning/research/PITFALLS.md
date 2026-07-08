@@ -1,353 +1,356 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Knowledge Lake / Data Pipeline Framework
-**Project:** HealthLake
-**Researched:** 2026-07-02
+**Domain:** Knowledge Lake Framework — v2.0 Agent-Ready Lake (MCP interfaces, hybrid search, domain-segmented storage, scheduled re-crawl)
+**Researched:** 2026-07-08
+**Confidence:** HIGH (verified against MCP spec 2025-06-18/2025-11-25, Qdrant 1.10+ Query API docs, and this system's v1.0 constraints)
+
+> Scope: mistakes specific to **adding these v2.0 features to the existing shipped `klake` system**. Every pitfall is filtered through the system's hard constraints: immutable SHA256-content-addressed raw zone, full lineage via stable IDs + content hashes, LiteLLM-only model calls, Dagster-from-day-1, structlog structured logging on stdout, robots.txt/license compliance. Generic "use rate limiting" advice is omitted — v1.0 already has it; the pitfalls here are about the *interactions* the new features create.
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites or major issues.
+### Pitfall 1: structlog on stdout corrupts the MCP stdio JSON-RPC stream
 
-### Pitfall 1: Over-engineering Orchestration Before Proving Pipeline End-to-End
+**What goes wrong:**
+The MCP stdio transport uses **stdout as the JSON-RPC message channel** — every byte on stdout must be a valid framed JSON-RPC message. This system's constraint is "structlog structured logging **on stdout**." The moment `klake mcp` (stdio) boots and *anything* — a structlog line, a stray `print()`, a Typer/Click echo, a library warning, an uncaught traceback, a tqdm/rich progress bar, a LiteLLM cost log, a Dagster init banner, an unflushed buffer — writes to stdout, the client's JSON-RPC parser sees garbage and the session dies or silently drops messages. This is the single highest-probability v2.0 failure because the existing logging default *actively fights* the new transport.
 
-**What goes wrong:** Teams build elaborate Dagster asset graphs, custom IO managers, partition strategies, and resource abstractions before verifying that a single document can flow from crawl to vector store. Weeks pass refining orchestration scaffolding while the actual ingestion logic remains untested.
+**Why it happens:**
+Every dependency in the stack logs to stdout by default (structlog is explicitly configured that way here; LiteLLM prints cost/verbose lines; Docling/Crawl4AI emit progress). Developers test the MCP server, it "works" in a quick manual check, then a single enrichment or crawl tool call triggers a downstream library that writes one line to stdout and the whole session breaks intermittently — hard to reproduce.
 
-**Why it happens:** Dagster's asset model is seductive — it encourages thinking in terms of the full dependency graph from day one. The "Dagster from day 1" constraint amplifies this by making it feel like the orchestration layer must be production-grade before any pipeline runs.
+**How to avoid:**
+- **Before any MCP tool logic**, at `klake mcp` (stdio mode) entry: reconfigure structlog to write to **stderr** (or a file), and redirect the root stdout. Concretely: set the structlog `WriteLoggerFactory`/`PrintLoggerFactory` to `sys.stderr`, and defensively `sys.stdout = sys.stderr` (or swap the real stdout fd to a saved handle the transport owns) so *any* third-party stdout write lands on stderr.
+- Silence known offenders explicitly: set `litellm.suppress_debug_info = True` / route LiteLLM logging to stderr; disable Crawl4AI/Docling verbose/progress in MCP mode; set `logging.basicConfig` stream to stderr.
+- Add a startup self-test: in stdio mode, write a canary line via the normal logging path and assert nothing landed on the fd the transport reads.
+- **stdio vs SSE/HTTP mode must diverge here**: only stdio needs the stdout lockdown. Gate it on transport mode, not globally (HTTP mode still wants normal logs).
 
-**Consequences:** When you finally test real documents, you discover the parsers fail on your actual inputs, the chunking strategy is wrong for your domain, or the enrichment step costs 10x what you budgeted. All that orchestration work must be reworked around different pipeline shapes.
+**Warning signs:**
+- MCP client reports "invalid JSON", "unexpected token", or the session hangs after the first tool call that touches enrichment/crawl/parse.
+- It works for `list_tools` but breaks on real operations (because those trigger noisy libraries).
+- Intermittent/unreproducible disconnects tied to specific tools.
 
-**Prevention:**
-- Build a "spike pipeline" first: one Python script that crawls one URL, parses one PDF, chunks it, embeds it, and queries it. Prove the data path works end-to-end.
-- Only THEN wrap in Dagster assets. Let the asset graph emerge from working code, not from design documents.
-- Use `deps` (not IO managers) initially. IO managers are premature until storage patterns stabilize.
-
-**Detection:** If your Dagster job definitions outnumber your working integration tests, you are over-engineering.
-
-**Phase relevance:** Phase 1 (Foundation). Must resist the temptation to build the "beautiful graph" before proving data flows.
-
----
-
-### Pitfall 2: Parser Quality Blindness (Docling/Unstructured Failure Modes)
-
-**What goes wrong:** The framework treats document parsing as a solved problem — configure Docling, point it at PDFs, get clean text. In reality, healthcare PDFs contain complex tables (merged cells, multi-row headers), multi-column clinical layouts, scanned formularies, and regulatory documents with nested heading structures. Parsers silently produce garbage.
-
-**Why it happens:** Docling demos work well on clean academic PDFs. But production healthcare documents (CMS manuals, hospital formularies, insurance policy PDFs, clinical guidelines) have pathological formatting. Known Docling issues include:
-- `std::bad_alloc` memory crashes on large PDFs (100+ pages)
-- TableFormer V1/V2 mishandles merged rows and columns regardless of `cell_matching` setting
-- Headers/headings incorrectly classified as "page furniture" and silently removed
-- OCR fails without explicit language configuration
-- Metadata extraction (title, authors, references) is still incomplete
-
-**Consequences:** Garbage parsing propagates through the entire pipeline: bad chunks, wrong embeddings, hallucinated RAG answers, unusable training datasets. The worst part is it fails silently — you only discover the quality issue when downstream consumers report bad results.
-
-**Prevention:**
-- Build a parser quality gate: sample N documents from each source, manually inspect parsed output, compute quality scores before bulk processing.
-- Implement parser fallback chains: Docling -> Unstructured -> Tika, with quality comparison on each document.
-- Store raw bytes in bronze zone ALWAYS. Never rely solely on parsed output.
-- Create a "parser torture test" corpus: find the worst PDFs in your domain (scanned, multi-column, merged-cell tables, 500+ pages) and run them through every parser candidate during Phase 1.
-- Set memory limits on parser processes and handle OOM gracefully with fallback.
-
-**Detection:** Parse 50 random documents. Manually read 10 of the outputs. If more than 2 have structural errors (broken tables, lost headings, garbled text), your parser config is not ready for production.
-
-**Phase relevance:** Phase 2 (Ingestion Pipeline). Must be addressed before any bulk processing begins.
+**Phase to address:** AI Agent Skills phase (MCP-01/MCP-02). This is a **first-task gate** — write the stdout-isolation shim and its self-test before implementing a single tool.
 
 ---
 
-### Pitfall 3: Chunking Strategy Destroys Domain Context
+### Pitfall 2: Building v2.0 MCP on the deprecated SSE transport
 
-**What goes wrong:** Fixed-size chunking (e.g., 512 tokens with 50-token overlap) is applied uniformly across all document types. This breaks tables mid-row, splits clinical guidelines from their applicability criteria, separates drug names from their dosage information, and produces chunks that are meaningless without surrounding context.
+**What goes wrong:**
+Requirement MCP-01/MCP-02 says "stdio + **SSE**" and `klake mcp --sse --port 3001`. The standalone **HTTP+SSE transport was deprecated in the MCP spec revision 2025-03-26** and superseded by **Streamable HTTP** (spec 2025-11-25 defines only `stdio` and `Streamable HTTP` as standard). Building fresh on SSE means shipping v2.0 on a transport that current MCP clients (Claude Desktop/Code newer builds, IDEs) are dropping support for — you get an agent interface that agents can't reliably connect to, plus a near-term rewrite.
 
-**Why it happens:** Fixed-size chunking is the default in every tutorial and framework. It is simple to implement and produces consistent vector dimensions. Teams defer "smart chunking" to later and never get back to it.
+**Why it happens:**
+Older tutorials, blog posts, and the requirement text itself still say "SSE" because it was the original remote transport. The MCP Python SDK still *ships* an SSE server class, so it compiles and runs — masking that it's the wrong target.
 
-**Consequences:**
-- RAG retrieves chunks that answer the wrong question because context was severed
-- Embedding quality degrades because chunks are not semantically coherent
-- Training datasets contain incomplete examples
-- Tables become rows of nonsense when split across chunks
+**How to avoid:**
+- Implement the remote transport as **Streamable HTTP** (single endpoint, POST + optional SSE upgrade) even though the requirement says "SSE." Keep the `--sse`/`--port` CLI surface if desired for familiarity, but back it with Streamable HTTP. Note the substitution in the phase plan / decision log so it's an intentional deviation, not a silent one.
+- If a legacy SSE client must be supported, add it as an *additional* endpoint, not the primary.
+- Pin the MCP SDK version and record which spec revision it targets.
 
-**Prevention:**
-- Implement structure-aware chunking from the start: parse documents into structural elements (headings, paragraphs, tables, lists) THEN apply size constraints within those boundaries.
-- Tables are ATOMIC: never split a table across chunks. If a table exceeds token limit, serialize it as a separate artifact with metadata linking back to the surrounding context.
-- Use the "human readability test": if a chunk does not make sense to a human reading it in isolation, it will not make sense to an embedding model.
-- Attach parent section heading to every chunk as prefix metadata (e.g., "Section: Drug Interactions > Warfarin" prepended to a chunk about specific drug interactions).
-- Healthcare-specific: clinical guidelines, formulary entries, and procedure codes must be chunked as complete semantic units, not arbitrary token windows.
+**Warning signs:**
+- Newer MCP clients fail to connect to the remote server but the old `mcp` inspector works.
+- SDK deprecation warnings mentioning `SSEServerTransport` / "use streamable HTTP".
 
-**Detection:** Retrieve 20 random chunks from your vector store. Read them without context. If more than 5 are incomprehensible in isolation, your chunking strategy is broken.
-
-**Phase relevance:** Phase 2-3 (Chunking and Embedding). This is the single highest-leverage quality improvement in the entire pipeline.
+**Phase to address:** AI Agent Skills phase (MCP-01). Decide the transport target at design time — flag to roadmapper as a requirement-vs-current-spec conflict to resolve up front.
 
 ---
 
-### Pitfall 4: LLM Enrichment Cost Explosion
+### Pitfall 3: Two tool registries drift between stdio and HTTP transports
 
-**What goes wrong:** The pipeline calls an LLM for metadata extraction, summarization, or quality scoring on every document/chunk. With thousands of documents, each requiring multiple LLM calls, costs spiral from dollars to hundreds or thousands of dollars before anyone notices. A single bulk re-enrichment run after a prompt change can cost more than the entire monthly infrastructure budget.
+**What goes wrong:**
+Because stdio and SSE/HTTP are wired up separately, developers register the lake operations (search, add-source, export-dataset, crawl, etc.) twice — once per transport — or duplicate the Pydantic→tool-schema conversion. Over time a tool is added/renamed on one path and not the other, so an agent gets different capabilities depending on how it connects. This also multiplies the surface for the SKILL-03 OpenAI-format definitions and SKILL-02 OpenAPI export to disagree.
 
-**Why it happens:** LLM calls feel cheap in development (one document = pennies). At scale, the math is brutal: 10,000 documents x 5 enrichment calls each x $0.01/call = $500 per pipeline run. Healthcare corpora with 100K+ pages make this worse.
+**Why it happens:**
+The MCP SDK encourages per-server registration; the two entrypoints (`klake mcp` vs `klake mcp --sse`) feel like two apps. Nobody notices drift until an agent complains a tool is "missing."
 
-**Consequences:**
-- Uncontrolled spend that exceeds budget
-- Pipeline becomes too expensive to re-run after improvements
-- Teams avoid re-processing, leading to stale enrichments
-- Rate limiting from providers causes pipeline failures and partial results
+**How to avoid:**
+- Define **one tool registry module** — a single list of tool objects (name, description, Pydantic input model, handler) — and have both transports mount that same registry. The transport is a thin adapter; the tool set is transport-agnostic.
+- Derive the OpenAI-format tool defs (SKILL-03) and the static OpenAPI export (SKILL-02) from the **same registry / same Pydantic schemas**, not hand-written copies.
+- Add a test asserting `stdio.list_tools() == http.list_tools()` and that every registry tool appears in the generated OpenAI/OpenAPI artifacts.
 
-**Prevention:**
-- Implement hard budget caps per pipeline run using LiteLLM's `max_budget` and `budget_duration` before writing ANY enrichment code.
-- Use the "deterministic first" constraint religiously: regex, heuristics, and rule-based extraction BEFORE any LLM call. Only use LLM for what cannot be done deterministically.
-- Tag every LLM call with pipeline name, document ID, and enrichment type for cost attribution.
-- Implement enrichment caching: hash(prompt_version + input_text) -> cached result. Never re-enrich identical content with the same prompt.
-- Set RPM/TPM limits explicitly in LiteLLM router config (do NOT leave unset — router randomly picks deployments without limits).
-- Use `cheap_model` alias for bulk enrichment, `strong_model` only for quality-critical tasks.
-- Log estimated cost BEFORE starting a bulk enrichment run. Require manual approval above a threshold.
+**Warning signs:**
+- A tool works over stdio but 404s/absent over HTTP (or vice versa).
+- `docs/openapi.json` or the OpenAI tool JSON lists a different tool set than `list_tools`.
 
-**Detection:** If you cannot answer "how much did the last pipeline run cost?" within 5 seconds, you lack cost observability. If the answer is "I don't know," stop and add tracking immediately.
-
-**Phase relevance:** Phase 3 (Enrichment). Must implement budget guardrails BEFORE the first enrichment pipeline runs at scale.
+**Phase to address:** AI Agent Skills phase (MCP-01, SKILL-02, SKILL-03). Establish the single-registry pattern before adding the second transport.
 
 ---
 
-### Pitfall 5: Vector Store Collection Sprawl and Embedding Model Lock-in
+### Pitfall 4: Domain-scoped S3 keys break content-hash dedup and existing lineage pointers
 
-**What goes wrong:** Teams create multiple Qdrant collections as needs evolve — one per embedding model experiment, one per document type, one for "v2" after changing chunking. Collections accumulate, queries hit stale data, and switching embedding models requires rebuilding everything because vector dimensions are immutable after collection creation.
+**What goes wrong:**
+STORE-01 restructures keys to `{zone}/{domain}/{source_id}/{hash}.{ext}`. Two collisions with the immutability/lineage constraints:
+1. **Dedup regression:** v1.0 dedup is content-addressed (same SHA256 = same object = one copy). If the domain/source_id is now *in the path*, the **same bytes ingested under two domains (or two sources) produce two objects** at two keys. Cross-source dedup silently dies; the raw zone grows with byte-identical duplicates and the registry may mint two document IDs for one content hash.
+2. **Lineage break:** Every v1.0 artifact, bronze/silver/gold pointer, and registry row references the **old key layout**. Changing the key scheme without a migration + pointer-rewrite orphans existing lineage — you can no longer resolve a stored object from a v1.0 artifact's parent pointer.
 
-**Why it happens:** Qdrant's collection configuration (vector size, distance metric) is immutable after creation. When you change embedding models (different dimensions or distance metric requirements), you must create new collections. Without a naming/versioning strategy, you end up with `documents_v1`, `documents_v2`, `documents_test_384d`, etc.
+**Why it happens:**
+"Segment storage by domain" reads as a pure organizational change, but in a content-addressed WORM store the key *is* the dedup identity and *is* the lineage anchor. Putting mutable classification (domain/source) into an immutable content-addressed path conflates identity with organization.
 
-**Consequences:**
-- Queries return results from stale collections with outdated embeddings
-- Dimension mismatches cause hard errors when embedding model changes
-- Wrong distance metric (e.g., Euclidean on cosine-optimized embeddings) silently degrades quality without errors
-- Storage grows unbounded with orphaned collections
-- No clear "source of truth" collection for production queries
+**How to avoid:**
+- **Keep content identity separate from organization.** Options, in order of safety:
+  - Preferred: keep the raw object physically content-addressed by hash (dedup intact) and express domain/source segmentation via **object tags** (STORE-02) and/or registry columns and/or a thin index prefix — not by relocating the canonical raw bytes.
+  - If keys must carry domain, make **dedup a registry-level check on content_hash** that runs *before* choosing a key, and when the same hash appears under a new domain, **link to the existing object** rather than writing a second copy (store the additional domain as a tag/association, not a duplicate blob).
+- **Never rewrite existing raw-zone keys** — immutability forbids moving objects. New scheme applies to **new writes only**; old objects stay put and remain resolvable. Maintain a key-scheme version on each object/registry row so both layouts resolve.
+- Migration for *derived* zones (bronze/silver/gold) is a copy-forward with lineage pointer rewrites in a transaction, never an in-place raw mutation.
+- Define `_unclassified` fallback deterministically: assert exactly one domain resolution path, and make `_unclassified` a real routed value (never null/empty segment producing `//`).
 
-**Prevention:**
-- Use collection aliasing: production always queries via alias (e.g., `documents_current`), not direct collection name. Rebuild into new collection, atomically swap alias.
-- Encode embedding model info in collection metadata: model name, version, dimensions, distance metric.
-- Use deterministic point IDs (content_hash based) so upserts naturally deduplicate.
-- Create a collection registry in PostgreSQL that tracks: collection name, embedding model, creation date, document count, status (active/deprecated/pending-deletion).
-- Automate stale collection cleanup: if a collection is not aliased and older than N days, schedule for deletion.
-- Choose distance metric to match embedding model training (almost always Cosine for sentence-transformers).
+**Warning signs:**
+- Raw-zone object count climbs faster than unique content hashes.
+- A v1.0 artifact's parent pointer no longer resolves to an object.
+- Two document registry rows share one content_hash across different domains.
+- Keys containing `//` or literal `None`/empty domain segments.
 
-**Detection:** Run `GET /collections` on your Qdrant instance. If there are more than 3 collections and you cannot explain what each one is for, you have sprawl.
-
-**Phase relevance:** Phase 3 (Vector Search). Must establish collection naming and aliasing conventions before first production collection.
-
----
-
-### Pitfall 6: Immutable Raw Zone Violations and Missing Content Hashing
-
-**What goes wrong:** The "immutable raw zone" principle is violated in subtle ways: documents are re-crawled and overwritten (losing the original version), parsers write intermediate results into the raw bucket, or file paths change between runs making lineage impossible to trace backward.
-
-**Why it happens:** S3/MinIO makes it easy to overwrite objects. Without explicit versioning or content-addressed storage, a `PUT` silently replaces the previous version. Teams also confuse "raw zone" (original bytes as received) with "landing zone" (whatever the crawler outputs).
-
-**Consequences:**
-- Lineage breaks: you cannot reproduce how a derived artifact was created because the source changed
-- Deduplication fails: same content re-ingested gets new IDs because there is no content hash to detect duplicates
-- Audit trail gaps: cannot prove what was processed or when
-- Re-processing produces different results because inputs changed underneath
-
-**Prevention:**
-- Content-addressed storage in raw zone: object key includes content hash (e.g., `raw/{source_id}/{sha256_first16}.{ext}`). Same content = same path = natural dedup.
-- NEVER overwrite in raw zone. New version = new object with new content hash. Keep both.
-- Compute content hash (SHA-256) on ingest, store in PostgreSQL registry alongside object path, source URL, crawl timestamp.
-- MinIO bucket policy: disable `DeleteObject` on raw zone bucket for non-admin roles.
-- Every downstream artifact references parent content hash, not just object path.
-
-**Detection:** Crawl the same URL twice, one week apart. If the raw zone contains only one copy, your immutability is broken. If it contains two copies with no content hash comparison, your dedup is broken.
-
-**Phase relevance:** Phase 1 (Storage Layer). Must be correct from the first write. Retrofitting content-addressed storage is a data migration nightmare.
+**Phase to address:** MinIO Domain Segmentation phase (STORE-01/02/03). This is the highest-risk storage change — treat immutability + dedup + lineage as explicit acceptance criteria, not incidental.
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 5: Content-hash re-crawl detection thrashes on dynamic HTML (false positives) or misses real edits (false negatives)
 
-### Pitfall 7: Dagster IO Manager Misuse for Data Lake Workloads
+**What goes wrong:**
+SCHED-02 "skip unchanged" hashes crawled content to decide whether to re-ingest. Two failure modes, both costly:
+- **False positives (needless re-ingest):** Pages embed CSRF tokens, nonces, session IDs, ad slots, `generated-at` timestamps, view counters, or randomized script bundles. The *meaningful* content is identical but the raw bytes differ every fetch → the hash changes every tick → the sensor re-ingests, re-parses, re-enriches (LiteLLM spend), re-embeds, and **writes a new immutable raw object every schedule cycle**, permanently bloating the WORM raw zone with near-duplicates.
+- **False negatives (missed updates):** If you hash only normalized/extracted text and a source updates data inside a table or PDF the extractor mangles, or updates only a linked asset, the text hash is unchanged and a real update is silently skipped → stale corpus.
 
-**What goes wrong:** Teams adopt Dagster IO managers to handle reading/writing from S3/MinIO because it feels like the "Dagster way." But IO managers assume data fits in memory, use implicit naming conventions tied to asset keys, and hide storage logic behind abstractions that do not match data lake patterns (large files, streaming, append-only zones).
+**Why it happens:**
+Naive `sha256(raw_bytes)` is the obvious change signal and matches the existing content-addressing, but raw bytes are the *wrong* signal for "did the meaningful content change." Dynamic boilerplate is nearly universal on real sites.
 
-**Prevention:**
-- Use `deps` parameter for asset dependencies instead of IO managers for the raw/bronze/silver pipeline. IO managers are for in-memory DataFrames, not multi-GB object storage blobs.
-- Handle S3 I/O explicitly in asset functions using a shared MinIO resource (connection pool, bucket references).
-- Reserve IO managers only for small metadata tables or export artifacts where the convenience outweighs the opacity.
+**How to avoid:**
+- Detect change on a **normalized content signature**, not raw bytes: strip volatile regions (scripts, nonces, timestamps, tracking params) → canonicalize → hash the *cleaned/extracted* text (this system already produces cleaned text in the silver stage — reuse it). Keep the raw-bytes SHA256 for storage identity, but gate *re-ingest* on the normalized signature.
+- Store per-source a `last_content_signature`; only proceed when it changes. Record both the raw hash and the signature so you can audit false pos/neg.
+- Guard against false negatives by *also* re-ingesting on a max-staleness interval (force refresh every N cycles) and by including linked-asset hashes in the signature where INGEST-01 follows PDFs.
+- Respect immutability: an unchanged-signature re-crawl must **not** write a new raw object. Only a genuine change writes a new content-addressed object (new version, old retained).
 
-**Detection:** If your IO manager code has workarounds for large files, streaming uploads, or custom path logic, it is the wrong abstraction.
+**Warning signs:**
+- Raw-zone object count grows on every schedule tick with no real source updates.
+- LiteLLM enrichment spend rises on a schedule with no new sources.
+- A source known to update daily never produces a new document version.
 
-**Phase relevance:** Phase 1 (Dagster Setup). Decide early: explicit I/O vs IO managers.
-
----
-
-### Pitfall 8: PostgreSQL Registry Over-Normalization
-
-**What goes wrong:** The metadata registry schema is designed with heavy normalization: separate tables for sources, documents, versions, artifacts, lineage edges, quality scores, tags, processing status, etc., all joined through foreign keys. Queries require 5-table JOINs for simple "show me this document's status" lookups.
-
-**Prevention:**
-- Start with 3-4 core tables: `sources`, `documents`, `artifacts`, `pipeline_runs`. Use JSONB columns for flexible metadata rather than creating new tables for every attribute.
-- Add indexes on: content_hash, source_id, status, created_at. Skip indexes on columns you do not filter on.
-- Denormalize status and latest quality score into the documents table. Normalize only when you have proven write-contention issues.
-- Use PostgreSQL's `GENERATED ALWAYS AS` for computed columns (e.g., `document_age`) rather than materialized views initially.
-
-**Detection:** If a simple status dashboard query requires more than 2 JOINs, your schema is over-normalized for the current scale.
-
-**Phase relevance:** Phase 1 (Registry Design). Schema mistakes compound over time; get the core right early.
+**Phase to address:** Crawl Scheduling phase (SCHED-02). Pair the signature design with the Dagster sensor (Pitfall 6).
 
 ---
 
-### Pitfall 9: Crawling Without Rate Limiting, Backoff, and Legal Compliance
+### Pitfall 6: Dagster re-crawl sensor — cursor/idempotency gaps cause duplicate runs and tick storms
 
-**What goes wrong:** Crawlers are configured for maximum throughput. They hit healthcare websites (CMS.gov, FDA.gov, medical journals) at high concurrency, get IP-banned, violate robots.txt directives, or trigger legal notices. Some healthcare sources have strict ToS prohibiting automated access.
+**What goes wrong:**
+The SCHED-01 sensor evaluates on an interval and yields `RunRequest`s for sources due for re-crawl. Common failures:
+- **No/duplicate `run_key`:** if RunRequests don't carry a stable, deterministic `run_key`, the sensor fires the same source repeatedly across ticks → duplicate concurrent crawls of one source → racing writes, doubled spend, lineage confusion.
+- **Cursor mismanagement:** the sensor cursor isn't advanced/persisted correctly, so on each evaluation it re-scans and re-emits everything (tick storm), or advances past sources and never re-crawls them.
+- **Long evaluation blocking:** doing the crawl/DB work *inside* the sensor evaluation (instead of just emitting RunRequests) exceeds the sensor tick timeout, causing skipped ticks and backlog.
+- **Overlap:** a scheduled re-crawl fires while the previous run for that source is still in-flight (slow crawl), stacking runs.
 
-**Prevention:**
-- Default to conservative rate limits: 1 request/second per domain, with exponential backoff on 429/503 responses.
-- Parse and obey robots.txt before first request to any domain. Store crawl-delay directives in source registry.
-- Track source licensing in the registry: `license_type` (public domain, Creative Commons, copyrighted, unknown). Flag "unknown" for manual review.
-- Healthcare-specific: CMS.gov, FDA.gov are public domain. Medical journals (NEJM, Lancet, JAMA) are copyrighted — only crawl abstracts or open-access content.
-- Implement `User-Agent` header identifying your crawler with contact info. Stealth crawling invites legal trouble.
-- Log every crawl request with timestamp, response code, and bytes downloaded for audit trail.
+**Why it happens:**
+Sensors feel like "just a function that returns runs," but Dagster's dedup/idempotency depends entirely on `run_key` semantics and correct cursor persistence. The existing v1.0 pipeline used assets/schedules, not change-driven sensors, so this is new territory here.
 
-**Detection:** Check your source registry. If any source lacks a `robots_txt_checked` flag or `license_type`, your legal compliance is incomplete.
+**How to avoid:**
+- Give each RunRequest a **deterministic `run_key`** encoding source_id + the change signal (e.g., `f"{source_id}:{content_signature}"` or `:{crawl_window}`), so Dagster dedups repeats automatically.
+- Keep sensor evaluation **cheap and fast**: query "sources due by `crawl_schedule`" from Postgres, emit RunRequests, update cursor to a monotonic watermark (e.g., last evaluated timestamp/id). Do the actual crawl in the launched run, not in the sensor.
+- Prevent overlap: skip a source whose previous run is still active (query run status, or use a Dagster concurrency key / `RunsFilter`), and set a per-source concurrency limit.
+- Tune `minimum_interval_seconds` to the crawl cadence — not seconds — to avoid tick storms; this interacts with adaptive rate limiting (Pitfall 7) and resumable jobs.
+- Make the sensor idempotent under replay: re-emitting the same `run_key` after a crash must not double-crawl.
 
-**Phase relevance:** Phase 2 (Crawling). Must be correct before scaling beyond test sources.
+**Warning signs:**
+- Two active runs for the same source_id.
+- Dagster daemon logs show skipped ticks / evaluation timeouts.
+- Sensor re-emits the full source list every tick (cursor not advancing).
 
----
-
-### Pitfall 10: Schema Evolution Without Migration Strategy
-
-**What goes wrong:** The PostgreSQL registry schema evolves as new features are added (new columns, changed types, additional tables). Without a migration tool, changes are applied manually or via ad-hoc ALTER TABLE statements. Old data is not backfilled. Code assumes columns exist that were added after initial data was inserted.
-
-**Prevention:**
-- Use Alembic (SQLAlchemy migrations) from day 1. Every schema change is a versioned migration file.
-- Make all new columns NULLABLE or provide DEFAULT values. Never add NOT NULL columns without a backfill migration.
-- Test migrations on a copy of production data before applying. PostgreSQL ALTER TABLE on large tables can lock for extended periods.
-- Store schema version in a `_meta` table. Pipeline startup checks schema version matches code expectation.
-- Plan for JSONB column evolution: document the expected keys, but do not enforce via CHECK constraints until schema stabilizes.
-
-**Detection:** If you have ever run a raw `ALTER TABLE` in production without a corresponding migration file, your schema management is broken.
-
-**Phase relevance:** Phase 1 (Foundation). Must establish migration discipline from first table creation.
+**Phase to address:** Crawl Scheduling phase (SCHED-01). Design `run_key` + cursor together with the change signature (Pitfall 5).
 
 ---
 
-### Pitfall 11: MinIO/S3 Multipart Upload and Large File Handling
+### Pitfall 7: Adaptive rate limiting deadlocks the crawl or overrides robots.txt crawl-delay
 
-**What goes wrong:** Large files (100MB+ PDFs, bulk exports) fail silently during upload because multipart upload configuration is wrong, network interruptions leave incomplete uploads consuming storage, or presigned URLs expire mid-transfer for large uploads.
+**What goes wrong:**
+CRAWL-03 adds per-host cooldown + backoff on 429/403. Interactions that bite:
+- **Starvation/deadlock in `crawl-all`:** a single hot host that keeps returning 429 drives its cooldown ever longer; if the batch scheduler blocks the shared worker pool waiting on that host (or a global lock), the whole `crawl-all` (CRAWL-02) stalls even though other hosts are idle. Worst case: all workers parked on cooling-down hosts → no forward progress.
+- **Backoff undercuts robots.txt:** the new adaptive limiter computes its own delay and *ignores* the crawl-delay already parsed from robots.txt in v1.0 → you crawl faster than the site's stated policy, violating the legal constraint, or you race two subsystems both throttling.
+- **Resumable-job interaction:** cooldown/backoff state lives only in memory; a resumed job (v1.0 resumable crawls) forgets it was backing off and hammers a host that just banned it.
 
-**Prevention:**
-- Set `part_size` in MinIO client to at least 64MB for files over 500MB. Default 5MB creates too many parts and is slow.
-- Implement lifecycle policies to abort incomplete multipart uploads after 24 hours (they consume storage invisibly).
-- For presigned upload URLs: calculate expected upload duration and set expiry accordingly (minimum 1 hour for large files, not the default 7 days which is a security risk).
-- Wrap all S3 operations in retry logic with exponential backoff. Network blips are common on DigitalOcean.
-- Use `fput_object` for file-based uploads (handles multipart automatically) rather than manual `put_object` with stream data for large files.
+**Why it happens:**
+Adaptive limiting is bolted onto an existing static rate limiter + robots.txt handler without deciding which one wins. Per-host cooldown naturally couples hosts if the work queue isn't host-partitioned.
 
-**Detection:** Check MinIO console for incomplete multipart uploads. If any exist older than 24 hours, your lifecycle policies are missing.
+**How to avoid:**
+- **Effective delay = max(robots.txt crawl-delay, adaptive backoff, per-source `crawl_config.rate_limit_rps`).** Adaptive backoff may only *slow down*, never speed up past the robots/policy floor. Make this a single composed function with a unit test asserting robots-delay is never violated.
+- Make the scheduler **host-partitioned and non-blocking**: a cooling-down host yields its worker to other hosts (ready-queue keyed by host + next-eligible-time), so one bad host can't starve the batch. Add a global deadline / max-cooldown cap and a "give up this host, continue batch" path.
+- Persist per-host cooldown/backoff state (in Postgres/registry) so resumable jobs restore it and don't re-hammer a banned host.
+- Cap cooldown growth and emit a structured event when a host is parked so it's observable.
 
-**Phase relevance:** Phase 1 (Storage). Configure lifecycle policies when creating buckets, not after discovering storage leaks.
+**Warning signs:**
+- `crawl-all` wall-clock stalls with workers idle and one host repeatedly 429ing.
+- Request timestamps to a host closer together than its robots crawl-delay.
+- After a resume, immediate 403/429 bursts to a previously-throttled host.
 
----
-
-### Pitfall 12: Prompt Instability in Batch Enrichment
-
-**What goes wrong:** LLM enrichment prompts are tweaked iteratively during development. Each change produces different outputs for the same input. Documents enriched with prompt v1 have different metadata structure/quality than those enriched with prompt v2. The corpus becomes inconsistent.
-
-**Prevention:**
-- Version every prompt. Store prompt text with SHA-256 hash. Record prompt version in every enrichment artifact's lineage.
-- When prompt changes, re-enrich ALL affected documents (or accept and document the inconsistency boundary).
-- Use structured output (JSON mode) with explicit schema validation. Reject LLM outputs that don't conform to expected schema.
-- Test prompt changes on a fixed evaluation set of 50 documents before bulk application. Compare outputs for regressions.
-- Store enrichment results with prompt_version_hash so you can query "all documents enriched with prompt v3."
-
-**Detection:** Query your artifact registry for documents enriched in the last month. If `prompt_version` field is missing or has more than 2 distinct values without an intentional migration, your prompt management is ad-hoc.
-
-**Phase relevance:** Phase 3 (Enrichment). Must version prompts from first enrichment call.
+**Phase to address:** Metadata & Crawl Maturation phase (CRAWL-03), with a cross-check against SCHED-01 scheduling.
 
 ---
 
-### Pitfall 13: Dataset Generation Garbage-In-Garbage-Out
+### Pitfall 8: Partial-JSON recovery silently caches a corrupt/misassigned enrichment result
 
-**What goes wrong:** Fine-tuning datasets and RAG evaluation sets are generated from the knowledge lake without quality filtering. If upstream parsing was poor, chunks were bad, or enrichment was inconsistent, the generated datasets inherit and amplify those quality issues. Models trained on garbage data perform poorly, but the cause is non-obvious — teams blame the model or training hyperparameters instead of the data.
+**What goes wrong:**
+ENRICH-01 recovers truncated LLM output by closing braces/heuristically repairing JSON. Failure modes that poison the corpus:
+- **Wrong values from brace-closing:** naive "append `}`/`]` until it parses" can close a string mid-token, drop the last (partial) field, or — worse — mis-terminate so a value lands in the wrong key, producing a *valid-looking but incorrect* object that passes schema validation.
+- **Caching the bad result:** v1.0 caches enrichment by `hash(prompt_version + content)` with **one call per document**. If the repaired partial is written to that cache, every future run returns the corrupt enrichment forever — the truncation happened once, but the poison is permanent and invisible.
+- **Silent field misassignment:** partial recovery fills required fields with defaults/nulls that downstream code treats as "enriched," so the document looks processed but has degraded metadata (feeding Qdrant payload PAYLOAD-01 and search filters PAYLOAD-02 with wrong tags/title/org).
 
-**Prevention:**
-- Implement quality scoring at document and chunk level BEFORE dataset generation. Only chunks above quality threshold enter dataset generation pipeline.
-- Build a "gold standard" evaluation set of 100 manually verified examples. Use this to validate generated datasets against known-good answers.
-- Track data lineage into datasets: every training example must trace back to specific chunks, documents, and sources. When a source is flagged as low-quality, automatically flag all derived dataset entries.
-- Implement automated quality checks: exact-match dedup within datasets, answer extractability verification, question diversity scoring.
-- Healthcare-specific: clinical accuracy must be verified by domain experts for at least a sample of generated QA pairs before using in fine-tuning.
+**Why it happens:**
+Truncation is usually a `max_tokens`/timeout symptom; "just recover what we can" feels graceful. But partial recovery + a content-hash cache = durably persisting a one-time defect. The single-call-per-doc design means there's no second signal to catch it.
 
-**Detection:** Sample 20 random entries from a generated dataset. If more than 3 contain obviously wrong, incomplete, or nonsensical content, your upstream quality filtering is insufficient.
+**How to avoid:**
+- **Detect truncation explicitly first:** check the LiteLLM finish_reason (`length`/truncated) — don't infer it from a parse failure. If truncated, prefer **retry with higher max_tokens / continuation** over guessing.
+- Only accept a recovered partial if it **validates against the full Pydantic schema AND all required fields are present and typed**; mark the result with a `partial_recovery=True` / `enrichment_incomplete` flag in the artifact + payload.
+- **Do not cache incomplete/recovered results under the normal key** (or cache them under a distinct key/status so a later full run overwrites them). Never let a `partial=True` result short-circuit future full enrichment.
+- Prefer a real streaming/greedy JSON parser (parse the longest valid prefix and *drop* the trailing incomplete object) over blind brace-appending, so you never invent values.
+- Emit a structured warning + count of truncations so this is observable, not silent.
 
-**Phase relevance:** Phase 4 (Dataset Generation). Quality must be validated before any model training.
+**Warning signs:**
+- Enrichment cache entries with missing/`null` required fields.
+- Qdrant payloads with empty `title`/`organization`/`tags` where the source clearly had them.
+- LiteLLM responses with `finish_reason=length` that still produced a "successful" enrichment.
 
----
-
-## Minor Pitfalls
-
-### Pitfall 14: Dagster Resource Configuration Drift Between Environments
-
-**What goes wrong:** Resources (MinIO client, PostgreSQL connection, LiteLLM gateway URL) are configured differently in dev vs. production, but the differences are not captured in Dagster's resource system. Hard-coded URLs slip into asset code.
-
-**Prevention:** Define all external connections as Dagster resources with environment-specific configuration. Use `EnvVar` for secrets. Test that assets work with a mock resource before deploying.
-
-**Phase relevance:** Phase 1 (Foundation). Establish resource pattern from first external connection.
+**Phase to address:** Metadata & Crawl Maturation phase (ENRICH-01), coordinated with PAYLOAD-01/02 (bad enrichment flows straight into search payloads).
 
 ---
 
-### Pitfall 15: Qdrant Payload Index Neglect
+### Pitfall 9: PDF-from-crawl link-following opens SSRF and unbounded crawl explosion, and breaks license/robots scope
 
-**What goes wrong:** Queries with payload filters (e.g., "find chunks from source X with quality > 0.8") perform full scans because payload indexes were never created. Performance degrades as collection grows.
+**What goes wrong:**
+INGEST-01 follows links on a crawled page to ingest linked PDFs/docs. Four hazards:
+- **SSRF:** a followed link points at `http://169.254.169.254/…` (cloud metadata), `http://localhost:9000` (the MinIO instance), internal Docker service names, or `file://` — the crawler fetches internal resources. v1.0 has an SSRF guard for *seed* URLs, but followed/derived links are a **new, untrusted input path** that may bypass it.
+- **Crawl explosion:** "follow links to PDFs" without depth/count/domain bounds turns a single page into an unbounded frontier (link farms, paginated document indexes) → runaway crawl, cost, and raw-zone growth.
+- **Robots/license scope:** the linked PDF may be on a *different host* with its own robots.txt and its own license, or off the source's licensed scope entirely — following it can violate the legal constraint and ingest content whose license isn't tracked.
+- **Dedup across HTML + its PDF:** the same document exists as the HTML page *and* the linked PDF (or the PDF is linked from many pages) → double-ingest unless dedup spans both.
 
-**Prevention:** Create payload indexes for any field you filter on: `source_id`, `document_id`, `quality_score`, `created_at`, `document_type`. Do this at collection creation time, not after performance problems appear.
+**How to avoid:**
+- Route **every followed link through the same SSRF guard** as seed URLs (block private/link-local/loopback/metadata IPs, non-http(s) schemes, and internal hostnames) — resolve DNS and re-check after redirects, not just the literal URL.
+- Bound following hard: max additional depth (e.g., 1), max linked assets per page, allowed content-types (PDF/doc only), and a **same-registered-domain (or explicitly allowlisted host) restriction** by default.
+- Re-evaluate robots.txt **for the linked asset's host** before fetching; record the linked asset's own `license_type` (flag `unknown` for review, per v1.0 policy).
+- Dedup by content hash across formats: after download, if the PDF's content_hash already exists (from HTML extraction or another page's link), link to the existing document instead of re-ingesting. Track the HTML↔PDF relationship in lineage.
 
-**Phase relevance:** Phase 3 (Vector Search). Configure indexes when creating collections.
+**Warning signs:**
+- Crawl requests to RFC1918 / `169.254.169.254` / internal service hostnames.
+- Frontier size growing without bound during a single-source crawl.
+- Ingested PDFs with `license_type=unknown` slipping past review.
+- Same content_hash ingested from both an HTML page and a PDF link as two documents.
 
----
-
-### Pitfall 16: LiteLLM Cooldown Cascade Under Load
-
-**What goes wrong:** Under bursty batch enrichment load, a provider returns a few 429 errors. LiteLLM's default cooldown (3 failures = 5 second cooldown) cascades: deployments are rapidly pulled offline, remaining deployments get overloaded, they fail too, and the entire router enters a death spiral.
-
-**Prevention:** Increase `allowed_fails` to 10+ for batch workloads. Set `cooldown_time` to 30-60 seconds (not 5). Use `simple-shuffle` routing (not usage-based, which adds Redis latency). Pre-calculate batch concurrency to stay under provider rate limits rather than relying on reactive cooldown.
-
-**Phase relevance:** Phase 3 (Enrichment). Configure before first batch enrichment run.
-
----
-
-### Pitfall 17: Lineage Over-Tracking vs Under-Tracking
-
-**What goes wrong:** Either lineage captures every intermediate transformation (creating a lineage graph too complex to query or understand), or lineage only tracks source -> final output (making it impossible to debug which intermediate step introduced an error).
-
-**Prevention:** Track lineage at zone boundaries (raw -> bronze -> silver -> gold) and at LLM enrichment steps. Skip lineage for pure mechanical transforms (encoding changes, format normalization). Every lineage edge should answer: "if this input changes, what outputs are affected?"
-
-**Phase relevance:** Phase 1-2 (Registry and Pipeline). Define lineage granularity in schema design.
+**Phase to address:** Metadata & Crawl Maturation phase (INGEST-01). Treat followed links as untrusted seed-equivalent input.
 
 ---
 
-### Pitfall 18: SearXNG Source Discovery Without Deduplication
+## Technical Debt Patterns
 
-**What goes wrong:** SearXNG discovers URLs that point to the same content (mirrors, cached versions, different URL parameters). Without URL normalization and content-hash deduplication, the pipeline processes the same document multiple times, wasting compute and creating duplicate entries.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Global `sys.stdout = stderr` for all `klake` commands (not just stdio MCP) | One-line "fix" for MCP framing | Breaks/relocates normal CLI output for every other command; confuses users | Never — gate the redirect on stdio MCP transport only |
+| Register tools separately per transport | Fast to get second transport working | Registry drift (Pitfall 3); OpenAPI/OpenAI defs diverge | Never — single registry from the start |
+| Put domain/source into the raw-zone content-addressed key | "Storage is organized by domain" | Kills cross-domain dedup, entangles identity with mutable classification (Pitfall 4) | Never for raw zone; acceptable for derived/gold zones with lineage pointers |
+| Hash raw bytes for re-crawl change detection | Reuses existing content-addressing | Thrashing on dynamic HTML → WORM bloat + spend (Pitfall 5) | Only as a coarse pre-filter *before* normalized-signature check |
+| Cache recovered partial-JSON enrichment under the normal key | Avoids re-calling the LLM | Permanently poisons corpus with one-time truncation defect (Pitfall 8) | Never — flag + separate status, allow later overwrite |
+| Do crawl work inside the Dagster sensor evaluation | Simpler than emitting RunRequests | Tick timeouts, skipped ticks, no idempotency (Pitfall 6) | Never — sensor emits, run executes |
+| Ship SSE remote transport per the requirement text | Matches the written requirement literally | Deprecated transport; near-term rewrite; agents can't connect (Pitfall 2) | Only as a secondary/legacy endpoint alongside Streamable HTTP |
+| Commit `docs/openapi.json` and hand-maintain it | Static file for agents/skills to read | Drifts from live app on every endpoint change (Pitfall 10) | Only if generated in CI and drift-checked |
 
-**Prevention:** Normalize URLs before storing (strip tracking params, canonicalize). After download, compute content hash. If hash exists in registry, skip processing and link to existing document.
+## Integration Gotchas
 
-**Phase relevance:** Phase 2 (Discovery and Crawling). Implement dedup at the earliest point in the pipeline.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| MCP stdio ↔ structlog/LiteLLM/Docling | Any of them writing to stdout corrupts JSON-RPC framing | Lock stdout to the transport; route ALL logs to stderr/file in stdio mode; suppress LiteLLM/Docling/Crawl4AI verbose output |
+| MCP remote transport ↔ MCP spec | Implementing deprecated HTTP+SSE | Implement Streamable HTTP (spec 2025-11-25); keep `--sse` flag as alias if desired |
+| MCP SSE/HTTP server ↔ security | No auth, permissive CORS, exposing lake mutations (add-source, export) to any origin | Require auth token; restrict CORS origins; bind to localhost by default; treat write tools as privileged |
+| Qdrant client 1.18 ↔ Qdrant **server** | Query API + sparse vectors + IDF require **server ≥ 1.10**; a stale server container fails or silently degrades | Verify running server version at startup; Query API/IDF need server 1.10+, not just client 1.18 |
+| Qdrant sparse vectors (RETR-01) | Prefetch `limit` < main `limit+offset` → empty/short hybrid results | Set each prefetch limit ≥ main query `limit + offset`; tune RRF fusion, don't leave defaults |
+| Qdrant IDF sparse | Forgetting to enable IDF modifier in the sparse vector config → BM25-style weighting absent | Set `modifier: idf` on the sparse vector at collection creation |
+| Qdrant existing collection ↔ sparse vectors | Adding sparse vectors but not backfilling existing points → hybrid search only covers new chunks (partial-collection problem) | Re-index existing points with sparse vectors via the alias-swap reindex pattern already used in v1.0; verify count parity |
+| S3 object tags (STORE-02) | Assuming MinIO ≡ AWS S3 tagging semantics/limits (AWS: 10 tags, 128-char key/256-char value, tagging billed/API-limited) | Cap tag count/size to AWS limits even on MinIO; don't rely on tags for anything the registry should own; batch tag writes |
+| LiteLLM finish_reason (ENRICH-01) | Inferring truncation from a JSON parse error instead of `finish_reason=length` | Read finish_reason explicitly; retry-with-more-tokens before recovering |
+| Dagster sensor ↔ Postgres registry | Sensor scans full source table every tick | Cursor watermark + "due now" query; deterministic `run_key` |
 
----
+## Performance Traps
 
-## Phase-Specific Warnings
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Hybrid prefetch over-fetch | Slow hybrid queries; high memory | Keep prefetch limits tight (≥ limit+offset but not 10×); add payload indexes for new PAYLOAD-01 filter fields | As collection grows past ~10^5–10^6 points |
+| Missing payload indexes on new filter fields | PAYLOAD-02 filters (source_name, format, tags, source_id) do full scans | Create Qdrant payload indexes for every new filterable field at collection/reindex time | As chunk count grows |
+| `crawl-all` host starvation | Batch stalls with idle workers | Host-partitioned non-blocking scheduler (Pitfall 7) | Any batch with one slow/429ing host |
+| Re-crawl WORM bloat | Raw-zone object count grows every schedule tick | Normalized-signature change detection (Pitfall 5) | Immediately, on any dynamic-HTML source |
+| Sensor tick storm | Dagster daemon busy, skipped ticks | `minimum_interval_seconds` sized to crawl cadence; cheap evaluation | As number of scheduled sources grows |
+| Re-embedding whole corpus for sparse backfill | Long reindex, cost | Sparse vectors are computed (BM25/IDF), not model-embedded — build sparse without re-calling the embedding model where possible | Large existing collection |
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Phase 1: Foundation | Over-engineering Dagster graph before proving data flow | Build spike pipeline first, wrap in Dagster second |
-| Phase 1: Storage | Mutable raw zone, missing content hashing | Content-addressed storage from day 1, disable deletes on raw bucket |
-| Phase 1: Registry | Over-normalized schema, no migration tool | Start with 3-4 tables + JSONB, use Alembic from first migration |
-| Phase 2: Parsing | Silent parser failures on real healthcare PDFs | Parser torture test corpus, quality gates, fallback chains |
-| Phase 2: Chunking | Fixed-size splitting destroys tables and context | Structure-aware chunking, atomic tables, parent heading context |
-| Phase 2: Crawling | Rate limit violations, legal issues | Conservative defaults, robots.txt compliance, license tracking |
-| Phase 3: Enrichment | LLM cost explosion, prompt instability | Budget caps, deterministic-first, prompt versioning, enrichment caching |
-| Phase 3: Vector Search | Collection sprawl, wrong distance metric, no payload indexes | Aliasing, model-matched metrics, indexes at creation time |
-| Phase 3: LiteLLM | Cooldown cascade, silent misconfig | Higher allowed_fails, explicit RPM/TPM, simple-shuffle routing |
-| Phase 4: Datasets | Quality propagation from bad upstream data | Quality scoring gates, gold standard eval set, lineage tracing |
+## Security Mistakes
+
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| MCP HTTP transport with no auth / bound to 0.0.0.0 | Any network client can trigger crawls, add sources, export datasets, run LiteLLM spend | Require auth token; default-bind localhost; separate read vs write tool permissions |
+| Permissive CORS on MCP/SSE endpoint | Browser-based cross-origin calls drive lake mutations | Explicit allowlist of origins; deny by default |
+| Followed-link SSRF (INGEST-01) | Crawler fetches cloud metadata / internal MinIO/Postgres/Docker services | Run every followed link + post-redirect target through the SSRF guard; block private/link-local/metadata IPs and non-http(s) schemes |
+| Trusting agent/tool input to write tools | An agent (or prompt-injected page content) calls add-source/export with hostile args | Validate tool inputs via Pydantic; apply the same robots/license/SSRF guards on agent-initiated crawls as on CLI-initiated ones |
+| Leaking internal paths/keys in MCP tool outputs or OpenAPI export | Exposes MinIO keys, internal hostnames, registry internals to agents | Scrub tool responses; export only the intended public schema |
+| Object tags used as a trust/authorization signal | Tags are mutable and not lineage-grade | Keep authoritative classification in the registry; tags are convenience/discovery only |
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Over-large tool schemas for agents (SKILL-03) | Bloated context, agent picks wrong tool, higher token cost | Keep tool descriptions/schemas lean; expose a small set of high-level tools (search, add-source, export), not every CRUD endpoint; trim Pydantic schema to essential fields |
+| Search mode config (RETR-02) with silent fallback | User asks for `sparse` but gets `dense` because sparse vectors weren't built for that collection | Fail loudly (or clearly report mode used) when the requested mode's vectors are absent; expose which mode actually ran |
+| `crawl-all` with no dry-run / progress | User triggers a huge batch blind; can't tell what will be crawled or budget impact | `--dry-run` listing sources + estimated scope; structured progress; `--domain` filter surfaced clearly |
+| MCP tool errors as opaque failures | Agent can't recover; user sees "tool failed" | Return structured, actionable error messages (which guard tripped, which field invalid) |
+
+## "Looks Done But Isn't" Checklist
+
+- [ ] **MCP stdio server:** Boots and lists tools — but verify a *real* tool call that triggers enrichment/crawl/parse doesn't leak library output to stdout and break the session. Test with the actual noisy code paths, not just `list_tools`.
+- [ ] **MCP remote transport:** "SSE works" — verify it's Streamable HTTP (not deprecated HTTP+SSE) and that a *current* MCP client connects, with auth + CORS configured.
+- [ ] **Single tool registry:** Both transports "have the tools" — assert `stdio.list_tools() == http.list_tools()` and that OpenAPI/OpenAI exports match the same set.
+- [ ] **Domain-scoped keys:** New objects land under `{zone}/{domain}/{source_id}/{hash}` — verify same-content-across-domains does NOT create duplicate raw blobs, and old v1.0 keys still resolve.
+- [ ] **Object tagging:** Tags written — verify tag count/size within AWS limits (so prod S3 won't reject) and that no tag exceeds 10 tags / 128:256 chars.
+- [ ] **Re-crawl change detection:** "Skips unchanged" — verify it skips a page whose only diff is a nonce/timestamp, AND that it re-ingests a page with a real content edit.
+- [ ] **Dagster sensor:** Fires re-crawls — verify no duplicate concurrent runs for one source (deterministic `run_key`) and cursor advances (no tick storm).
+- [ ] **Partial-JSON recovery:** Recovers truncated output — verify a recovered partial is flagged, NOT cached as a normal result, and can be overwritten by a later full run; verify finish_reason drives the decision.
+- [ ] **Adaptive rate limiting:** Backs off on 429 — verify it never crawls faster than robots.txt crawl-delay and one hot host doesn't stall `crawl-all`.
+- [ ] **PDF-from-crawl:** Ingests linked PDFs — verify followed links go through the SSRF guard, respect the linked host's robots/license, and dedup against the HTML source.
+- [ ] **Hybrid search:** Returns results — verify sparse vectors exist for ALL points (including pre-existing ones), IDF modifier is set, and requested `search_mode` is actually honored.
+- [ ] **OpenAPI export:** `docs/openapi.json` committed — verify it's regenerated from the live app in CI and drift-checked against endpoints.
+
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| stdout pollution broke MCP sessions | LOW | Add the stdio stdout-isolation shim + self-test; gate on transport mode; re-test with noisy tool calls |
+| Shipped deprecated SSE transport | MEDIUM | Add Streamable HTTP endpoint; keep SSE as legacy alias; update client configs |
+| Domain-scoped keys created duplicate raw blobs | HIGH | Cannot delete from WORM raw zone; add registry-level content_hash dedup going forward, associate extra domains as tags, accept existing duplicates as sunk; fix write path so no new duplicates |
+| Broken lineage pointers after key change | HIGH | Rebuild pointer map from registry content_hash ↔ old-key index; add key-scheme version; backfill resolvable pointers; never touch raw objects |
+| WORM bloat from re-crawl thrashing | HIGH | Switch to normalized-signature detection; existing duplicate versions are permanent (immutability) — stop the bleeding, accept sunk storage |
+| Poisoned enrichment cache (bad partials) | MEDIUM | Query cache/artifacts for `partial=True`/missing-required-field entries; invalidate + re-enrich those documents with higher max_tokens |
+| Sparse vectors missing on old points | MEDIUM | Run alias-swap reindex building sparse vectors for all points; verify count parity before swap |
+| Sensor duplicate/thrashing runs | LOW | Add deterministic `run_key`, fix cursor watermark, add per-source concurrency limit |
+
+## Pitfall-to-Phase Mapping
+
+Phases named by the four v2.0 feature groups in PROJECT.md (roadmapper may reorder/rename).
+
+| Pitfall | Prevention Phase (feature group) | Verification |
+|---------|----------------------------------|--------------|
+| 1. stdout corrupts MCP stdio | AI Agent Skills (MCP-01/02) | Self-test asserts no bytes on transport fd from logging; real tool call keeps session alive |
+| 2. Deprecated SSE transport | AI Agent Skills (MCP-01) | Current MCP client connects via Streamable HTTP |
+| 3. Dual tool-registry drift | AI Agent Skills (MCP-01, SKILL-02/03) | `stdio.list_tools()==http.list_tools()==openapi==openai defs` |
+| 4. Domain keys break dedup/lineage | MinIO Domain Segmentation (STORE-01/02/03) | Same content/two domains = one raw blob; old keys resolve; no `//`/`None` segments |
+| 5. Re-crawl change-detection false pos/neg | Crawl Scheduling (SCHED-02) | Nonce-only diff skipped; real edit re-ingested; no per-tick WORM growth |
+| 6. Dagster sensor idempotency | Crawl Scheduling (SCHED-01) | No duplicate active runs per source; cursor advances; no tick storm |
+| 7. Adaptive limiter starvation / robots override | Metadata & Crawl Maturation (CRAWL-03) | robots crawl-delay never violated; one 429 host doesn't stall `crawl-all`; state survives resume |
+| 8. Partial-JSON poisons cache | Metadata & Crawl Maturation (ENRICH-01) | Partials flagged, not cached as final; finish_reason drives recovery; overwritable |
+| 9. Followed-link SSRF / explosion / scope | Metadata & Crawl Maturation (INGEST-01) | Followed links pass SSRF guard + robots/license check; bounded frontier; HTML↔PDF dedup |
+| 10. OpenAPI drift | AI Agent Skills (SKILL-02) | CI regenerates + drift-checks `docs/openapi.json` |
+| Qdrant partial-collection / IDF / prefetch | Hybrid Search (RETR-01/02) | Sparse vectors on all points; IDF set; prefetch ≥ limit+offset; server ≥1.10 |
+| MCP HTTP auth/CORS | AI Agent Skills (MCP-01) | Auth required; CORS allowlist; localhost default bind |
 
 ## Sources
 
-- Dagster official documentation: assets, IO managers, resources, external pipelines (docs.dagster.io) [MEDIUM confidence - official docs via WebFetch]
-- Docling GitHub issues: #3671, #3698, #3693, #3699, #3685 (github.com/docling-project/docling) [MEDIUM confidence - verified community reports]
-- Qdrant documentation: collections, optimization (qdrant.tech/documentation) [MEDIUM confidence - official docs via WebFetch]
-- LiteLLM documentation: routing, cost tracking (docs.litellm.ai) [MEDIUM confidence - official docs via WebFetch]
-- Pinecone chunking strategies guide (pinecone.io/learn/chunking-strategies) [MEDIUM confidence - cross-referenced with domain knowledge]
-- MinIO Python SDK repository and documentation (github.com/minio/minio-py) [MEDIUM confidence - official repo via WebFetch]
+- MCP Transports specification, revisions 2025-03-26 (HTTP+SSE deprecated → Streamable HTTP) and 2025-06-18 / 2025-11-25 (stdio + Streamable HTTP standard): https://modelcontextprotocol.io/specification/2025-06-18/basic/transports [HIGH — official spec, verified]
+- MCP stdio stdout-pollution / logging-to-stderr requirement: modelcontextprotocol.io transports + community writeups (chatforest.com/guides/mcp-transports-explained, startdebugging.net MCP transport guide) [HIGH — consistent across official + multiple sources]
+- Qdrant 1.10 — Universal Query API, built-in IDF, sparse vectors, prefetch: https://qdrant.tech/blog/qdrant-1.10.x/ and https://qdrant.tech/documentation/search/hybrid-queries/ [HIGH — official docs; prefetch limit ≥ limit+offset and `modifier: idf` verified]
+- Qdrant hybrid search / RRF fusion + prefetch semantics: https://qdrant.tech/articles/hybrid-search/ [HIGH — official]
+- AWS S3 object tagging limits (10 tags/object, 128-char key, 256-char value, tagging API/cost) vs MinIO parity: AWS S3 developer guide (object tagging) [MEDIUM — well-established S3 limits]
+- Dagster sensors: `run_key` idempotency, cursor persistence, evaluation interval: docs.dagster.io (sensors) [MEDIUM — official docs + v1.0 team experience]
+- LiteLLM `finish_reason`/truncation, budget/cooldown behavior: docs.litellm.ai [MEDIUM — carried from v1.0 PITFALLS, still applicable]
+- This system's v1.0 PITFALLS.md and PROJECT.md constraints (immutability, content-addressing, lineage, LiteLLM-only, structlog) [HIGH — internal, authoritative]
+
+---
+*Pitfalls research for: Knowledge Lake Framework v2.0 Agent-Ready Lake*
+*Researched: 2026-07-08*

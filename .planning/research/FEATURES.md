@@ -1,165 +1,245 @@
-# Feature Landscape
+# Feature Research — v2.0 Agent-Ready Lake
 
-**Domain:** Knowledge Lake / Document Processing Pipeline Framework
-**Researched:** 2026-07-02
-**Overall Confidence:** HIGH (based on official documentation of DataTrove, NeMo Curator, Haystack, LlamaIndex, Docling, Unstructured, RAGFlow, Crawl4AI, Dagster, Qdrant, SearXNG, distilabel, Argilla)
+**Domain:** Knowledge Lake / AI-ready document pipeline framework (subsequent milestone: agent access, richer search, self-maintenance)
+**Researched:** 2026-07-08
+**Confidence:** HIGH (MCP + Qdrant hybrid grounded in current official docs/best-practice writeups; crawl/storage/robustness grounded in established v1.0 stack and standard patterns)
 
-## Table Stakes
+> Scope note: This milestone adds v2.0 features to a shipped framework. v1.0 capabilities (full ingest→export pipeline, dense Qdrant search, Crawl4AI/Scrapy crawling, LiteLLM enrichment, MinIO storage, Postgres registries+lineage, Dagster, FastAPI+Typer, healthcare pack) are **not** re-scoped here. Every feature below is analysed only for its *new* behaviour and its dependency on existing v1.0 pieces.
 
-Features users expect. Missing = framework feels incomplete or unusable for its stated purpose.
+---
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Document ingestion from multiple sources | Every pipeline starts with data acquisition; DataTrove, Unstructured, LlamaIndex all provide readers/connectors | Medium | Must support local files, URLs, S3, and crawled content |
-| Multi-format document parsing | All competitors (Docling, Unstructured, LlamaIndex) support PDF, DOCX, HTML, Markdown at minimum | High | Docling covers 20+ formats; wrap as plugin, do not reimplement |
-| Content extraction and normalization | Raw documents must become clean text; Unstructured's partition, Docling's converter, DataTrove's extractors | Medium | Includes HTML stripping, encoding normalization, whitespace cleanup |
-| Text chunking with configurable strategies | LlamaIndex, LangChain, Haystack, RAGFlow all provide multiple chunking methods as core | Medium | Must support fixed-size, recursive, semantic, and section-aware at minimum |
-| Embedding generation | Haystack, LlamaIndex, RAGFlow all embed as a core pipeline stage | Low | Wrap sentence-transformers and LiteLLM API; model-agnostic interface |
-| Vector indexing and semantic search | Qdrant, FAISS, Chroma are standard backends; every RAG framework expects this | Medium | Plugin interface to vector stores; Qdrant as default |
-| Metadata extraction and attachment | Unstructured attaches element-level metadata; LlamaIndex stores node metadata | Medium | Source URL, dates, section headers, page numbers, content hashes |
-| Export to standard formats | DataTrove writes JSONL/Parquet; NeMo Curator outputs datasets; all frameworks export | Low | Parquet, JSONL, DuckDB are the minimum trio |
-| CLI interface | DataTrove, Unstructured, Crawl4AI all have CLIs; expected for developer tools | Medium | Typer-based; mirrors all API operations |
-| REST API | RAGFlow, Haystack (Hayhooks), Dagster all expose HTTP APIs | Medium | FastAPI with OpenAPI spec; pipeline triggers, CRUD, status |
-| Configuration management | All frameworks use YAML/JSON/Python configs for pipeline definition | Low | Pydantic settings with env var overrides |
-| Logging and error reporting | Standard in all data tools; Dagster has built-in observability | Low | Structured logging with per-job context |
-| Idempotent and resumable jobs | DataTrove's skip_completed, Crawl4AI's resume_state, Dagster's asset materialization | High | Content-hash-based deduplication of work; checkpoint/resume on failure |
-| Content deduplication | DataTrove (MinHash, exact, substring), NeMo Curator (exact, fuzzy, semantic) both treat this as core | High | At minimum exact hash dedup; fuzzy (MinHash) for near-duplicates |
-| Language detection | DataTrove and NeMo Curator include language identification as a standard filter | Low | FastText-based detection; filter or tag per document |
-| Pipeline orchestration with DAG execution | Dagster's core value; Haystack pipelines; DataTrove executors | High | Dagster integration from day 1; asset-based model maps to zones |
-| Source and document registries | Metadata catalog is what differentiates a "lake" from a "pile of files" | Medium | PostgreSQL-backed; source -> document -> artifact lineage |
-| Immutable raw storage | Medallion architecture pattern; data lakes always preserve raw | Low | Write-once to S3; content-addressed paths |
+## Feature Landscape
 
-## Differentiators
+### Table Stakes (Expected — absence makes v2.0 feel half-built)
 
-Features that set the Knowledge Lake Framework apart from existing tools. Not expected in any single competitor, but create unique value.
+| Feature | Why Expected | Complexity | Depends on (v1.0) | Notes |
+|---------|--------------|------------|-------------------|-------|
+| **Richer chunk payload** (source_id, source_name, source_url, format, tags, title, organization) — PAYLOAD-01 | Agents and humans both need to know *what* a hit is and *where it came from*; a bare text+score result is unusable for citation. Every RAG framework attaches provenance to nodes. | LOW | Qdrant plugin, chunker, source/document registries (all payload fields already exist as registry columns) | Payload is the join point between vector hits and lineage. Denormalise registry fields into the payload at index time so search needs no DB round-trip. |
+| **Search filters** on source_name, format, tags (array-contains), source_id — PAYLOAD-02 | Filtered retrieval is standard in Qdrant/every vector DB; without it you cannot scope a query to one source or one format. | LOW–MEDIUM | Depends on PAYLOAD-01 (fields must be indexed payload keys), search API + CLI | Create Qdrant **payload indexes** on filtered fields (keyword index for source_id/source_name/format, keyword index for tags with array semantics) — unindexed filters silently degrade to full scans. Filters must be exposed identically in API and CLI. |
+| **Hybrid BM25 + dense with RRF** — RETR-01 | Dense-only misses exact terms (drug codes, ICD/CPT codes, acronyms, product names) — a critical failure mode in healthcare. Hybrid is now the expected default in production RAG. | MEDIUM | Qdrant plugin (must add a **named sparse vector** to the collection), embed stage, reindex path | Use Qdrant's native **Query API with `prefetch` + `FusionQuery(RRF)`** — do not fuse client-side. Requires a sparse encoder (BM25/BM42 or SPLADE) added to the embed stage. See "When each mode wins" below. |
+| **Configurable search mode** (hybrid \| dense \| sparse) — RETR-02 | Operators need an escape hatch (debugging relevance, cost, or when a sparse index isn't populated). | LOW | RETR-01 | Single enum param threaded through API + CLI. **Default = hybrid.** Dense/sparse are fallbacks. |
+| **`crawl-all` batch command** with `--domain` filter — CRAWL-02 | Once you have many sources, per-source crawl invocation doesn't scale operationally. Batch-over-registry is expected. | LOW–MEDIUM | Source registry, existing crawl job runner, Dagster | Iterate registry sources (optionally filtered by domain), enqueue crawl jobs. Must be **resumable/idempotent** and respect per-source config (CRAWL-01). |
+| **Per-source crawl_config** (depth, rate_limit_rps) — CRAWL-01 | Different sites need different depth and politeness; one global setting is wrong for a 28-source (soon multi-domain) lake. | LOW | sources.yaml / DomainLoader, crawler plugin | Config lives in sources.yaml, validated by Pydantic, passed to the crawler per job. Sensible defaults so existing sources keep working with no config. |
+| **Adaptive rate limiting** (backoff on 429/403, per-host cooldown) — CRAWL-03 | Polite crawling is a legal/operational baseline; hammering a host gets you blocked and violates the project's compliance constraint. | MEDIUM | crawler plugin, per-host state | Exponential backoff + jitter on 429/403, honour `Retry-After`, per-host token bucket. Crawl4AI has rate-limit primitives; wrap rather than reinvent. |
+| **Partial-JSON recovery** on truncated LLM enrichment — ENRICH-01 | Truncated/invalid JSON from an LLM is a *when-not-if* event (token cap, stop sequence, provider hiccup). Dropping the whole document is data loss. | LOW–MEDIUM | enrich stage, LiteLLM gateway | Recover the largest valid prefix (balance braces/brackets, salvage complete fields), tag the doc as partially-enriched, keep deterministic fields. Do **not** silently accept junk — record recovery in lineage. |
+| **Static OpenAPI export** (`klake openapi` → docs/openapi.json) — SKILL-02 | FastAPI already generates the schema; exporting it as a committed artifact is the trivially-expected way to let external tools/agents consume the API contract. | LOW | Existing FastAPI app | Just serialise `app.openapi()` to a file + a CLI command. Near-free given v1.0. |
+| **Domain/source-scoped S3 keys** with `_unclassified` fallback — STORE-01 | Flat keyspaces become unnavigable and un-lifecyclable at scale; scoping by domain/source is the standard data-lake layout. | LOW–MEDIUM | S3/MinIO storage layer, registries (domain/source known at write) | Key template `{zone}/{domain}/{source}/...`; unknown domain → `_unclassified`. **Migration concern:** existing v1.0 objects use old keys — decide read-compat vs. one-time re-key (see Pitfalls linkage). |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Full lineage from source to AI-ready output | No existing tool provides end-to-end provenance spanning crawl -> parse -> chunk -> enrich -> embed -> export. DataTrove handles corpus prep; RAGFlow handles RAG; nobody connects both with lineage | High | Stable IDs, content hashes, transformation timestamps at every stage; this is the core differentiator |
-| Data lake zone management (raw/bronze/silver/gold) | Medallion architecture applied to document processing. Dagster supports this pattern but no document-focused framework implements it natively | Medium | Zone promotion rules, quality gates between zones, zone-specific storage policies |
-| Domain pack extensibility | No competitor offers domain-specific source registries with curated seeds, domain ontologies, and specialized enrichment as pluggable packs | High | Healthcare-first; extensible to legal, finance, education; each pack defines sources, vocabularies, quality rules |
-| Dual-mode output: RAG-ready AND pretraining corpus | Existing tools focus on ONE output. LlamaIndex/Haystack for RAG. DataTrove/NeMo Curator for pretraining. This framework serves both from the same pipeline | Medium | Same source material, different output branches: chunked+embedded for RAG, filtered+deduplicated for pretraining |
-| Dataset generation for fine-tuning | distilabel exists but is standalone. Embedding dataset generation within the lake pipeline (using the same curated content) is novel | High | Instruction tuning pairs, Q&A generation, classification datasets, entity extraction training data from enriched documents |
-| Quality scoring at document and source level | NeMo Curator has quality classifiers; DataTrove has statistics. No framework scores at both source-level (is this website reliable?) and document-level (is this content high quality?) | Medium | Composite score: freshness, authority, completeness, relevance, duplication ratio |
-| Source discovery via meta-search | SearXNG integration for automated discovery of domain-relevant sources; no RAG framework does this | Low | Query expansion, result deduplication, candidate ranking before crawl |
-| Plugin architecture with tool-agnostic core | Most frameworks tightly couple to their parsers/stores. This framework treats parsers (Docling/Unstructured), crawlers (Crawl4AI/Scrapy), stores (Qdrant/Chroma), LLMs (via LiteLLM) as replaceable plugins | High | Interface contracts per plugin type; swap without breaking registries or lineage |
-| Corpus curation for pretraining | DataTrove-style filtering (quality, toxicity, repetition, language) applied to domain-specific corpora, with lineage back to sources | Medium | Heuristic filters + LLM-based classifiers; configurable filter chains per domain |
-| LLM-based metadata enrichment with task aliases | Using LLMs to extract entities, classify topics, generate summaries -- routed through task-based model aliases (cheap_model for classification, strong_model for summarization) | Medium | Cost-aware routing; deterministic-first with LLM as fallback |
-| Section-aware and table-aware chunking | RAGFlow mentions "template-based chunking" but most frameworks use generic splitters. Section structure and table boundaries as chunk boundaries is rare | Medium | Preserves semantic units: a table stays whole, a section header stays with its content |
-| Automated crawling with compliance tracking | Crawl4AI has features but does not track robots.txt compliance, source licensing, or crawl freshness in a registry | Low | License field per source, robots.txt honor flag, last-crawl timestamp, recrawl schedules |
+### Differentiators (Set this framework apart)
 
-## Anti-Features
+| Feature | Value Proposition | Complexity | Depends on (v1.0) | Notes |
+|---------|-------------------|------------|-------------------|-------|
+| **MCP server exposing lake operations** (stdio + SSE), `klake mcp` — MCP-01/02 | Turns the lake into a first-class tool for AI agents (Claude Code, IDE agents, custom orchestrators). Very few data-lake/RAG frameworks ship a native MCP surface. This is the headline v2.0 differentiator. | MEDIUM–HIGH | FastAPI service layer (reuse business logic, not HTTP), search, ingest, export, registries | Expose a *small, curated* toolset (search_knowledge, add_source, build_corpus, export_dataset, get_lineage) — **not** a 1:1 dump of 26 endpoints. See "Agent-facing tool contract" section — this is where quality is won or lost. |
+| **Claude Code skills** (build-corpus, search-knowledge, add-source, export-dataset) — SKILL-01 | Skills give agents guided, opinionated workflows over raw tools — the difference between "here are 20 endpoints" and "here's how to build a corpus." Aligns with the framework's "AI-ready assets" core value. | LOW–MEDIUM | MCP-01 tools (skills orchestrate tools) | Each skill = a SKILL.md with a workflow + which MCP tools to call. Keep verbs matching user intent, not internal stage names. |
+| **OpenAI-format tool definitions from Pydantic** — SKILL-03 | Lets non-MCP agent frameworks (OpenAI tool-calling, LangChain, LlamaIndex) consume the lake with zero hand-authoring. Generated from the same Pydantic schemas → one source of truth. | LOW | Pydantic request models (already exist), SKILL-02 | Emit `{type: function, function: {name, description, parameters(JSON Schema)}}`. Derive from the same models the MCP tools use so the three surfaces (OpenAPI, MCP, OpenAI-tools) never drift. |
+| **Self-maintaining lake: scheduled re-crawl sensor** — SCHED-01 | A knowledge lake that goes stale is a liability. Dagster sensor-driven re-crawl on a per-source schedule keeps corpora fresh automatically — a genuine "lake" behaviour vs. one-shot scrapers. | MEDIUM | Dagster (v1.0 has sensors/assets), crawl runner, source registry (needs crawl_schedule + last_crawled fields) | Sensor evaluates which sources are due (schedule vs. last_crawled) and materialises crawl assets. Must not stampede — stagger/limit concurrency. |
+| **Content-hash change detection** (skip unchanged pages) — SCHED-02 | Re-crawling is cheap only if you skip unchanged content. Content-hash comparison avoids re-parsing/re-embedding identical pages — huge cost saver at scale, and preserves lineage stability (same hash → same artifact IDs). | MEDIUM | Existing SHA256/xxhash content hashing, document registry, raw-zone immutability (WORM) | Compare fetched-page hash to last-known hash per URL; unchanged → no new raw write, no downstream work, just update last_seen. Changed → new immutable raw version, full pipeline. This is the mechanism that makes SCHED-01 affordable. |
+| **PDF/doc ingest by following links** to .pdf/.docx on crawled pages — INGEST-01 | Domain knowledge (esp. healthcare: CMS/ONC/FDA guidance) lives in linked PDFs, not just HTML. Auto-harvesting linked documents dramatically expands corpus coverage without manual upload. | MEDIUM | Crawler (link extraction), Docling parser (already handles PDF/DOCX), ingest + dedup | Detect binary-doc links during crawl, enqueue them as ingest jobs (respect same-domain/allowlist + robots + dedup). Reuse the existing parse path — no new parser. Guard against unbounded fan-out. |
+| **Gold-zone segmentation** into rag_corpus / pretrain / finetune per domain — STORE-03 | The framework's dual/triple-output identity (RAG + pretraining + fine-tuning) becomes physically legible in storage, per domain. Makes exports addressable and lifecycle-manageable. | LOW–MEDIUM | Gold-zone export (v1.0), dataset generation | Key layout `gold/{domain}/{rag_corpus\|pretrain\|finetune}/...`. Aligns storage with the three existing output branches. |
+| **S3 object tags on every write** (domain, source_name, format, artifact_type) — STORE-02 | Enables lifecycle rules, cost attribution, and metadata-driven queries at the object-store layer without touching Postgres. Complements (does not replace) the registry. | LOW | Storage write path | Tag on every `put`. Keep tags to S3 limits (10 tags, key/value length caps). Tags mirror a subset of registry metadata — treat registry as source of truth, tags as convenience/lifecycle hooks. |
 
-Features to explicitly NOT build. Each represents a trap that would dilute focus or duplicate existing tools.
+### Anti-Features (Tempting but wrong — exclude explicitly)
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| Custom document parser | Docling and Unstructured are excellent, actively maintained, and handle 20+ formats each. Building a parser is a multi-year effort | Plugin interface wrapping Docling (primary) and Unstructured (fallback). Let them handle the hard parsing problems |
-| Custom vector database | Qdrant, Milvus, Chroma are purpose-built with GPU indexing, quantization, distributed deployment | Plugin interface to vector stores; Qdrant as default, swappable via config |
-| Custom LLM serving | LiteLLM already unifies 100+ providers with fallbacks, cost tracking, rate limiting | All LLM calls through LiteLLM with task-based model aliases |
-| Web UI / dashboard for MVP | RAGFlow, Dify, AnythingLLM all have UIs. Building one diverts from core pipeline value | CLI + API + Swagger UI. Defer dashboard to Phase 3+; consider Dagster UI for pipeline monitoring |
-| Real-time streaming ingestion | Adds massive complexity (Kafka, event sourcing, backpressure). Batch-first covers 95% of knowledge lake use cases | Batch pipelines with configurable schedules. Consider streaming only after batch is proven |
-| Custom orchestrator | Dagster is purpose-built for asset-based data pipelines with observability, retry, scheduling | Dagster from day 1. Use assets for zone transitions, sensors for triggers |
-| Custom web crawler | Crawl4AI, Scrapy, Playwright are mature with anti-bot, proxy, session management | Plugin interface wrapping Crawl4AI (primary) and Scrapy (complex sites) |
-| Multi-tenant auth / RBAC | Massive scope creep for a single-user/small-team tool. Would need user management, permission models, data isolation | Single-user API keys for MVP. Defer multi-tenancy to productization phase |
-| Knowledge graph / ontology engine | Neo4j integration is interesting but not core to the pipeline's value. Adds query language complexity | Defer to Phase 3. Focus on relational metadata + vector search first |
-| Human annotation UI | Argilla and Label Studio are purpose-built for this with years of UX refinement | Export to Argilla format. Integrate via API when human review is needed |
-| Custom embedding model training | Requires ML infrastructure, training data, evaluation -- a project unto itself | Use pre-trained models via sentence-transformers or API. Fine-tune only with external tools |
-| Duplicate DataTrove's executor system | DataTrove's Slurm/Ray executors are battle-tested at trillion-token scale | Use Dagster for orchestration. For DataTrove-specific operations, call DataTrove as a library within Dagster assets |
+| Feature | Why Requested | Why Problematic | Do Instead |
+|---------|---------------|-----------------|------------|
+| **Expose all 26 REST endpoints 1:1 as MCP tools** | "We already have the API, just wrap it." | Overwhelms the agent's tool-selection: too many tools, overlapping verbs, internal-stage naming (`materialize_silver_zone`) the model can't map to intent. Degrades accuracy — the #1 documented cause of failing MCP agents. | Curate ~5–8 intent-level tools (search_knowledge, add_source, build_corpus, export_dataset, get_lineage, list_sources). Hide pipeline internals behind them. |
+| **Return full result sets / full documents from MCP tools** | "The agent might need everything." | Blows the context window, loses earlier tool context, slows the agent. | Enforce result-size limits: default small `limit`, snippets not full bodies, return **URIs/IDs** to fetch full artifacts on demand. Add pagination (`limit`+`cursor`, `has_more`). |
+| **Deeply nested / free-form object args on agent tools** | Mirrors the rich REST request bodies. | LLMs hallucinate and mis-serialise nested objects; raises tool-call failure rate. | Flat primitives + enums (`mode: hybrid\|dense\|sparse`), <5 params per tool, `Literal` types over free strings. |
+| **Client-side fusion of dense+sparse scores** (or fixed-weight linear blend) | Seems simple; "just add the scores." | Dense and sparse scores live on different, query-dependent scales — fixed weights get dominated by whichever retriever has larger magnitudes. | Use Qdrant's native RRF fusion (rank-based, scale-free) via the Query API `prefetch`. |
+| **Re-crawl everything on every schedule tick** | Simplest scheduler logic. | Wastes crawl budget, re-parses/re-embeds unchanged pages, hammers hosts, churns lineage IDs. | Content-hash change detection (SCHED-02) + per-source due-check; only changed pages flow downstream. |
+| **Mutate existing raw objects when a page changes** | "Update the page in place." | Violates the hard raw-zone immutability/WORM constraint and breaks lineage stability. | Write a new immutable raw version keyed by new content hash; keep prior version. |
+| **Re-key / rewrite all existing v1.0 objects to new scoped layout eagerly** | "Make storage consistent." | Bulk mutation risk, breaks existing lineage pointers, expensive, error-prone during a live migration. | Apply scoped keys to *new* writes; read-compat for old keys; migrate lazily/optionally. Treat as a flagged migration decision, not an implicit side effect. |
+| **Full-text LLM re-summarisation to detect page changes** | "Semantic change detection is smarter." | Expensive, non-deterministic, defeats the point of a cheap skip check. Violates deterministic-first constraint. | Cheap content-hash comparison first; LLM only on confirmed-changed content. |
+| **Adaptive rate limiting that ignores `Retry-After` / robots** | "Backoff heuristics are enough." | Legal/compliance breach and gets you IP-banned; robots + Retry-After are authoritative. | Honour robots.txt (already v1.0) and `Retry-After`; use adaptive backoff *on top of*, never instead of, those signals. |
+| **Unbounded link-following for PDF/doc ingest** | "Grab every linked document." | Crawl explosion, off-domain leakage, license/robots violations, dedup blowup. | Bound by same-domain/allowlist, max depth, robots, SHA256 dedup, and per-source crawl_config. |
+| **Second metadata store via S3 object tags** | "Query metadata straight from the bucket." | Two sources of truth drift; S3 tag limits (10 tags) can't hold full metadata; querying tags at scale is slow. | Postgres registry stays source of truth; tags are lifecycle/cost-attribution convenience only. |
+
+---
+
+## Agent-Facing Tool Contract (MCP / OpenAI-tools) — Concrete Expectations
+
+This section answers the milestone's explicit question: *what do good agent-facing tool contracts look like?* Grounded in current MCP best-practice guidance.
+
+**Naming**
+- `snake_case`, pattern `action_resource` (`search_knowledge`, `add_source`, `export_dataset`, `build_corpus`, `get_lineage`, `list_sources`).
+- Names express intent, not internal pipeline stages. No version numbers, no abbreviations. The MCP server name disambiguates, so avoid heavy prefixes.
+- Keep the toolset small (~5–8). Fewer, well-described tools beat many overlapping ones for selection accuracy.
+
+**Argument shape**
+- Flat primitives + enums only. Target **<5 params per tool**.
+- Constrain choices with `Literal`/enum (e.g. `mode: "hybrid"|"dense"|"sparse"`, `format: "html"|"pdf"|...`), never free-text where a set is known.
+- Avoid nested objects/dicts (raise hallucination + serialisation errors).
+- Rich, example-bearing descriptions per tool and per param (the model reads these to decide).
+
+**Idempotency**
+- Mutating tools (`add_source`, `build_corpus`, `export_dataset`) should be idempotent by natural key (source URL/id, corpus name) — re-calling with same args returns the existing entity, not a duplicate. Reuse v1.0 SHA256/dedup + registry upserts.
+- Long-running ops (crawl, build_corpus) should return a **job id + status** immediately (async), with a `get_job_status`/lineage lookup, rather than blocking the agent.
+
+**Result size / shape**
+- Default small `limit` (e.g. 5–10 hits). Return **snippets + metadata + IDs/URIs**, not full document bodies.
+- Pagination: `limit` + `cursor`/`offset`, plus `has_more`/`next_cursor` in the response.
+- For large artifacts (datasets, corpora, full docs), return a **reference (S3 URI / artifact id / lineage id)** the agent can fetch on demand, not the payload.
+- Stable, typed, minimal JSON — same Pydantic models that back OpenAPI (SKILL-02) and OpenAI-tools (SKILL-03) so all three surfaces stay in lockstep.
+
+**Transports**
+- `stdio` for local agent embedding (Claude Code), `SSE`/HTTP for networked agents. Same tool implementations behind both.
+
+---
+
+## When Each Search Mode Wins (RETR-01/02)
+
+| Mode | Wins when | Loses when | Healthcare-specific note |
+|------|-----------|------------|--------------------------|
+| **Hybrid (default)** | General queries; mix of concepts + exact terms; unknown query style | Marginal extra latency/index cost vs. dense-only | Best default: catches both "how is sepsis managed" (semantic) and "CPT 99213" (exact code) |
+| **Dense** | Pure conceptual/paraphrase queries; short vague natural-language | Exact codes, acronyms, rare tokens, product/drug names | Misses ICD/CPT/NDC codes and abbreviations — a real failure mode here |
+| **Sparse (BM25)** | Exact keyword/code lookups; known-item search; when sparse index populated | Paraphrase/synonym queries; semantic intent | Great for code/identifier lookup; brittle for clinical concept queries |
+
+**Recommendation:** default **hybrid** with Qdrant native RRF fusion (rank-based, scale-free). Expose `dense`/`sparse` as explicit overrides. RRF chosen over weighted fusion because dense/sparse scores are on incomparable, query-shifting scales.
+
+---
 
 ## Feature Dependencies
 
 ```
-Source Registry → Document Registry → Artifact Registry
-       ↓                   ↓                    ↓
-Source Discovery    Document Parsing      Chunking/Embedding
-(SearXNG)          (Docling plugin)      (core logic)
-       ↓                   ↓                    ↓
-Automated Crawling  Content Extraction    Vector Indexing
-(Crawl4AI plugin)  (normalization)       (Qdrant plugin)
-       ↓                   ↓                    ↓
-Raw Zone Storage   Bronze Zone (parsed)  Silver Zone (enriched)
-(S3/MinIO)         (S3/MinIO)            (S3/MinIO + PG)
-                                                ↓
-                                         Gold Zone (AI-ready)
-                                         (Parquet/JSONL/DuckDB)
+PAYLOAD-01 (richer payload)
+    └──requires──> PAYLOAD-02 (search filters need indexed payload fields)
 
-Pipeline Orchestration (Dagster) ──── spans all zones ────
+RETR-01 (hybrid: add sparse named vector + encoder)
+    └──requires──> RETR-02 (mode switch)
+    └──enhances──> PAYLOAD-02 (filtered hybrid search)
+    └──touches───> reindex path (collection schema change → alias-based reindex from v1.0)
 
-LLM Gateway (LiteLLM) ──── used by enrichment, dataset gen, quality scoring ────
+MCP-01 (MCP server / curated tools)
+    ├──requires──> search (PAYLOAD/RETR for search_knowledge)
+    ├──requires──> ingest/registry (add_source), export (export_dataset)
+    ├──enables───> SKILL-01 (Claude Code skills orchestrate MCP tools)
+    └──shares schemas──> SKILL-03 (OpenAI-tools) & SKILL-02 (OpenAPI)  ← one Pydantic source of truth
 
-Export to:
-├── RAG (chunks + embeddings + metadata → Qdrant)
-├── Pretraining Corpus (filtered + deduplicated → Parquet/JSONL)
-├── Fine-tuning Datasets (generated pairs → JSONL/HF format)
-└── Evaluation Sets (held-out Q&A → JSONL)
+SKILL-02 (OpenAPI export) ──feeds──> SKILL-03 (OpenAI-tools generation)
+
+CRAWL-01 (per-source config)
+    └──required-by──> CRAWL-02 (crawl-all uses per-source config)
+    └──required-by──> CRAWL-03 (rate_limit_rps seeds adaptive limiter)
+    └──required-by──> SCHED-01 (crawl_schedule is per-source config)
+
+SCHED-02 (content-hash change detection)
+    └──makes-affordable──> SCHED-01 (scheduled re-crawl)
+    └──requires──> raw-zone immutability (new version on change, never mutate)
+
+INGEST-01 (linked PDF/doc ingest)
+    └──requires──> crawler link extraction + Docling parse path + dedup
+    └──bounded-by──> CRAWL-01 (depth/allowlist) + robots (v1.0)
+
+STORE-01 (scoped keys) ──requires──> registries (domain/source at write time)
+STORE-02 (object tags) ──enhances──> STORE-01
+STORE-03 (gold segmentation) ──requires──> gold-zone export + dataset gen (v1.0)
 ```
 
-### Critical Path Dependencies
+### Dependency Notes
 
-1. **Source Registry** must exist before crawling (tracks what to crawl, when, compliance)
-2. **Document Registry** must exist before parsing (tracks document lifecycle through zones)
-3. **Raw zone immutable storage** must exist before any ingestion (write-once guarantee)
-4. **Plugin interface contracts** must be defined before implementing any plugin (parser, crawler, vector store, LLM)
-5. **Dagster integration** must be in place before building pipelines (do not build ad-hoc scripts then migrate)
-6. **LiteLLM gateway** must be configured before any LLM-based enrichment or dataset generation
-7. **Chunking** depends on parsing being complete (cannot chunk unparsed documents)
-8. **Embedding** depends on chunking (embeds chunks, not raw documents)
-9. **Quality scoring** depends on metadata enrichment (uses metadata signals as scoring inputs)
-10. **Dataset generation** depends on silver/gold zone content (needs enriched, deduplicated material)
+- **PAYLOAD-02 requires PAYLOAD-01 + Qdrant payload indexes:** filters on unindexed fields fall back to slow full scans; create keyword indexes on source_id/source_name/format and array-keyword index on tags.
+- **RETR-01 forces a collection schema change:** adding a named sparse vector means existing points need re-indexing — reuse v1.0's alias-based zero-downtime reindex, and add a sparse encoder to the embed stage.
+- **MCP-01 should reuse the service layer, not HTTP:** call business logic directly; sharing Pydantic models keeps OpenAPI/MCP/OpenAI-tools from drifting.
+- **SCHED-02 is the enabler for SCHED-01:** without cheap change detection, scheduled re-crawl is prohibitively expensive and churns lineage.
+- **STORE-01 raises a migration decision:** new writes use scoped keys; old objects keep working via read-compat — do not eagerly rewrite (anti-feature above).
 
-## MVP Recommendation
+---
 
-### Phase 1 Priority: Foundation (build the lake, not the ocean)
+## MVP Definition (for this milestone)
 
-1. **Source and document registries with lineage** -- This IS the product. Without registries and lineage, it is just another script collection.
-2. **Raw/bronze zone management with immutable storage** -- Data lake identity requires zone discipline from day 1.
-3. **Plugin interface contracts** (parser, crawler, vector store, LLM gateway) -- Define the interfaces before implementing. This locks in architecture.
-4. **Dagster pipeline orchestration** -- Build on Dagster assets from the start; never write ad-hoc pipeline scripts.
-5. **Document parsing via Docling plugin** -- First concrete capability; proves the plugin architecture works.
-6. **CLI and API scaffold** -- Developer ergonomics; every feature must be operable via both CLI and API.
+### Must land (core v2.0 value)
 
-### Phase 2 Priority: Processing Pipeline
+- [ ] PAYLOAD-01 + PAYLOAD-02 — searchable metadata is the foundation everything else cites; low cost, high leverage.
+- [ ] RETR-01 + RETR-02 — hybrid retrieval; the correctness upgrade (codes/acronyms) that matters most for the domain.
+- [ ] MCP-01 + MCP-02 — the headline "agent-ready" capability; curated tools.
+- [ ] SKILL-02 + SKILL-03 — near-free given FastAPI+Pydantic; unlocks non-MCP agents and keeps contracts in sync.
+- [ ] CRAWL-01 + CRAWL-02 + CRAWL-03 — crawl maturation so the self-maintaining loop is safe and batchable.
+- [ ] STORE-01 — scoped keys; needed before storage grows further.
 
-7. **Chunking strategies** (fixed, recursive, section-aware, table-aware)
-8. **Content deduplication** (exact hash + MinHash fuzzy)
-9. **LLM-based metadata enrichment** through LiteLLM
-10. **Embedding generation** (sentence-transformers + API)
-11. **Vector indexing via Qdrant plugin**
-12. **Silver zone promotion** with quality gates
+### Add once core works
 
-### Phase 3 Priority: AI-Ready Outputs
+- [ ] SKILL-01 — Claude Code skills (depend on stable MCP tools).
+- [ ] SCHED-01 + SCHED-02 — self-maintenance loop (depends on crawl maturation + change detection).
+- [ ] INGEST-01 — linked-doc harvesting (depends on crawl + dedup guards).
+- [ ] STORE-02 + STORE-03 — object tags + gold segmentation (polish on the storage layer).
+- [ ] ENRICH-01 — partial-JSON recovery (robustness; can ship anytime, low coupling).
 
-13. **Export to Parquet/JSONL/DuckDB** (gold zone)
-14. **Corpus curation filters** (DataTrove-style quality, language, dedup)
-15. **Dataset generation** (instruction tuning, Q&A, classification)
-16. **Quality scoring** (document + source level)
-17. **Source discovery** (SearXNG integration)
-18. **Automated crawling** (Crawl4AI plugin)
+### Explicitly deferred (per PROJECT.md v2.1)
 
-### Defer: Beyond MVP
+- [ ] Eval harness (RAGAS/Promptfoo), observability (Langfuse/Arize) — separate milestone.
+- [ ] klake-client SDK, multi-domain conflict resolution, pack registry/versioning, discovery scheduling, admin UI, lakeFS/DVC versioning, sitemap-first crawl, quality-score search propagation.
 
-- **Knowledge graph** (Neo4j) -- Phase 4+
-- **Human review integration** (Argilla) -- Phase 4+
-- **Web dashboard** -- Phase 4+
-- **Hybrid BM25 search** -- Phase 3+
-- **Data versioning** (lakeFS/DVC) -- Phase 4+
-- **Catalog integration** (OpenMetadata) -- Phase 4+
+---
 
-**Rationale for ordering:** The framework's unique value is registries + lineage + zone management. Without these, adding features just creates another untracked pipeline. Build the "lake management" layer first, then prove it works with one complete flow (ingest -> parse -> chunk -> embed -> query), then expand to pretraining corpus and dataset generation.
+## Feature Prioritization Matrix
+
+| Feature | User Value | Impl. Cost | Priority |
+|---------|-----------|-----------|----------|
+| PAYLOAD-01 richer payload | HIGH | LOW | P1 |
+| PAYLOAD-02 search filters | HIGH | LOW | P1 |
+| RETR-01 hybrid RRF | HIGH | MEDIUM | P1 |
+| RETR-02 mode switch | MEDIUM | LOW | P1 |
+| MCP-01 MCP server | HIGH | MEDIUM-HIGH | P1 |
+| MCP-02 klake mcp transports | HIGH | LOW | P1 |
+| SKILL-02 OpenAPI export | MEDIUM | LOW | P1 |
+| SKILL-03 OpenAI-tools gen | MEDIUM | LOW | P1 |
+| CRAWL-01 per-source config | HIGH | LOW | P1 |
+| CRAWL-02 crawl-all | HIGH | LOW-MEDIUM | P1 |
+| CRAWL-03 adaptive rate limit | HIGH | MEDIUM | P1 |
+| STORE-01 scoped keys | MEDIUM | LOW-MEDIUM | P1 |
+| SKILL-01 Claude Code skills | MEDIUM | LOW-MEDIUM | P2 |
+| SCHED-02 content-hash detect | HIGH | MEDIUM | P2 |
+| SCHED-01 re-crawl sensor | HIGH | MEDIUM | P2 |
+| INGEST-01 linked-doc ingest | HIGH | MEDIUM | P2 |
+| ENRICH-01 partial-JSON recovery | MEDIUM | LOW-MEDIUM | P2 |
+| STORE-02 object tags | LOW | LOW | P2 |
+| STORE-03 gold segmentation | MEDIUM | LOW-MEDIUM | P2 |
+
+**Priority key:** P1 = core milestone value / low-risk enablers; P2 = builds on P1, add once core is stable.
+
+---
+
+## Commonly-Expected-But-Easy-To-Miss Behaviours
+
+- **Qdrant payload indexes**, not just payload fields — filters silently do full scans without them.
+- **Reindex/backfill path** for the new payload fields *and* the new sparse vector — existing points won't have them; reuse alias-based reindex.
+- **Sensible crawl_config defaults** so all 28 existing sources keep crawling with zero config change.
+- **Honour `Retry-After` and robots** inside adaptive rate limiting — backoff heuristics are additive, not a replacement.
+- **Idempotent crawl-all and MCP mutations** — re-running must not duplicate sources/jobs.
+- **Change detection must not mutate raw** — changed page → new immutable version, preserving WORM + lineage.
+- **Bounded link-following** for INGEST-01 — same-domain/allowlist + depth + dedup or you get crawl explosion.
+- **One Pydantic source of truth** for OpenAPI + MCP + OpenAI-tools so the three agent surfaces never drift.
+- **Result-size discipline on MCP** — snippets + IDs/URIs + pagination, never full bodies.
+- **Storage key migration is a decision, not a side effect** — read-compat for old keys; don't eagerly rewrite.
+- **Partial-enrichment must be recorded in lineage** — a partially-enriched doc should be traceable, not silently equal to a fully-enriched one.
+
+---
+
+## Competitor / Prior-Art Feature Analysis
+
+| Feature | Prior art | Our approach |
+|---------|-----------|--------------|
+| Hybrid search | Qdrant native Query API (prefetch + RRF); RAGFlow, Haystack, LlamaIndex all offer hybrid | Use Qdrant native RRF fusion server-side; default hybrid, mode-switchable |
+| MCP for data/RAG | Growing set of MCP servers (DBs, search); few RAG/lake frameworks ship curated MCP + skills | Curated ~5–8 intent tools + Claude Code skills + generated OpenAI-tools |
+| Scheduled re-crawl + change detection | Scrapy/crawlers support recrawl; content-hash skip is common in ETL; sitemap-based freshness | Dagster sensor + content-hash skip, per-source schedule, immutable versioning |
+| Domain-scoped object layout | Medallion/lakehouse layouts scope by domain/dataset | Scope by domain/source; gold split into rag_corpus/pretrain/finetune |
+| Agent tool contracts | MCP best-practice guidance (flat primitives, small toolset, pagination, URIs) | Applied directly (see contract section) |
+
+---
 
 ## Sources
 
-- DataTrove GitHub (huggingface/datatrove) -- Pipeline architecture, readers, filters, dedup, writers, executors
-- NeMo Curator GitHub (NVIDIA/NeMo-Curator) -- Curation stages, GPU-accelerated filtering, multi-modal support
-- Haystack GitHub (deepset-ai/haystack) -- Component pipeline architecture, integrations, RAG patterns
-- LlamaIndex GitHub (run-llama/llama_index) -- Data connectors, index types, query engines, integrations
-- Docling GitHub (DS4SD/docling) -- Document parsing, 20+ formats, table extraction, OCR, output formats
-- Unstructured GitHub (Unstructured-IO/unstructured) -- Partitioning, element types, metadata, batch ingest
-- RAGFlow GitHub (infiniflow/ragflow) -- Deep document understanding, template chunking, retrieval
-- Crawl4AI GitHub (unclecode/crawl4ai) -- Async crawling, extraction strategies, batch processing
-- Dagster docs (docs.dagster.io) -- Assets, ops, schedules, sensors, resources, partitions, IO managers
-- Qdrant GitHub (qdrant/qdrant) -- Dense/sparse vectors, hybrid search, filtering, multitenancy
-- SearXNG GitHub (SearXNG/searxng) -- Metasearch aggregation, API, self-hosted deployment
-- distilabel GitHub (argilla-io/distilabel) -- Synthetic data generation, LLM pipelines, structured output
-- Argilla GitHub (argilla-io/argilla) -- Data labeling, AI feedback, human-in-the-loop curation
+- [MCP tool descriptions: overview, examples, and best practices — Merge](https://www.merge.dev/blog/mcp-tool-description) — naming, descriptions, arg shape
+- [MCP server tool design — Workato Docs](https://docs.workato.com/en/mcp/mcp-server-tool-design.html) — service_action_resource naming, primitives/enums, pagination
+- [15 Best Practices for Building MCP Servers in Production — The New Stack](https://thenewstack.io/15-best-practices-for-building-mcp-servers-in-production/) — result size, curated toolsets
+- [Client Best Practices — Model Context Protocol](https://modelcontextprotocol.io/docs/develop/clients/client-best-practices) — transport + client expectations
+- [MCP is Not the Problem, It's your Server — philschmid](https://www.philschmid.de/mcp-best-practices) — <5 params, Literal types, small toolset
+- [MCP Tool Design: Why Your AI Agent Is Failing — DEV](https://dev.to/aws-heroes/mcp-tool-design-why-your-ai-agent-is-failing-and-how-to-fix-it-40fc) — over-exposure as top failure cause
+- [Hybrid Search Revamped — Building with Qdrant's Query API](https://qdrant.tech/articles/hybrid-search/) — prefetch + FusionQuery(RRF)
+- [Hybrid Queries — Qdrant](https://qdrant.tech/documentation/search/hybrid-queries/) — RRF vs weighted fusion, sparse+dense
+- [Hybrid Search with Reranking — Qdrant](https://qdrant.tech/documentation/tutorials-basics/reranking-hybrid-search/) — dense fills sparse gaps; scale-free ranking rationale
+- v1.0 project artifacts: `.planning/PROJECT.md`, `.planning/milestones/v1.0-research/FEATURES.md` — existing stack, constraints, dependencies
+
+---
+*Feature research for: Knowledge Lake Framework v2.0 (Agent-Ready Lake)*
+*Researched: 2026-07-08*

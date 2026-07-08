@@ -1,995 +1,305 @@
-# Architecture Patterns
+# Architecture Research — v2.0 Feature Integration
 
-**Domain:** Knowledge Lake / Document Processing Pipeline Framework
-**Researched:** 2026-07-02
-**Overall Confidence:** MEDIUM (cross-referenced official docs from Dagster, FastAPI, Typer, pluggy; medallion architecture from Databricks reference; patterns verified across multiple sources)
+**Domain:** Knowledge Lake Framework (`klake`) — v2.0 "Agent-Ready Lake" integration into shipped v1.0
+**Researched:** 2026-07-08
+**Confidence:** HIGH (grounded in direct reads of the shipped v1.0 source, not inferred — every integration point cites a real file/function)
 
-## Recommended Architecture
+## Scope
 
-### High-Level System Diagram
+This document answers: *how does each NEW v2.0 feature bolt onto the existing, shipped architecture?* For each feature: integration point, new-vs-modified components, data-flow changes, and migration/back-compat. It closes with a dependency-aware build order for the roadmapper.
 
-```
-                         +------------------+
-                         |   CLI (Typer)    |
-                         |   klake command  |
-                         +--------+---------+
-                                  |
-                         +--------v---------+
-                         |  API (FastAPI)   |
-                         |  REST + triggers |
-                         +--------+---------+
-                                  |
-              +-------------------+-------------------+
-              |                                       |
-    +---------v----------+              +-------------v-----------+
-    | Dagster Orchestrator|              | Plugin Manager (pluggy) |
-    | Assets + Schedules  |              | hookspecs + hookimpls   |
-    +---------+----------+              +-------------+-----------+
-              |                                       |
-    +---------v------------------------------------------v--------+
-    |                     Core Services Layer                      |
-    |  Registry | Storage | Lineage | Config | Domain Packs       |
-    +-----+----------+----------+---------+----------+------------+
-          |          |          |         |          |
-    +-----v---+ +---v----+ +--v---+ +---v----+ +---v---------+
-    |PostgreSQL| |S3/MinIO| |Qdrant| |LiteLLM | |Domain Packs |
-    |Registries| |Objects | |Vector| |Gateway | |(Healthcare) |
-    +----------+ +--------+ +------+ +--------+ +-------------+
-```
-
-### Data Flow Through Zones
+It is **not** a from-scratch architecture (that lives in `v1.0-research/ARCHITECTURE.md`). The v1.0 layering is taken as fixed:
 
 ```
-Sources (web, files, APIs)
-    |
-    v
-+-------------------------------------------+
-| BRONZE (Raw Zone) - Immutable             |
-| S3: bronze/{source_id}/{doc_id}/raw.*     |
-| PG: documents table (raw metadata)        |
-+-------------------------------------------+
-    |
-    v
-+-------------------------------------------+
-| SILVER (Processed Zone) - Cleaned         |
-| S3: silver/{doc_id}/parsed.json           |
-| S3: silver/{doc_id}/chunks/*.json         |
-| PG: sections, chunks tables               |
-+-------------------------------------------+
-    |
-    v
-+-------------------------------------------+
-| GOLD (AI-Ready Zone) - Enriched           |
-| S3: gold/embeddings/{collection}/*.parquet|
-| S3: gold/datasets/{dataset_id}/*.jsonl    |
-| Qdrant: vector collections                |
-| PG: artifacts, datasets tables            |
-+-------------------------------------------+
+Typer CLI (cli/app.py)  ─┐
+FastAPI (api/app.py)     ─┼─►  pipeline/*.py service functions  ─►  plugins (resolver-keyed)  ─►  Postgres registry + S3 + Qdrant
+Dagster assets           ─┘        (ingest/parse/clean/chunk/            (parsers/crawlers/
+  (dagster_defs/assets.py)          enrich/curate/index/search/           embedders/vectorstore/
+                                    export/datasets)                      storage/discovery)
 ```
 
-## Component Boundaries
+**The load-bearing invariant (D-02):** CLI, API, and Dagster are three thin adapters over the SAME `pipeline/*.py` functions. No adapter re-implements business logic. Every v2.0 feature MUST preserve this — new surfaces (MCP) wrap existing functions; new behavior lands in `pipeline/` or `plugins/`, never in an adapter.
 
-| Component | Responsibility | Communicates With | Build Phase |
-|-----------|---------------|-------------------|-------------|
-| **Core Config** | Settings loading, env management, path resolution | All components | Phase 1 |
-| **Storage Abstraction** | S3-compatible read/write with zone routing | All data components | Phase 1 |
-| **Registry (PostgreSQL)** | Source, document, chunk, artifact metadata; lineage graph | All pipeline stages | Phase 1 |
-| **Plugin Manager** | Hook specs, plugin discovery, adapter loading | Parsers, crawlers, vector stores | Phase 1 |
-| **Dagster Definitions** | Asset DAG, IO managers, resources, schedules | Storage, Registry, Plugins | Phase 2 |
-| **Ingest Pipeline** | Crawling, file upload, raw storage | Storage (Bronze), Registry | Phase 2 |
-| **Parse Pipeline** | Document parsing, section extraction | Storage (Silver), Registry, Parser plugins | Phase 2 |
-| **Chunk Pipeline** | Section-aware/token-aware chunking | Storage (Silver), Registry | Phase 3 |
-| **Enrich Pipeline** | LLM metadata, embeddings, quality scoring | LiteLLM, Storage (Gold), Registry | Phase 3 |
-| **Export Pipeline** | Parquet/JSONL/DuckDB generation, vector indexing | Storage (Gold), Vector plugins | Phase 4 |
-| **API Layer (FastAPI)** | REST CRUD, pipeline triggers, status queries | Dagster, Registry, Storage | Phase 2+ |
-| **CLI Layer (Typer)** | User commands, rich output, batch operations | API Layer or direct service calls | Phase 2+ |
-| **Domain Packs** | Source seeds, domain schemas, custom enrichment | Plugin Manager, Enrich Pipeline | Phase 4+ |
+## Standard Architecture (v2.0 target)
 
-## Detailed Component Architecture
-
-### 1. Plugin / Adapter Architecture (pluggy-based)
-
-Use pluggy for the plugin system because it provides decoupled hook specifications, setuptools entry_point discovery, and is battle-tested (pytest's plugin system). The framework defines hookspecs; plugins provide hookimpls.
-
-**Hook Specification Design:**
-
-```python
-# klake/plugins/hookspecs.py
-import pluggy
-
-hookspec = pluggy.HookspecMarker("klake")
-hookimpl = pluggy.HookimplMarker("klake")
-
-class ParserSpec:
-    @hookspec(firstresult=True)
-    def can_parse(self, mime_type: str, file_ext: str) -> bool:
-        """Return True if this parser handles the given type."""
-
-    @hookspec(firstresult=True)
-    def parse_document(self, raw_path: str, options: dict) -> "ParseResult":
-        """Parse raw document into structured sections."""
-
-class CrawlerSpec:
-    @hookspec(firstresult=True)
-    def can_crawl(self, url: str, source_type: str) -> bool:
-        """Return True if this crawler handles the given source."""
-
-    @hookspec
-    def crawl_source(self, source_config: dict) -> "Iterator[RawDocument]":
-        """Yield raw documents from a source."""
-
-class VectorStoreSpec:
-    @hookspec
-    def index_chunks(self, collection: str, chunks: "list[ChunkWithEmbedding]") -> None:
-        """Index chunks into vector store."""
-
-    @hookspec(firstresult=True)
-    def search(self, collection: str, query_vector: list, top_k: int) -> "list[SearchResult]":
-        """Search for similar chunks."""
-
-class EmbeddingSpec:
-    @hookspec(firstresult=True)
-    def embed_texts(self, texts: list[str], model_alias: str) -> "list[list[float]]":
-        """Generate embeddings for text list."""
-```
-
-**Plugin Discovery:**
-
-```python
-# klake/plugins/manager.py
-import pluggy
-
-def create_plugin_manager() -> pluggy.PluginManager:
-    pm = pluggy.PluginManager("klake")
-    pm.add_hookspecs(ParserSpec)
-    pm.add_hookspecs(CrawlerSpec)
-    pm.add_hookspecs(VectorStoreSpec)
-    pm.add_hookspecs(EmbeddingSpec)
-
-    # Load built-in plugins
-    from klake.plugins.builtin import docling_parser, crawl4ai_crawler, qdrant_store
-    pm.register(docling_parser)
-    pm.register(crawl4ai_crawler)
-    pm.register(qdrant_store)
-
-    # Load external plugins via entry_points
-    pm.load_setuptools_entrypoints("klake")
-
-    return pm
-```
-
-**Entry point registration (pyproject.toml for external plugins):**
-
-```toml
-[project.entry-points.klake]
-my_custom_parser = "my_package.parser:MyParserPlugin"
-```
-
-**Why pluggy over ABC + registry:**
-- Pluggy supports multiple implementations per hook (e.g., multiple parsers registered, `firstresult` picks the right one)
-- Entry_points enable pip-installable third-party plugins without modifying core code
-- LIFO ordering and `tryfirst`/`trylast` control priority
-- No import-time coupling between host and plugins
-
-### 2. Data Lake Zone Architecture
-
-Adapted medallion pattern for document processing:
-
-| Zone | S3 Prefix | Contents | Immutability | Registry Table |
-|------|-----------|----------|--------------|----------------|
-| **Bronze** | `bronze/` | Raw files exactly as received | IMMUTABLE - never modified | `documents` (status=raw) |
-| **Silver** | `silver/` | Parsed JSON, extracted sections, chunks | APPEND-ONLY per version | `sections`, `chunks` |
-| **Gold** | `gold/` | Embeddings, datasets, exports | VERSIONED outputs | `artifacts`, `datasets` |
-
-**Zone transition rules:**
-- Bronze -> Silver: Parse + clean. Original raw file stays in Bronze forever.
-- Silver -> Gold: Enrich + export. Silver data remains as intermediate for reprocessing.
-- Each transition records lineage edges in the registry.
-
-**Storage path conventions:**
+### System Overview
 
 ```
-bronze/{source_id}/{document_id}/{content_hash}.{ext}
-silver/{document_id}/v{version}/parsed.json
-silver/{document_id}/v{version}/sections/{section_id}.json
-silver/{document_id}/v{version}/chunks/{chunk_id}.json
-gold/embeddings/{collection_id}/{batch_id}.parquet
-gold/datasets/{dataset_id}/v{version}/{split}.jsonl
-gold/exports/{export_id}/{filename}
+┌──────────────────────────────────────────────────────────────────────┐
+│                          ADAPTER LAYER (thin)                          │
+│  ┌──────────┐  ┌──────────┐  ┌────────────────┐  ┌─────────────────┐  │
+│  │ Typer CLI│  │ FastAPI  │  │  MCP server    │  │ Dagster assets  │  │
+│  │  +crawl- │  │ +filters │  │  (NEW)         │  │ +recrawl sensor │  │
+│  │  all,mcp,│  │ +openapi │  │  stdio + SSE   │  │  (NEW)          │  │
+│  │  openapi │  │  export  │  │  11 tools      │  │                 │  │
+│  └────┬─────┘  └────┬─────┘  └───────┬────────┘  └───────┬─────────┘  │
+│       └─────────────┴───────┬────────┴───────────────────┘            │
+├──────────────────────────────┼────────────────────────────────────────┤
+│                    pipeline/*.py  SERVICE FUNCTIONS                     │
+│  ingest  crawl  parse  clean  chunk  enrich  curate  index  search     │
+│  export  datasets   crawl_all(NEW)   (all reused unchanged by MCP)     │
+├──────────────────────────────┬─────────────────────────────────────────┤
+│                       PLUGINS (resolver-keyed)                          │
+│  parsers │ crawlers(+adaptive) │ embedders(+sparse) │ qdrant(+hybrid)  │
+│                    │ storage (+domain keys +tags)                       │
+├──────┬────────────┬───────────┬──────────────────────┬─────────────────┤
+│ Postgres registry │  S3/MinIO  │      Qdrant          │   LiteLLM       │
+│ (+crawl_schedule) │(+domain seg│(+sparse named vector)│                 │
+│                   │ +obj tags) │                      │                 │
+└───────────────────┴────────────┴──────────────────────┴─────────────────┘
 ```
 
-### 3. Registry Design (PostgreSQL)
+Legend: `(NEW)` = net-new component; `+x` = additive change to an existing component.
 
-**Core schema pattern:**
+### Component Responsibilities (v2.0 deltas only)
 
-```sql
--- Source registry: where content comes from
-CREATE TABLE sources (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    source_type TEXT NOT NULL,  -- 'web', 'file_upload', 'api', 'sitemap'
-    url TEXT,
-    config JSONB NOT NULL DEFAULT '{}',
-    domain_pack TEXT,  -- NULL = generic
-    schedule TEXT,  -- cron expression or NULL
-    last_crawled_at TIMESTAMPTZ,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+| Component | v2.0 responsibility change | New / Modified |
+|-----------|----------------------------|----------------|
+| `mcp/` package (NEW) | Expose 11 lake ops as MCP tools over stdio + SSE; each tool is a shim onto a `pipeline/` function | **New** |
+| `pipeline/search.py` | Add `mode=hybrid\|dense\|sparse` + new filter kwargs; build sparse query vector | Modified (additive) |
+| `pipeline/index.py` | Assemble expanded payload; upsert dense + sparse named vectors | Modified (additive) |
+| `plugins/builtin/qdrant_store.py` | Named-vector collections (dense+sparse), RRF/prefetch hybrid query, sparse in copy/reindex | Modified (additive) |
+| `plugins/protocols.py` | Extend `VectorStorePlugin.search` signature (mode, sparse); embedder gains sparse capability | Modified (additive) |
+| `storage/s3.py` | Domain-segmented keys, object tags on every write, gold sub-zones | Modified |
+| `pipeline/crawl.py` + `crawl/ratelimit.py` | Read `Source.config['crawl_config']`; adaptive backoff on 429/403; route PDF links to ingest | Modified |
+| `pipeline/crawl_all.py` (NEW) | Batch driver over registered sources with `--domain` filter | **New** |
+| `dagster_defs/sensors.py` (NEW) | Schedule-driven re-crawl sensor + content-hash change gate | **New** |
+| Registry (`models.py`/migration) | `crawl_schedule`, `last_crawled_at`, `last_content_hash` on Source (or in `config`) | Modified (migration) |
+| `cli/app.py` `openapi` cmd (NEW) | Dump `app.openapi()` + generate OpenAI tool defs from Pydantic | **New** |
 
--- Document registry: individual documents
-CREATE TABLE documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_id UUID REFERENCES sources(id),
-    content_hash TEXT NOT NULL,  -- SHA-256 of raw content
-    mime_type TEXT,
-    file_extension TEXT,
-    title TEXT,
-    url TEXT,  -- original URL if web-sourced
-    raw_storage_path TEXT NOT NULL,  -- S3 key in bronze zone
-    file_size_bytes BIGINT,
-    language TEXT,
-    zone TEXT NOT NULL DEFAULT 'bronze',  -- current highest zone
-    quality_score FLOAT,
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(content_hash)  -- deduplication
-);
+## Feature-by-Feature Integration
 
--- Section registry: structural units within documents
-CREATE TABLE sections (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
-    section_index INTEGER NOT NULL,
-    heading TEXT,
-    section_type TEXT,  -- 'paragraph', 'table', 'list', 'code', 'image_caption'
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    token_count INTEGER,
-    storage_path TEXT NOT NULL,  -- S3 key in silver zone
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+### 1. MCP server (MCP-01/02, SKILL-01)
 
--- Chunk registry: embedding-ready units
-CREATE TABLE chunks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
-    section_id UUID REFERENCES sections(id) ON DELETE CASCADE,
-    chunk_index INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    token_count INTEGER NOT NULL,
-    overlap_prev INTEGER DEFAULT 0,  -- overlap tokens with previous chunk
-    strategy TEXT NOT NULL,  -- 'fixed_token', 'section_aware', 'semantic'
-    storage_path TEXT NOT NULL,
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE(content_hash, strategy)  -- no duplicate chunks per strategy
-);
-
--- Artifact registry: gold-zone outputs
-CREATE TABLE artifacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    artifact_type TEXT NOT NULL,  -- 'embedding_batch', 'dataset', 'export'
-    name TEXT NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1,
-    storage_path TEXT NOT NULL,
-    format TEXT NOT NULL,  -- 'parquet', 'jsonl', 'duckdb'
-    record_count INTEGER,
-    config JSONB NOT NULL DEFAULT '{}',  -- generation parameters
-    metadata JSONB NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Lineage tracking: edges between entities
-CREATE TABLE lineage_edges (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_entity_type TEXT NOT NULL,  -- 'document', 'section', 'chunk', 'artifact'
-    source_entity_id UUID NOT NULL,
-    target_entity_type TEXT NOT NULL,
-    target_entity_id UUID NOT NULL,
-    relationship TEXT NOT NULL,  -- 'parsed_from', 'chunked_from', 'embedded_in', 'exported_to'
-    pipeline_run_id UUID,
-    transform_config JSONB DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_lineage_source ON lineage_edges(source_entity_type, source_entity_id);
-CREATE INDEX idx_lineage_target ON lineage_edges(target_entity_type, target_entity_id);
-
--- Pipeline job tracking
-CREATE TABLE pipeline_runs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    dagster_run_id TEXT,
-    pipeline_name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',  -- pending, running, completed, failed
-    config JSONB NOT NULL DEFAULT '{}',
-    started_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    error_message TEXT,
-    stats JSONB DEFAULT '{}',  -- documents_processed, chunks_created, etc.
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-```
-
-**Key design decisions:**
-- `content_hash` on documents AND chunks for deduplication at both levels
-- JSONB `metadata` columns for extensibility without schema migrations
-- `lineage_edges` table as a generic graph enabling arbitrary relationship queries
-- `zone` field on documents tracks progression through the pipeline
-- UUID primary keys for distributed generation without coordination
-
-### 4. Lineage Tracking Approach
-
-**Chunk lineage chain:** Every chunk traces back to its source:
+**Where it sits:** MCP is a **fourth adapter**, a *sibling* of CLI/FastAPI/Dagster — never above or below them. It calls `pipeline/*.py` functions directly (in-process), exactly as the CLI does. It does NOT proxy the FastAPI HTTP layer (that would add a network hop, a second serialization, and couple two adapters).
 
 ```
-chunk -> section -> document -> source
-  |         |          |          |
-  +--- lineage_edges ---+--- lineage_edges ---+
+MCP tool  ──►  pipeline function  ──►  plugins/registry/storage
+(thin shim)    (e.g. search(), crawl_source(), ingest_url())
 ```
 
-**Query: "Where did this chunk come from?"**
-
-```sql
-WITH RECURSIVE lineage AS (
-    SELECT source_entity_type, source_entity_id, relationship, 0 as depth
-    FROM lineage_edges
-    WHERE target_entity_type = 'chunk' AND target_entity_id = :chunk_id
-    UNION ALL
-    SELECT e.source_entity_type, e.source_entity_id, e.relationship, l.depth + 1
-    FROM lineage_edges e
-    JOIN lineage l ON e.target_entity_type = l.source_entity_type
-                  AND e.target_entity_id = l.source_entity_id
-    WHERE l.depth < 5
-)
-SELECT * FROM lineage ORDER BY depth;
-```
-
-**Lineage metadata includes:**
-- Pipeline run ID (which Dagster run produced this edge)
-- Transform config (chunking strategy, model used, parameters)
-- Timestamps for temporal queries
-
-### 5. Pipeline DAG Structure (Dagster Assets)
-
-Use Dagster's **software-defined assets** model. Each zone transition is an asset or asset group.
-
-**Asset hierarchy:**
-
-```python
-# klake/pipelines/assets/ingest.py
-@dg.asset(group_name="bronze", key_prefix=["bronze"])
-def crawled_documents(
-    context: dg.AssetExecutionContext,
-    plugin_manager: PluginManagerResource,
-    storage: StorageResource,
-    registry: RegistryResource,
-) -> dg.MaterializeResult:
-    """Crawl sources and store raw documents in bronze zone."""
-    ...
-
-@dg.asset(group_name="bronze", key_prefix=["bronze"])
-def uploaded_documents(
-    context: dg.AssetExecutionContext,
-    storage: StorageResource,
-    registry: RegistryResource,
-) -> dg.MaterializeResult:
-    """Process manually uploaded files into bronze zone."""
-    ...
-
-# klake/pipelines/assets/parse.py
-@dg.asset(
-    group_name="silver",
-    key_prefix=["silver"],
-    deps=[crawled_documents, uploaded_documents],
-)
-def parsed_documents(
-    context: dg.AssetExecutionContext,
-    plugin_manager: PluginManagerResource,
-    storage: StorageResource,
-    registry: RegistryResource,
-) -> dg.MaterializeResult:
-    """Parse raw documents into structured sections."""
-    ...
-
-# klake/pipelines/assets/chunk.py
-@dg.asset(
-    group_name="silver",
-    key_prefix=["silver"],
-    deps=[parsed_documents],
-)
-def document_chunks(
-    context: dg.AssetExecutionContext,
-    storage: StorageResource,
-    registry: RegistryResource,
-    config: ChunkingConfigResource,
-) -> dg.MaterializeResult:
-    """Chunk parsed sections into embedding-ready units."""
-    ...
-
-# klake/pipelines/assets/enrich.py
-@dg.asset(
-    group_name="gold",
-    key_prefix=["gold"],
-    deps=[document_chunks],
-)
-def enriched_chunks(
-    context: dg.AssetExecutionContext,
-    litellm: LiteLLMResource,
-    registry: RegistryResource,
-) -> dg.MaterializeResult:
-    """Add LLM-generated metadata to chunks."""
-    ...
-
-@dg.asset(
-    group_name="gold",
-    key_prefix=["gold"],
-    deps=[document_chunks],
-)
-def chunk_embeddings(
-    context: dg.AssetExecutionContext,
-    plugin_manager: PluginManagerResource,
-    storage: StorageResource,
-    registry: RegistryResource,
-) -> dg.MaterializeResult:
-    """Generate embeddings and index in vector store."""
-    ...
-```
-
-**Why assets over ops/graphs:**
-- Assets model "what data exists" rather than "what steps to run" - fits the zone architecture naturally
-- Each asset corresponds to a data zone transition (bronze documents, silver chunks, gold embeddings)
-- Dagster tracks staleness via `code_version` - if chunking logic changes, downstream assets know they need refresh
-- IO managers handle storage abstraction per-environment (MinIO dev, S3 prod)
-- Asset checks provide data quality gates between zones
-
-**Asset checks for zone transitions:**
-
-```python
-@dg.asset_check(asset=parsed_documents, blocking=True)
-def parsed_documents_have_sections(registry: RegistryResource):
-    """Every parsed document must have at least one section."""
-    count = registry.count_documents_without_sections()
-    return dg.AssetCheckResult(
-        passed=count == 0,
-        metadata={"documents_without_sections": count}
-    )
-```
-
-**Partitioning strategy:**
-- Source-based partitions: Each source can be processed independently
-- Time-based partitions for incremental crawls (daily/weekly)
-- Enables backfills when parsing logic improves
-
-### 6. Storage Abstraction Pattern
-
-Abstract S3-compatible storage to work with both MinIO (dev) and AWS S3 (prod).
-
-```python
-# klake/storage/backend.py
-from pydantic import BaseModel
-import boto3
-from botocore.config import Config
-
-class StorageConfig(BaseModel):
-    endpoint_url: str | None = None  # None = AWS S3, set for MinIO
-    bucket: str = "klake-data"
-    region: str = "us-east-1"
-    access_key_id: str | None = None
-    secret_access_key: str | None = None
-
-class StorageBackend:
-    """S3-compatible storage abstraction for all zones."""
-
-    def __init__(self, config: StorageConfig):
-        self._client = boto3.client(
-            "s3",
-            endpoint_url=config.endpoint_url,
-            region_name=config.region,
-            aws_access_key_id=config.access_key_id,
-            aws_secret_access_key=config.secret_access_key,
-        )
-        self._bucket = config.bucket
-
-    def put_object(self, zone: str, key: str, data: bytes, metadata: dict = None) -> str:
-        """Write object to zone. Returns full S3 key."""
-        full_key = f"{zone}/{key}"
-        self._client.put_object(
-            Bucket=self._bucket,
-            Key=full_key,
-            Body=data,
-            Metadata=metadata or {},
-        )
-        return full_key
-
-    def get_object(self, zone: str, key: str) -> bytes:
-        """Read object from zone."""
-        full_key = f"{zone}/{key}"
-        response = self._client.get_object(Bucket=self._bucket, Key=full_key)
-        return response["Body"].read()
-
-    def exists(self, zone: str, key: str) -> bool:
-        """Check if object exists (for idempotency)."""
-        ...
-
-    def list_objects(self, zone: str, prefix: str) -> list[str]:
-        """List objects with prefix in zone."""
-        ...
-```
-
-**Zone enforcement:**
-- Bronze zone: `put_object` only, no `delete_object` or `overwrite`. Immutability enforced at application layer.
-- Silver/Gold zones: Versioned paths prevent overwrites (`v{version}/` prefix).
-
-**Dagster IO Manager integration:**
-
-```python
-class KlakeIOManager(dg.ConfigurableIOManager):
-    storage: StorageBackend
-
-    def handle_output(self, context, obj):
-        zone = context.asset_key.path[0]  # key_prefix determines zone
-        key = "/".join(context.asset_key.path[1:])
-        self.storage.put_object(zone, key, serialize(obj))
-
-    def load_input(self, context):
-        zone = context.asset_key.path[0]
-        key = "/".join(context.asset_key.path[1:])
-        return deserialize(self.storage.get_object(zone, key))
-```
-
-### 7. API Layer Design (FastAPI)
-
-**Router organization:**
-
-```python
-# klake/api/app.py
-from fastapi import FastAPI
-from klake.api.routers import sources, documents, pipelines, artifacts, health
-
-app = FastAPI(title="Knowledge Lake API", version="0.1.0")
-app.include_router(health.router, tags=["health"])
-app.include_router(sources.router, prefix="/api/v1/sources", tags=["sources"])
-app.include_router(documents.router, prefix="/api/v1/documents", tags=["documents"])
-app.include_router(pipelines.router, prefix="/api/v1/pipelines", tags=["pipelines"])
-app.include_router(artifacts.router, prefix="/api/v1/artifacts", tags=["artifacts"])
-```
-
-**Pipeline trigger pattern (FastAPI + Dagster):**
-
-```python
-# klake/api/routers/pipelines.py
-from fastapi import APIRouter, BackgroundTasks
-from dagster_graphql import DagsterGraphQLClient
-
-router = APIRouter()
-
-@router.post("/trigger/{pipeline_name}")
-async def trigger_pipeline(
-    pipeline_name: str,
-    config: PipelineRunConfig,
-    background_tasks: BackgroundTasks,
-    dagster_client: DagsterGraphQLClient = Depends(get_dagster_client),
-    registry: Registry = Depends(get_registry),
-):
-    """Trigger a pipeline run. Returns immediately with run ID."""
-    run_id = registry.create_pipeline_run(pipeline_name, config)
-    background_tasks.add_task(
-        _submit_dagster_job, dagster_client, pipeline_name, config, run_id
-    )
-    return {"run_id": run_id, "status": "submitted"}
-
-@router.get("/runs/{run_id}/status")
-async def get_run_status(run_id: str, registry: Registry = Depends(get_registry)):
-    """Poll pipeline run status."""
-    return registry.get_pipeline_run(run_id)
-```
-
-**Key patterns:**
-- FastAPI triggers Dagster runs via GraphQL client, does NOT orchestrate itself
-- Background tasks only for lightweight submission, not for pipeline execution
-- Status polling via registry (Dagster run status synced back)
-- Dependency injection for all services (registry, storage, dagster client)
-
-### 8. CLI Design (Typer)
-
-**Hierarchical command structure:**
-
-```
-klake
-  source
-    add       -- Register a new source
-    list      -- List all sources
-    crawl     -- Trigger crawl for a source
-    remove    -- Remove a source
-  document
-    list      -- List documents (with filters)
-    show      -- Show document details + lineage
-    upload    -- Upload a file manually
-    reprocess -- Re-run pipeline on document
-  pipeline
-    run       -- Trigger a named pipeline
-    status    -- Show pipeline run status
-    list      -- List recent runs
-  artifact
-    list      -- List generated artifacts
-    export    -- Export dataset to file
-  config
-    show      -- Display current config
-    set       -- Set config value
-  domain
-    list      -- List available domain packs
-    install   -- Install a domain pack
-```
-
-**Implementation pattern:**
-
-```python
-# klake/cli/app.py
-import typer
-from rich.console import Console
-from klake.cli import source, document, pipeline, artifact, config, domain
-
-app = typer.Typer(name="klake", help="Knowledge Lake Framework")
-console = Console()
-
-app.add_typer(source.app, name="source")
-app.add_typer(document.app, name="document")
-app.add_typer(pipeline.app, name="pipeline")
-app.add_typer(artifact.app, name="artifact")
-app.add_typer(config.app, name="config")
-app.add_typer(domain.app, name="domain")
-
-# klake/cli/source.py
-app = typer.Typer(help="Manage data sources")
-
-@app.command()
-def add(
-    name: str = typer.Argument(..., help="Source name"),
-    url: str = typer.Option(..., help="Source URL"),
-    source_type: str = typer.Option("web", help="Source type"),
-):
-    """Register a new source for crawling."""
-    ...
-```
-
-### 9. Domain Pack / Plugin Loading
-
-Domain packs are specialized plugin bundles that configure sources, schemas, and enrichment logic for a specific domain.
-
-**Domain pack structure:**
-
-```
-klake-healthcare/
-  pyproject.toml          # entry_points for klake
-  klake_healthcare/
-    __init__.py           # Plugin registration
-    sources.py            # Pre-configured source seeds
-    schemas.py            # Domain-specific metadata schemas
-    enrichment.py         # Custom LLM prompts for healthcare
-    quality.py            # Domain-specific quality rules
-    config.yaml           # Default configuration
-```
-
-**Loading mechanism:**
-
-```python
-# Domain packs register via entry_points
-[project.entry-points."klake.domain_packs"]
-healthcare = "klake_healthcare:HealthcareDomainPack"
-
-# Core discovers and loads them
-class DomainPackManager:
-    def __init__(self, plugin_manager: pluggy.PluginManager):
-        self._packs: dict[str, DomainPack] = {}
-        # Discover via entry_points
-        for ep in importlib.metadata.entry_points(group="klake.domain_packs"):
-            pack = ep.load()()
-            self._packs[ep.name] = pack
-            plugin_manager.register(pack)  # Register hooks
-```
-
-### 10. Configuration Management
-
-Use pydantic-settings (BaseSettings) with layered sources.
-
-**Priority order (highest wins):**
-1. Environment variables (12-factor app compliance)
-2. `.env` file (local overrides)
-3. `klake.yaml` config file (project settings)
-4. Default values in code
-
-**Configuration structure:**
-
-```python
-# klake/config/settings.py
-from pydantic_settings import BaseSettings
-from pydantic import Field
-
-class StorageSettings(BaseSettings):
-    endpoint_url: str | None = None
-    bucket: str = "klake-data"
-    region: str = "us-east-1"
-    access_key_id: str | None = None
-    secret_access_key: str | None = None
-
-    model_config = {"env_prefix": "KLAKE_STORAGE_"}
-
-class DatabaseSettings(BaseSettings):
-    url: str = "postgresql://localhost:5432/klake"
-    pool_size: int = 5
-
-    model_config = {"env_prefix": "KLAKE_DB_"}
-
-class LLMSettings(BaseSettings):
-    gateway_url: str = "http://localhost:4000"  # LiteLLM proxy
-    cheap_model: str = "bedrock/anthropic.claude-3-haiku-20240307-v1:0"
-    strong_model: str = "bedrock/anthropic.claude-sonnet-4-20250514"
-    embedding_model: str = "bedrock/amazon.titan-embed-text-v2:0"
-    max_retries: int = 3
-    timeout: int = 60
-
-    model_config = {"env_prefix": "KLAKE_LLM_"}
-
-class PipelineSettings(BaseSettings):
-    chunk_size_tokens: int = 512
-    chunk_overlap_tokens: int = 64
-    max_concurrent_crawls: int = 5
-    rate_limit_seconds: float = 1.0
-    batch_size: int = 100
-
-    model_config = {"env_prefix": "KLAKE_PIPELINE_"}
-
-class Settings(BaseSettings):
-    storage: StorageSettings = StorageSettings()
-    database: DatabaseSettings = DatabaseSettings()
-    llm: LLMSettings = LLMSettings()
-    pipeline: PipelineSettings = PipelineSettings()
-    domain_packs: list[str] = []
-    debug: bool = False
-
-    model_config = {"env_prefix": "KLAKE_"}
-```
-
-**YAML config file (`klake.yaml`):**
-
-```yaml
-storage:
-  endpoint_url: "http://localhost:9000"
-  bucket: "klake-dev"
-
-database:
-  url: "postgresql://klake:klake@localhost:5432/klake"
-
-llm:
-  gateway_url: "http://localhost:4000"
-  cheap_model: "bedrock/anthropic.claude-3-haiku-20240307-v1:0"
-
-pipeline:
-  chunk_size_tokens: 512
-  max_concurrent_crawls: 3
-
-domain_packs:
-  - healthcare
-```
-
-### 11. Idempotent Pipeline Patterns
-
-**Content hashing for deduplication:**
-
-```python
-import hashlib
-
-def compute_content_hash(content: bytes) -> str:
-    """SHA-256 hash for deduplication. Same content = same hash = skip."""
-    return hashlib.sha256(content).hexdigest()
-
-# In ingest pipeline:
-def ingest_document(raw_content: bytes, source_id: str, registry: Registry, storage: StorageBackend):
-    content_hash = compute_content_hash(raw_content)
-
-    # Check if already ingested
-    existing = registry.get_document_by_hash(content_hash)
-    if existing:
-        return existing  # Idempotent: same content already processed
-
-    # New document - store and register
-    doc_id = uuid4()
-    storage_path = storage.put_object("bronze", f"{source_id}/{doc_id}/{content_hash}.bin", raw_content)
-    return registry.create_document(doc_id, source_id, content_hash, storage_path)
-```
-
-**Resumable jobs:**
-- Each pipeline stage checks registry status before processing
-- Documents track `zone` field (bronze/silver/gold) - only process if not yet in target zone
-- Failed documents marked `status='failed'` with error, skipped on retry, manually retriggerable
-- Pipeline runs record progress in `pipeline_runs.stats` JSONB for resumption
-
-**Dagster materialization metadata:**
-
-```python
-@dg.asset
-def parsed_documents(...) -> dg.MaterializeResult:
-    stats = {"processed": 0, "skipped": 0, "failed": 0}
-    for doc in registry.get_documents(zone="bronze"):
-        if registry.has_sections(doc.id):
-            stats["skipped"] += 1
-            continue  # Already parsed - idempotent
-        try:
-            sections = parse(doc)
-            registry.store_sections(doc.id, sections)
-            stats["processed"] += 1
-        except Exception as e:
-            registry.mark_failed(doc.id, str(e))
-            stats["failed"] += 1
-
-    return dg.MaterializeResult(metadata=stats)
-```
-
-## Patterns to Follow
-
-### Pattern 1: Registry-First Design
-
-**What:** Every mutation goes through the registry. Storage writes are paired with registry records.
-
-**When:** Always. No orphaned files in S3, no registry entries without backing data.
-
-**Example:**
-
-```python
-# CORRECT: atomic registry + storage
-async def store_document(content: bytes, metadata: dict):
-    content_hash = compute_content_hash(content)
-    storage_path = storage.put_object("bronze", key, content)
-    registry.create_document(content_hash=content_hash, storage_path=storage_path, **metadata)
-    # If registry fails, storage has orphan - cleaned up by periodic job
-
-# WRONG: storage without registry
-async def store_document(content: bytes):
-    storage.put_object("bronze", key, content)  # No lineage!
-```
-
-### Pattern 2: Resource Injection via Dagster
-
-**What:** All external dependencies (storage, registry, LiteLLM, plugin manager) are Dagster resources injected into assets.
-
-**When:** For all pipeline assets. Enables test mocking and environment switching.
-
-```python
-class RegistryResource(dg.ConfigurableResource):
-    database_url: str
-
-    def get_client(self) -> Registry:
-        return Registry(self.database_url)
-
-# In Definitions:
-defs = dg.Definitions(
-    assets=[crawled_documents, parsed_documents, ...],
-    resources={
-        "registry": RegistryResource(database_url=dg.EnvVar("KLAKE_DB_URL")),
-        "storage": StorageResource(endpoint_url=dg.EnvVar("KLAKE_STORAGE_ENDPOINT")),
-    }
-)
-```
-
-### Pattern 3: Content Hash as Deduplication Key
-
-**What:** SHA-256 of raw content determines identity. Same content = same document regardless of source.
-
-**When:** At every zone boundary. Prevents reprocessing identical content.
-
-### Pattern 4: Explicit Zone Boundaries
-
-**What:** Data moves through zones only via defined pipeline assets. No direct zone-to-zone copies.
-
-**When:** Always. Each zone transition is a traceable, auditable event with lineage.
+**New components:**
+- `knowledge_lake/mcp/__init__.py`, `server.py` (tool registry + transports), `tools.py` (11 tool definitions).
+- New dependency: the official **`mcp` Python SDK** (FastMCP). It is NOT currently installed (verified — no `mcp`/`fastmcp` package in the venv). Pin it; it is the reference implementation and supports both stdio and SSE from one `FastMCP` instance.
+- `klake mcp` Typer command in `cli/app.py` (stdio default; `--sse --port 3001` for SSE).
+
+**One tool registry, two transports:** Define tools **once** with `@mcp.tool()` on a single `FastMCP` instance. Transport is a runtime choice at `mcp.run(transport="stdio")` vs `transport="sse")` — the tool set is transport-agnostic. Do NOT maintain two registries. `klake mcp` selects the transport from a flag.
+
+**The 11 tools → existing functions (all pure shims, D-02):**
+
+| MCP tool | Backing function (exists today) | Notes |
+|----------|--------------------------------|-------|
+| `search` | `pipeline.search.search()` | Add mode + filters (feature 2/4) |
+| `ingest_url` | `pipeline.run.run_document(url=...)` | Full ingest→index path already wired by `cmd_ingest_url` |
+| `crawl` | `pipeline.crawl.crawl_source()` | `async` — MCP tool can be async |
+| `crawl_all` | `pipeline.crawl_all.crawl_all()` (NEW, feature 6) | Depends on feature 6 |
+| `process_crawled` | Refactor `cmd_process_crawled` body → `pipeline.run.process_crawled()` | **Currently the loop lives in the CLI command** (cli/app.py:539) — extract it to `pipeline/` so MCP + CLI share it (D-02 fix) |
+| `add_source` | `pipeline.ingest.register_source()` | Direct |
+| `list_sources` | `registry.repo` list query (see `list_sources_endpoint`) | Extract shared helper into `pipeline`/`registry` |
+| `lineage` | `lineage.resolve_ancestry()` | Direct |
+| `export` | `pipeline.export.export_*()` | Direct (3 kinds) |
+| `init_domain` | `api.app._register_domain_sources()` | **Already extracted** as a shared helper — reuse verbatim |
+| `stats` | NEW small `registry.repo` aggregate query | Counts by artifact_type/source/domain |
+
+**Data-flow change:** none to the pipeline. MCP adds an inbound edge only. Tool inputs/outputs should reuse the **same Pydantic schemas** as FastAPI (`api/schemas.py`) so shapes stay identical across surfaces (this also feeds feature 7).
+
+**Refactors this forces (do them first):** two CLI-embedded behaviors must move down into `pipeline/` so MCP can reuse them without duplicating logic: `process_crawled` (cli/app.py:539–630) and the `list_sources` query (api/app.py:1097). This is the only structural debt MCP introduces.
+
+**Claude Code skills (SKILL-01):** thin markdown/skill wrappers that call the MCP tools (build-corpus, search-knowledge, add-source, export-dataset). No code integration beyond the MCP server; they are packaging.
+
+### 2. Sparse / hybrid search (RETR-01/02)
+
+**The critical migration fact:** v1.0 collections use a **single unnamed dense vector** — `qdrant_store.py` calls `create_collection(vectors_config=VectorParams(size=dim, distance=Cosine))`. Qdrant cannot add a sparse vector to an existing unnamed-vector collection in place; sparse vectors live under `sparse_vectors_config`, and coexisting dense+sparse requires the dense vector to be **named**. Therefore:
+
+> **Adding sparse REQUIRES recreating each collection with named-vector config and re-populating it. It is a reindex, not an ALTER.**
+
+Good news: the **alias-swap reindex machinery already exists and is purpose-built for exactly this.** `qdrant_store.reindex(alias, dim, upsert_fn)` builds a new physical collection, populates via `upsert_fn`, and atomically repoints the alias (index.py:143 `reindex_collection`). Migration path:
+
+1. Modify the create path (`ensure_aliased_collection`) to build **named** vectors: `vectors_config={"dense": VectorParams(size=dim, distance=Cosine)}` + `sparse_vectors_config={"sparse": SparseVectorParams()}`.
+2. Migration = call `reindex()` per alias, but `upsert_fn` must **re-embed**: `copy_all_points` copies dense vectors but cannot synthesize sparse vectors for old points. The migration `upsert_fn` re-reads chunk text (registry/silver zone) and produces both vectors. A pure copy is insufficient for the sparse backfill.
+3. Old physical collection retained (`keep_old_collections=True` default, settings.py:293) — instant rollback.
+
+**Sparse vector generation — decision:** neither `fastembed` nor a SPLADE model is installed; **`rank_bm25` IS present**. Two options:
+- **(Recommended) Add `fastembed`** and use Qdrant-native BM25/SPLADE sparse embeddings. Cleanest integration with `qdrant-client` 1.18 (which ships `qdrant_fastembed` support — verified present in the venv), keeps sparse-vector construction inside the vector-store plugin, and matches the tool-agnostic plugin ethos.
+- **(Fallback) Compute sparse vectors from IDF/BM25 manually** via `rank_bm25` in a new embedder. Avoids a dependency but forces us to own corpus-IDF/vocabulary state (sparse vectors need a shared vocabulary) — more moving parts. Prefer only if adding `fastembed` is rejected.
+
+**Plugin interface change (additive, non-breaking):**
+- `VectorStorePlugin.search(collection, query, top_k, query_filter, *, mode="dense", sparse_query=None)` — new keyword-only params default to today's behavior. Nothing passes `mode` today → existing callers unaffected.
+- Hybrid query uses Qdrant's `query_points` with `prefetch` (dense + sparse branches) and `FusionQuery(fusion=RRF)` — server-side RRF, no client fusion code, the 1.18-native path. Replaces any need for `rank_bm25` at query time.
+
+**`pipeline/search.py` change:** add `mode` param; when sparse is needed, compute the sparse query vector and pass `sparse_query`; dense path unchanged. The existing filter-building block (search.py:84–92) is reused verbatim. `search()` gains `mode="dense"` default → **CLI/API/MCP callers unaffected until they opt in** (`klake search --mode hybrid`, `?mode=hybrid`).
+
+**`pipeline/index.py` change:** produce sparse vectors alongside dense at upsert; `VectorPoint` gains an optional `sparse` field (dataclass default `None` → back-compat). `qdrant_store.upsert` writes both named vectors.
+
+### 3. Domain-segmented S3 keys + tags + gold sub-zones (STORE-01/02/03)
+
+**Current keys (storage/s3.py):**
+- `put_raw`:    `raw/{source_id}/{sha256}.{ext}` (s3.py:219)
+- `put_bronze`: `bronze/{source_id}/{sha256}.{ext}` (s3.py:323)
+- gold: `export.py` writes under `gold/...`
+
+**Target (STORE-01):** `{zone}/{domain}/{source_id}/{sha256}.{ext}`, with `_unclassified` when domain is absent.
+
+**Coexistence with content-addressing + WORM + lineage — all preserved:**
+- The **SHA256 is still in the key**, so identity==content and overwrite is still structurally impossible. Domain is a *prefix* segment, not part of identity.
+- **Lineage is unaffected:** ancestry traces via `parent_artifact_id` + `Artifact.storage_uri` in the registry, NOT via key structure. The recursive-CTE ancestry walk never parses keys. The key shape can change freely as long as the registry records the actual URI.
+- **WORM unaffected:** bucket-level versioning/object-lock/delete-deny is prefix-independent.
+- **The one subtlety:** the same content hash under two domains would produce two different keys. The registry no-op (`get_artifact_by_hash`) fires BEFORE key construction (s3.py:209/313), so identical content is still a single artifact — it keeps whatever domain it was first written under. This is correct and must be preserved: **domain is resolved, but the hash no-op still short-circuits first.** Call this ordering out explicitly in the plan.
+
+**Where domain comes from at write time:** `Source.config['domain']` (already populated by `klake init` and `register_source`). `put_raw`/`put_bronze` receive `source_id` today; add the domain — pass it in from the caller, or look it up via `registry.repo.get_domain_for_source(session, source_id)` which **already exists** (repo.py:820). Prefer passing it in to avoid an extra hot-path query; fall back to the lookup.
+
+**Object tags (STORE-02):** `put_object` currently calls `put_object(Bucket, Key, Body)` with no `Tagging` (s3.py:81). Add a `tags: dict` param and pass `Tagging=urlencode(tags)` (S3 and MinIO both support object tagging). Tags: `domain, source_name, format, artifact_type`. Single-site change in `storage/s3.py`, threaded through `put_raw`/`put_bronze` and the gold writers. Additive.
+
+**Gold sub-zones (STORE-03):** `export.py` gold writers get sub-prefixes `gold/{domain}/rag_corpus|pretrain|finetune/...`. `ExportSettings.gold_prefix` already exists (settings.py:246) — extend the key builders in `pipeline/export.py`. The three export kinds already map cleanly to the three sub-zones (`cmd_export` kinds rag-corpus/pretrain/finetune).
+
+**Migration story:** existing objects live at the old flat keys. Options, in preference order:
+1. **Forward-only (recommended):** new writes use the new scheme; old objects stay put; the registry's `storage_uri` already points at the real location so reads never break. No data movement, zero risk to WORM/immutability. Segmentation applies to net-new ingestion.
+2. **Backfill copy (optional, later):** a one-off job copies old→new keys and updates `Artifact.storage_uri`. Because raw is WORM/immutable, this is a copy (not move) and must update the registry transactionally. Only needed if a uniform layout is required for S3 lifecycle policies — not for v2.0 functionality.
+
+Recommend option 1 for v2.0; note option 2 as deferred ops tooling.
+
+### 4. Expanded chunk payload + filters (PAYLOAD-01/02)
+
+The **most self-contained, lowest-risk** feature — and **foundational for feature 2's filtering value**.
+
+**Payload assembly point:** `pipeline/index.py` lines 106–133 build the `payload` dict per chunk. v1.0 already joins enrichment once per `index()` call (domain via `get_domain_for_source`; document_type/keywords/quality_score via `get_enriched_artifact_for_parsed`). PAYLOAD-01 adds `source_id, source_name, source_url, format, title, organization, tags` to that same dict. Source-level fields come from the `Source` row (fetch once per `index()` call alongside the existing `get_domain_for_source` — same session, negligible cost). `title`/`organization` come from enrichment metadata already fetched. `tags` come from `Source.config['tags']` (populated by `klake init`). **Purely additive** — existing payload keys unchanged, existing search results keep working.
+
+**Filter build point:** `pipeline/search.py` lines 84–92 build the Qdrant `Filter.must` list. PAYLOAD-02 adds `source_name, format, tags, source_id` conditions with the same `FieldCondition`/`MatchValue` idiom (tags → `MatchAny`). The function already demonstrates the exact pattern for `domain`/`document_type`. Add matching optional kwargs to `search()`, then thread them through the three adapters (CLI options, API query params, MCP tool args) — each a mechanical mirror of the existing `--domain`/`domain=` wiring (cli/app.py:640, api/app.py:165).
+
+**Back-compat:** every new kwarg defaults to `None` → no-filter behavior identical to today. New payload fields exist only on newly-indexed points; **old points lack them** → filtering on a new field excludes old points. If that matters, a `reindex_collection` re-populates payloads. Note this coupling in the plan: *filters are only fully effective on points indexed after PAYLOAD-01, or after a reindex.*
+
+### 5. Dagster re-crawl sensor + content-hash change detection (SCHED-01/02)
+
+**New component:** `dagster_defs/sensors.py` with a `@sensor`, registered via `Definitions(sensors=[...])` in `definitions.py` (currently assets + one job + resources).
+
+**How the sensor drives crawl:** on each tick the sensor queries the registry for sources whose `crawl_schedule` is due (`now − last_crawled_at ≥ interval`) and yields a `RunRequest` per due source. Reuse `crawl_source()` — wrap it as a thin `crawl` asset/job (crawl is CLI/API-triggered today, not a Dagster asset), mirroring how `ingest_raw_document` wraps `ingest_*`.
+
+**Schema change:** Source has no schedule/timestamp/hash columns (verified — Source is id/name/source_type/url/normalized_url/license/robots_checked/config/created_at only). Two options:
+- Store schedule + timestamps in `Source.config` JSONB (no migration, but the sensor scans+filters in Python — fine at 28-source scale, weak at 10k).
+- **(Recommended) Add columns** `crawl_schedule TEXT`, `last_crawled_at TIMESTAMPTZ`, `last_content_hash TEXT` via a new Alembic migration (`0009`, continuing the 0001–0008 chain). Enables an indexed "due sources" query — the clean long-term shape.
+
+**Where "skip unchanged" lives (SCHED-02):** two complementary layers, both partly present:
+- **Artifact layer (already works):** `put_raw` computes SHA256 and no-ops if the hash exists (s3.py:206–216). Re-crawling an unchanged page already avoids a duplicate raw artifact and all downstream reprocessing — content-hash dedup is intrinsic.
+- **Source/sensor layer (new):** to skip the *fetch* entirely (not just the write), compare a freshly-fetched page hash against `Source.last_content_hash` (or per-URL `CrawlState`) and short-circuit. Put this in `pipeline/crawl.py` (it already computes per-URL state and has the hash via `put_raw`). Registry = source of truth for "last seen hash" (queryable by the sensor); storage's hash no-op remains the write-level guard.
+
+**Data-flow change:** adds a scheduled inbound trigger. Sensor → RunRequest → crawl asset → `crawl_source()` → existing raw/bronze writes. The crawl pipeline itself is unchanged.
+
+### 6. Crawl config + crawl-all + adaptive rate limiting + PDF-from-crawl (CRAWL-01/02/03, INGEST-01)
+
+**CRAWL-01 (per-source crawl_config):** the config is **already stored** — `klake init` writes `Source.config['crawl_config'] = {depth, rate_limit_rps, robots_txt}` (cli/app.py:1013; sources.yaml confirms the shape). But `crawl_source` **ignores it**: crawl.py:296 hard-codes `source_config = None` before `resolve_delay`. Integration = load `Source.config['crawl_config']` at crawl start and (a) pass it as `source_config` to `resolve_delay` (the three-tier resolver already honors `source_config['rate_limit_seconds']` — **note the key mismatch:** config stores `rate_limit_rps`, resolver reads `rate_limit_seconds`; reconcile by converting rps→seconds or adding an rps tier), and (b) use `crawl_config['depth']` as the `max_depth`/`max_pages` override. Localized change in `pipeline/crawl.py` + `crawl/ratelimit.py`.
+
+**CRAWL-02 (`klake crawl-all`):** new `pipeline/crawl_all.py` querying registered crawl-type sources (optionally filtered by `Source.config['domain'] == --domain`), looping `crawl_source()` per source. Resume-safety is already built in (`_find_or_create_job` reuses incomplete jobs, crawl.py:142). New thin `cmd_crawl_all` CLI command + an MCP `crawl_all` tool both call it. No change to `crawl_source` itself.
+
+**CRAWL-03 (adaptive rate limiting):** `PerHostLimiter` (ratelimit.py) tracks last-fetch per host but has **no backoff on 429/403**. Extend it: on a 429/403 (surfaced from the crawler adapter via `CrawlPageResult`), multiply the per-host delay (exponential) and set a per-host cooldown that `wait()` respects. State is per-host in the existing `_last_fetch` dict → add a parallel `_cooldown_until`/`_penalty` dict. The crawl loop already branches on result status (crawl.py:300–322); add a `rate_limited` branch feeding the limiter. Localized to `crawl/ratelimit.py` + the loop.
+
+**INGEST-01 (PDF-from-crawl):** `_extract_links` (crawl.py:360) follows in-domain links and does NOT skip `.pdf` (it skips images/css/js/media only). But those links are handed to the crawler adapter's `fetch_page`, which yields HTML/markdown — wrong for a PDF. Integration: in the crawl loop, when a queued link is a document type (`.pdf`, `.docx`, …), route it to **`pipeline.ingest.ingest_url()`** (proper `raw_document` with correct MIME, SSRF guard, size cap, content-hash dedup — all already implemented) instead of the HTML crawler path. The branch point is the loop's per-URL dispatch; keep same-domain + robots checks before dispatch. PDF links then become first-class raw artifacts that `process_crawled` parses.
+
+**ENRICH-01 (partial-JSON recovery):** localized to `pipeline/enrich.py` — salvage a truncated LLM JSON response (repair/parse-partial) before falling back to skip. Independent of every other feature; no cross-component integration.
+
+### 7. OpenAPI / OpenAI tool-def generation (SKILL-02/03)
+
+**OpenAPI (SKILL-02) — runtime-derived, build-time-emitted:** FastAPI already generates the spec (`app.openapi()`); `/docs` works today. New `klake openapi` command imports `knowledge_lake.api.app:app`, calls `app.openapi()`, writes `docs/openapi.json`. Pure derivation — no hand-maintained spec. Run in CI to keep it fresh. Zero pipeline impact.
+
+**OpenAI tool defs (SKILL-03) — derived from Pydantic:** the request schemas in `api/schemas.py` already define every operation's input shape. Emit OpenAI function-tool JSON as `{name, description, parameters: <Model>.model_json_schema()}` per operation, at build time (`klake openapi --openai-tools` → static `docs/openai_tools.json`). This is exactly why feature 1 should reuse `api/schemas.py` for MCP tool I/O — **one schema set feeds MCP tools, OpenAPI, and OpenAI tool defs.** Keep a single mapping table (operation → Pydantic request model → backing pipeline fn) as the shared source for MCP registration AND tool-def generation, so the three agent surfaces never drift.
+
+## Data Flow — What Changes
+
+1. **Search (dense→hybrid):** `search(mode=hybrid)` → embed dense query + build sparse query → `qdrant.search` issues one `query_points` with dense+sparse `prefetch` + RRF fusion → hits. Filters (feature 4) apply identically in all modes.
+2. **Index (dense→dense+sparse+rich payload):** `index()` joins Source + enrichment (already done) → builds expanded payload → produces dense **and** sparse vectors → `upsert` writes both named vectors.
+3. **Ingest write (flat→domain-segmented+tagged):** caller resolves domain from `Source.config` → `put_raw/put_bronze` write `{zone}/{domain}/{source_id}/{hash}.{ext}` with object tags → registry records the real `storage_uri` (lineage unaffected).
+4. **Scheduled crawl (new inbound trigger):** sensor tick → due-source query → RunRequest → crawl asset → `crawl_source()` → hash-gated writes.
+5. **Agent access (new inbound surface):** MCP tool call → pipeline function → same registry/storage/Qdrant path as CLI.
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Monolithic Pipeline Functions
+### Anti-Pattern 1: MCP re-implementing or HTTP-proxying pipeline logic
+**Mistake:** MCP tools call the FastAPI endpoints over HTTP, or re-code the crawl/search flow. **Why wrong:** double serialization, a network hop, two divergent code paths — violates D-02. **Instead:** MCP tools are in-process shims onto `pipeline/*.py`, sharing `api/schemas.py` shapes.
 
-**What:** Single function that crawls, parses, chunks, and embeds in one go.
+### Anti-Pattern 2: Trying to ALTER an unnamed-vector collection to add sparse
+**Mistake:** attempting an in-place add of a sparse vector to existing `klake_chunks`. **Why wrong:** Qdrant requires named vectors for dense+sparse coexistence; there is no in-place migration. **Instead:** use the existing `reindex()` alias-swap with a **re-embedding** `upsert_fn` (copy alone can't synthesize sparse vectors for old points).
 
-**Why bad:** Cannot resume from middle, no intermediate quality checks, no parallel processing of stages, violates zone architecture.
+### Anti-Pattern 3: Encoding domain into content-hash identity
+**Mistake:** folding domain into the hash, or dropping the registry no-op so "same doc in two domains" makes two artifacts. **Why wrong:** breaks content-addressed dedup and WORM guarantees. **Instead:** domain is a key *prefix* only; the `get_artifact_by_hash` no-op still short-circuits before key construction.
 
-**Instead:** One Dagster asset per zone transition. Each asset reads from upstream zone, writes to target zone, records lineage.
+### Anti-Pattern 4: Making new search filters or payload fields required
+**Mistake:** required kwargs / non-defaulted `VectorPoint.sparse` / mandatory `mode`. **Why wrong:** breaks the many existing callers and old indexed points. **Instead:** every addition defaults to today's behavior (`mode="dense"`, filters `None`, `sparse=None`).
 
-### Anti-Pattern 2: IO Managers for Everything
+### Anti-Pattern 5: Putting new behavior in the CLI/API adapter
+**Mistake:** implementing `crawl_all`/`process_crawled`/`stats` inside a Typer command (as `process_crawled` is today). **Why wrong:** MCP/Dagster can't reuse it → duplication. **Instead:** land logic in `pipeline/`, adapters stay thin.
 
-**What:** Using Dagster IO managers to handle all storage reads/writes.
+## Integration Points Summary
 
-**Why bad:** IO managers assume data fits in memory and follows simple serialize/deserialize patterns. Document pipelines process thousands of documents that should NOT all be loaded at once.
+| Feature | Primary file(s) to modify | New file(s) | Migration? |
+|---------|---------------------------|-------------|------------|
+| MCP server | `cli/app.py` (+`mcp` cmd) | `mcp/server.py`, `mcp/tools.py`; extract `pipeline/run.process_crawled`, `registry` list/stats helpers | No (new dep: `mcp` SDK) |
+| Sparse/hybrid | `plugins/builtin/qdrant_store.py`, `pipeline/index.py`, `pipeline/search.py`, `plugins/protocols.py` | maybe `plugins/builtin/sparse_embedder.py` | **Qdrant reindex (re-embed)**; new dep `fastembed` (recommended) |
+| Domain S3 keys + tags | `storage/s3.py`, `pipeline/export.py` | — | Forward-only (backfill deferred) |
+| Payload + filters | `pipeline/index.py`, `pipeline/search.py`, `cli/app.py`, `api/app.py`, `api/schemas.py` | — | Reindex to backfill old points (optional) |
+| Re-crawl sensor + hash | `dagster_defs/definitions.py`, `pipeline/crawl.py`, `registry/models.py` | `dagster_defs/sensors.py`, Alembic `0009_source_crawl_schedule` | **Yes (Source columns)** |
+| Crawl config/all/adaptive/PDF | `pipeline/crawl.py`, `crawl/ratelimit.py`, `cli/app.py`, `pipeline/enrich.py` | `pipeline/crawl_all.py` | No |
+| OpenAPI/OpenAI tools | `cli/app.py` (+`openapi` cmd), `api/schemas.py` | `docs/openapi.json`, `docs/openai_tools.json` (generated) | No |
 
-**Instead:** Use `deps` for asset dependencies. Handle storage explicitly via the StorageBackend resource. IO managers only for small metadata objects if at all.
+## Dependency-Aware Build Order
 
-### Anti-Pattern 3: Direct Provider Calls
-
-**What:** Importing `anthropic` or `openai` SDK directly in pipeline code.
-
-**Why bad:** Vendor lock-in, no unified rate limiting, no cost tracking, no model aliasing.
-
-**Instead:** ALL LLM calls through LiteLLM resource with task-based aliases (`cheap_model`, `strong_model`).
-
-### Anti-Pattern 4: Schema-Per-Domain in Core
-
-**What:** Adding healthcare-specific columns to core tables.
-
-**Why bad:** Core becomes coupled to domain concerns. Adding a new domain requires core schema changes.
-
-**Instead:** Domain-specific metadata goes in JSONB `metadata` columns. Domain packs define their own validation schemas applied at the application layer.
-
-## Scalability Considerations
-
-| Concern | Dev (single user) | Production (team) | Scale (1M+ docs) |
-|---------|-------------------|-------------------|-------------------|
-| Storage | MinIO single-node | AWS S3 | S3 with lifecycle policies |
-| Database | PostgreSQL single | PostgreSQL with read replicas | Partitioned tables by source/date |
-| Orchestration | Dagster single-process | Dagster with dagster-daemon | Dagster with K8s executor |
-| Vector store | Qdrant single-node | Qdrant cluster | Qdrant sharded collections |
-| LLM calls | Sequential, rate-limited | Batched, concurrent | Queue-based with backpressure |
-| Chunking | In-process | Dagster parallelism | Distributed via Dagster K8s |
-
-## Build Order Implications
-
-Based on component dependencies, the recommended build order is:
+Ordering is driven by real coupling found in the code, not theme grouping:
 
 ```
-Phase 1: Foundation (no dependencies)
-  - Core Config (pydantic-settings)
-  - Storage Abstraction (boto3 + zone logic)
-  - Registry Schema (PostgreSQL + SQLAlchemy/asyncpg)
-  - Plugin Manager skeleton (pluggy hookspecs)
-  - Basic Dagster definitions structure
+Phase A — Metadata foundation (no new deps, lowest risk)
+  1. PAYLOAD-01  Expanded chunk payload (index.py join point)          ← foundational
+  2. PAYLOAD-02  Search filters (search.py filter builder)             ← needs payload fields to filter on
+     Rationale: filters are worthless without the payload fields; payload lands first.
 
-Phase 2: Ingest Pipeline (depends on Phase 1)
-  - Crawler plugins (Crawl4AI hookimpl)
-  - File upload handling
-  - Bronze zone storage
-  - Basic CLI (source add/list, document upload)
-  - Basic API (source CRUD, upload endpoint)
-  - Dagster ingest assets
+Phase B — Crawl maturation (independent of A; unblocks crawl-all + sensor)
+  3. CRAWL-01    Wire Source.config['crawl_config'] into crawl_source  ← fixes source_config=None
+  4. CRAWL-03    Adaptive rate limiting (PerHostLimiter backoff)
+  5. INGEST-01   PDF-from-crawl routing to ingest_url
+  6. CRAWL-02    crawl-all batch driver (pipeline/crawl_all.py)        ← builds on 3–5
+  7. ENRICH-01   Partial-JSON recovery (localized to enrich.py; independent)
 
-Phase 3: Processing Pipeline (depends on Phase 2)
-  - Parser plugins (Docling hookimpl)
-  - Section extraction
-  - Chunking strategies
-  - Silver zone storage
-  - Lineage edge recording
-  - Pipeline status tracking
+Phase C — Storage segmentation (independent; touches write path)
+  8. STORE-01    Domain-segmented keys (needs domain at write time)
+  9. STORE-02    Object tags on every write (same put_object change site as 8)
+ 10. STORE-03    Gold sub-zones (export.py key builders)
+     Rationale: 8 and 9 are the same storage.s3 change; do together. Forward-only, no migration.
 
-Phase 4: Enrichment + Export (depends on Phase 3)
-  - LiteLLM integration resource
-  - Metadata enrichment
-  - Embedding generation
-  - Vector store plugin (Qdrant)
-  - Export formats (Parquet, JSONL)
-  - Gold zone completion
-  - Dataset generation
+Phase D — Hybrid retrieval (highest technical risk; needs reindex machinery)
+ 11. RETR-01    Sparse named vector: named-vector collections + re-embed reindex + fastembed
+ 12. RETR-02    mode=hybrid|dense|sparse in search() + RRF query
+     Rationale: sparse infra (named collections, migration) must exist before hybrid query mode.
+     Depends on Phase A payload (filters must work in hybrid mode too).
 
-Phase 5: Domain Packs + Polish (depends on Phase 4)
-  - Healthcare domain pack
-  - Quality scoring
-  - Domain-specific enrichment prompts
-  - Source discovery (SearXNG)
-  - Corpus curation
+Phase E — Scheduling (needs a runnable crawl trigger + registry columns)
+ 13. SCHED-schema  Alembic migration: Source.crawl_schedule/last_crawled_at/last_content_hash
+ 14. SCHED-02      Content-hash change gate in crawl.py (registry-backed)
+ 15. SCHED-01      Dagster re-crawl sensor + crawl asset
+     Rationale: sensor needs the schedule columns and a crawl asset to target; hash gate needs the column.
+
+Phase F — Agent surfaces (LAST — wrap stabilized functions)
+ 16. Refactor: extract process_crawled + list_sources/stats into pipeline/registry
+ 17. SKILL-02   klake openapi (app.openapi() dump)
+ 18. SKILL-03   OpenAI tool defs from Pydantic (shared schema/mapping table)
+ 19. MCP-01/02  MCP server (stdio+SSE), klake mcp — maps 11 tools to now-stable functions
+ 20. SKILL-01   Claude Code skills over the MCP tools
+     Rationale (explicit): MCP comes AFTER CLI/API stabilize and after crawl_all (tool #4)
+     and process_crawled extraction exist — otherwise the 11-tool mapping targets moving/duplicated code.
 ```
 
-**Dependency rationale:**
-- Config + Storage + Registry are the foundation everything else touches
-- Plugin Manager must exist before any plugins can be implemented
-- Ingest must work before you can parse (need documents in bronze)
-- Parsing must work before chunking (need sections in silver)
-- Chunks must exist before embeddings (need text units for vectors)
-- Domain packs build on top of working core (customization layer)
+**Why this order (the load-bearing dependencies):**
+- **Payload before filters** — a filter can only match a field the payload carries.
+- **Crawl-config/adaptive/PDF before crawl-all** — crawl-all is a loop over a single-source crawl that must already honor per-source config and route PDFs.
+- **Sparse infra before hybrid mode** — hybrid `query_points` needs named dense+sparse collections to exist (the reindex migration is the gate).
+- **Schedule columns before the sensor** — the sensor's "due sources" query and the hash gate both read new Source columns.
+- **MCP last** — it is a thin wrapper; wrapping functions still being reshaped (crawl_all added, process_crawled/list_sources extracted) would churn the tool registry. Stabilize the service layer, then expose it.
+
+Phases A/B/C are mutually independent and can parallelize across workstreams; D depends on A; E depends on B; F depends on B (crawl_all) plus everything it wraps.
 
 ## Sources
 
-- Dagster official documentation: Software-Defined Assets, IO Managers, Resources, Asset Checks, Partitions, Pipes (docs.dagster.io) — fetched 2026-07-02
-- FastAPI official documentation: Background Tasks, Dependency Injection (fastapi.tiangolo.com) — fetched 2026-07-02
-- Typer official documentation: Subcommands and App Groups (typer.tiangolo.com) — fetched 2026-07-02
-- pluggy official documentation: Hook Specifications, Plugin Manager, Entry Points (pluggy.readthedocs.io) — fetched 2026-07-02
-- Databricks Medallion Architecture reference (databricks.com/glossary/medallion-architecture) — fetched 2026-07-02
-- pydantic-settings documentation (pydantic-settings.readthedocs.io) — fetched 2026-07-02 (older version; BaseSettings patterns from training knowledge, marked MEDIUM confidence)
+- Direct reads of shipped v1.0 source (2026-07-08): `pipeline/{search,index,ingest,crawl,export}.py`, `plugins/{protocols,builtin/qdrant_store}.py`, `storage/s3.py`, `crawl/ratelimit.py`, `cli/app.py`, `api/app.py`, `config/settings.py`, `dagster_defs/{assets,definitions}.py`, `registry/{models,repo}.py`, `domains/healthcare/sources.yaml` — HIGH confidence (primary artifacts).
+- Dependency probe: `mcp`/`fastembed` absent, `rank_bm25` present, `qdrant-client` 1.18 with `qdrant_fastembed` present — HIGH confidence (venv inspection).
+- v1.0 architecture research: `.planning/milestones/v1.0-research/ARCHITECTURE.md` (pattern continuity) — MEDIUM confidence (prior research doc).
+- Qdrant named-vector / sparse-vector / RRF-fusion model and MCP dual-transport pattern — MEDIUM confidence (established product behavior; verify the exact `query_points` prefetch/`FusionQuery` API against qdrant-client 1.18 during Phase D planning).
+
+---
+*Architecture research for: Knowledge Lake Framework v2.0 feature integration*
+*Researched: 2026-07-08*

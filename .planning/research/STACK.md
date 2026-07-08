@@ -1,351 +1,135 @@
-# Technology Stack
+# Stack Research — v2.0 Agent-Ready Lake (additions only)
 
-**Project:** Knowledge Lake Framework (HealthLake)
-**Researched:** 2026-07-02
-**Overall Confidence:** MEDIUM (cross-verified from PyPI + GitHub official sources)
+**Domain:** AI-ready knowledge-lake framework (Python data pipeline)
+**Researched:** 2026-07-08
+**Confidence:** HIGH (versions cross-checked against installed `.venv` + PyPI JSON API on 2026-07-08; Qdrant/Crawl4AI APIs confirmed by importing the pinned versions already in the repo)
 
-## Recommended Stack
+> Scope: this milestone ADDS features to a shipped v1.0. The full validated stack (Python 3.12/uv/Pydantic 2/FastAPI/Typer/SQLAlchemy 2/Dagster 1.13/Crawl4AI 0.9/Docling/Qdrant 1.18/MinIO+boto3/LiteLLM/DataTrove/sentence-transformers/structlog/tenacity) lives in `.planning/milestones/v1.0-research/STACK.md` and is NOT re-litigated here. This file only covers what the 5 new capability areas require. **Net new runtime dependencies: 2 (`mcp`, `fastembed`). Everything else reuses packages already pinned in `pyproject.toml`.**
 
-### Language & Runtime
+---
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Python | 3.12+ | Core language | Best ecosystem for data/ML pipelines; 3.12 has performance improvements and better typing |
-| uv | latest | Package management | 10-100x faster than pip, proper lockfiles, replaces pip+virtualenv+pip-tools |
-| Pydantic | 2.13.x | Data validation & settings | Industry standard for Python data models; v2 is 5-50x faster than v1 |
+## Recommended Additions
 
-### Orchestration
+### New Core Dependencies
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Dagster | 1.13.x | Pipeline orchestration | Asset-based model maps perfectly to data lake zones; built-in lineage, retries, scheduling, observability |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `mcp` (official Model Context Protocol Python SDK) | `>=1.28,<2.0` (latest 1.28.1, 2026-06-26) | MCP server exposing lake ops over stdio + SSE/streamable-HTTP | Anthropic's reference SDK; **bundles FastMCP** (`mcp.server.fastmcp.FastMCP`) so one dep gives decorator-based tools AND all three transports (`stdio`, `sse`, `streamable-http`). No extra framework needed — the HTTP transports expose a Starlette/ASGI app that mounts on the existing FastAPI/uvicorn server. |
+| `fastembed` | `>=0.8,<0.9` (latest 0.8.0, 2026-03-23) | Client-side sparse (BM25) vector generation for hybrid search | Qdrant's own companion library. `SparseTextEmbedding("Qdrant/bm25")` produces term-frequency sparse vectors; pair with a collection-level `Modifier.IDF` so Qdrant computes corpus-global IDF server-side. Pure-lexical (stemmer/tokenizer) — **not** an LLM call, so it does not touch the LiteLLM-only constraint and keeps the BM25 path deterministic (fits the "deterministic first" rule). |
 
-**Why Dagster over alternatives:**
-- **vs Prefect:** Dagster's software-defined assets model is purpose-built for data pipelines where you declare outputs (bronze/silver/gold tables). Prefect is task-centric (imperative) which forces you to build lineage yourself.
-- **vs Airflow:** Airflow is DAG/task-centric and requires external tooling for asset lineage. The scheduler architecture is heavyweight. Dagster's dev experience (local testing, type-checked resources) is dramatically better.
-- **vs Custom:** Custom orchestration always under-invests in retries, observability, scheduling, and lineage. Dagster gives all of these for free.
+### Reused — No New Dependency
 
-### Document Parsing
+| Feature area | Package already in `pyproject.toml` | How it satisfies the requirement |
+|--------------|-------------------------------------|----------------------------------|
+| Hybrid BM25 + dense + RRF | `qdrant-client==1.18.0` | `models.{FusionQuery, Fusion, Prefetch, SparseVector, SparseVectorParams, NamedSparseVector, Modifier}` all present (verified by import). The 1.18 Query API (`query_points`) already drives dense search in `qdrant_store.py`; hybrid is the same call with `prefetch=[...]` + `query=FusionQuery(fusion=Fusion.RRF)`. No client or server upgrade. |
+| Adaptive rate limiting (429/403 backoff, per-host cooldown) | `crawl4ai==0.9.0` + `tenacity==9.1.4` | Crawl4AI exports `RateLimiter(base_delay, max_delay, max_retries, rate_limit_codes)` (exponential backoff on configurable status codes) and `MemoryAdaptiveDispatcher`/`SemaphoreDispatcher` — verified by import. `crawl/ratelimit.py::PerHostLimiter` + three-tier `resolve_delay()` already do per-host cooldown; Crawl4AI's `RateLimiter` adds the reactive 429/403 backoff. `tenacity` (already pinned) covers the non-Crawl4AI single-URL `httpx` path. |
+| Dagster re-crawl sensor + content-hash change detection | `dagster==1.13.11` | `@dg.sensor`, `RunRequest`, `SkipReason`, `SensorResult`, and `context.cursor` are core Dagster 1.13 — no add-on. Per-source `crawl_schedule` and last-seen content hash live in the sensor cursor / run_key. |
+| Static OpenAPI export (`klake openapi` → `docs/openapi.json`) | `fastapi==0.139.0` + `orjson==3.11.9` | `app.openapi()` returns the full spec dict; serialize with `orjson` (already a dep) and write `docs/openapi.json`. A Typer command wraps it. |
+| OpenAI-format tool definitions from Pydantic schemas | `pydantic==2.13.4` (+ `litellm==1.90.2`) | `Model.model_json_schema()` → wrap as `{"type":"function","function":{name, description, parameters}}`. Pydantic's `GenerateJsonSchema` with a flat `ref_template` (or manual `$defs` inlining) yields OpenAI-compatible parameter schemas. LiteLLM (already present) is the runtime consumer if an agent calls back through the gateway — no `openai` SDK needed. |
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Docling | 2.108.x | Primary document parser | Best open-source multi-format parser: PDF layout analysis, table extraction, reading order, OCR, formula detection. IBM Research quality, LF AI & Data Foundation hosted, MIT license |
-
-**Why Docling over alternatives:**
-- **vs Unstructured (0.23.x):** Unstructured moved to a SaaS-first model with the open-source version lagging behind. Docling is fully open, faster iteration (190 releases vs Unstructured's slower cadence), and better structured output (DoclingDocument format with lossless JSON export).
-- **vs Apache Tika:** Tika is Java-based (JVM dependency), focuses on text extraction without layout understanding. No table structure recognition, no reading order detection, no formula parsing. Legacy tool for simple text extraction only.
-
-**Plugin strategy:** Docling is the primary parser, but the framework should define a `DocumentParser` protocol that allows swapping in Unstructured or Tika for specific use cases (e.g., Tika for email/archive formats if needed).
-
-### Web Crawling
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Crawl4AI | 0.9.x | Primary web crawler | Async-first, LLM-ready markdown output, structured extraction, browser automation, anti-bot detection, deep crawl strategies (BFS/DFS/Best-First) |
-| Scrapy | 2.16.x | Secondary/bulk crawler | Best for high-volume structured scraping with mature middleware ecosystem |
-
-**Why Crawl4AI as primary:**
-- **vs Scrapy:** Crawl4AI is purpose-built for AI pipelines: outputs clean markdown, handles JavaScript-rendered pages natively, supports LLM-based structured extraction. Scrapy excels at volume but requires more work to produce AI-ready output.
-- **vs Custom (requests+BeautifulSoup):** Missing async pooling, browser automation, anti-bot detection, crash recovery, and deep crawl strategies.
-
-**Plugin strategy:** Crawl4AI for AI-focused crawling (markdown, structured extraction). Scrapy as an alternative plugin for bulk/sitemap crawling. Both behind a `WebCrawler` protocol.
-
-### Vector Search
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Qdrant | client 1.18.x | Vector database | Best balance of features (dense/sparse/hybrid/multivector), performance, filtering, and deployment flexibility. Rust-based server, Docker-first |
-
-**Why Qdrant over alternatives:**
-- **vs Milvus:** Milvus is more complex (requires etcd, MinIO, Pulsar for distributed mode). Qdrant runs standalone in a single Docker container for dev and scales horizontally for production. Simpler operational model.
-- **vs Weaviate:** Weaviate has good features but is less performant on filtered searches and has a more complex schema model. Qdrant's payload-based filtering with query planning is more flexible.
-- **vs pgvector:** pgvector is convenient (same DB as metadata) but significantly slower for large collections, lacks hybrid search, no multivector support, and scaling requires PostgreSQL scaling which is expensive.
-
-**Key capabilities used:**
-- Dense vectors for semantic search
-- Sparse vectors for keyword/BM25-style retrieval
-- Hybrid search with RRF fusion
-- Payload filtering (source_id, domain, quality_score, etc.)
-- Named vectors (multiple embedding models per document)
-- Quantization for cost reduction at scale
-
-### Object Storage
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| MinIO | Python SDK 7.2.x | S3-compatible object storage (dev) | Drop-in S3 replacement, runs locally in Docker, zero AWS costs during development |
-| boto3 | 1.43.x | S3 client (production) | Direct AWS S3 access for production; MinIO is S3-compatible so same code works |
-
-**Strategy:** Use `boto3` as the single S3 client library everywhere. Point it at MinIO endpoint for local dev, AWS S3 for production. The MinIO Python SDK is only needed for MinIO admin operations (bucket policies, etc.) — not for regular object operations.
-
-### Corpus Curation
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| DataTrove | 0.9.x | Text corpus filtering, deduplication, quality scoring | HuggingFace's production tool for FineWeb dataset. Modular pipeline architecture, MinHash dedup, quality filters, multi-executor support (local/Slurm/Ray) |
-
-**Why DataTrove over alternatives:**
-- **vs NeMo Curator (1.2.x):** NeMo Curator is GPU-first (requires NVIDIA RAPIDS, H100-class hardware). Overkill for our scale. DataTrove runs efficiently on CPU, which matches the DigitalOcean deployment constraint. NeMo Curator is for trillion-token scale.
-- **vs Dolma:** Dolma (Allen AI) is less actively maintained and has fewer built-in filters. DataTrove has proven its pipeline at the FineWeb scale and integrates with HuggingFace Hub natively.
-- **vs Custom filters:** DataTrove's pipeline block architecture (`Document` in, `Document` out) lets us write custom filters that compose with built-in ones. No reason to reinvent MinHash dedup or language detection.
-
-**Integration approach:** Use DataTrove's pipeline blocks as the curation engine within Dagster assets. Dagster manages scheduling/retries/lineage; DataTrove does the actual filtering/dedup work.
-
-### LLM Gateway
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| LiteLLM | 1.90.x | Unified LLM API gateway | Single interface to 100+ providers; handles Bedrock, OpenAI, Anthropic. Cost tracking, fallbacks, rate limiting, caching |
-
-**Deployment mode:** Use LiteLLM as a Python library (not proxy server) for MVP. The proxy adds operational complexity. Direct library usage gives the same routing/fallback/cost-tracking benefits with simpler deployment.
-
-**Model alias strategy (from PROJECT.md constraints):**
-```python
-# config.yaml
-models:
-  cheap_model: "bedrock/anthropic.claude-3-haiku-20240307-v1:0"
-  strong_model: "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
-  eval_model: "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
-  embedding_model: "bedrock/amazon.titan-embed-text-v2:0"
-```
-
-### Metadata & Registry
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| PostgreSQL | 16+ | Metadata registry, source/document/artifact registries | Robust, well-understood, handles complex queries for lineage tracing |
-| SQLAlchemy | 2.0.x | ORM & query builder | Industry standard Python ORM; async support, excellent migration tooling via Alembic |
-| Alembic | latest | Database migrations | Paired with SQLAlchemy; auto-generates migration scripts from model changes |
-| psycopg | 3.3.x | PostgreSQL driver | Modern async-capable PostgreSQL driver (replaces psycopg2) |
-
-### API & CLI
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| FastAPI | 0.139.x | REST API framework | Async, auto-generated OpenAPI docs, Pydantic integration, dependency injection |
-| Typer | 0.26.x | CLI framework | Same author as FastAPI, Pydantic-style CLI with auto-generated help |
-| uvicorn | 0.49.x | ASGI server | Production ASGI server for FastAPI |
-
-### Data Processing & Export
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| DuckDB | 1.5.x | Analytics queries & Parquet export | In-process analytical database, reads/writes Parquet natively, SQL interface over data lake files |
-| PyArrow | 24.0.x | Arrow/Parquet format handling | Foundation for columnar data; DuckDB, Polars, and pandas all use it |
-| Polars | 1.42.x | DataFrame operations | 10-100x faster than pandas for ETL transforms; native Parquet/Arrow support, lazy evaluation |
-
-**Why Polars over pandas:**
-- Lazy evaluation enables query optimization
-- Native multithreading (no GIL issues)
-- Predictable memory usage with streaming
-- Same Arrow foundation as DuckDB/PyArrow (zero-copy interop)
-
-### Embeddings
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| sentence-transformers | 5.6.x | Local embedding models | Run embeddings locally without API costs; supports all MTEB models |
-
-**Strategy:** Default to local sentence-transformers for development/small scale. Route through LiteLLM embedding endpoint for production (Bedrock Titan, OpenAI ada-003, etc.) via task alias `embedding_model`.
-
-### Supporting Libraries
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| lingua-language-detector | 2.2.x | Language detection | Every document ingestion; more accurate than langdetect (rule-based + ML hybrid) |
-| structlog | latest | Structured logging | All application logging; JSON-structured logs for observability |
-| tenacity | latest | Retry logic | HTTP calls, LLM calls, external service interactions |
-| httpx | latest | Async HTTP client | All outbound HTTP (replaces requests for async contexts) |
-| xxhash | latest | Fast content hashing | Document deduplication, content-addressable storage keys |
-| orjson | latest | Fast JSON serialization | High-throughput JSON for JSONL export and API responses |
-
-### Infrastructure
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Docker + Compose | latest | Local development environment | Run Postgres, MinIO, Qdrant, SearXNG as services |
-| SearXNG | Docker image | Source discovery | Meta-search engine for finding domain sources; self-hosted, privacy-respecting |
-
-### Source Discovery
-
-| Technology | Deployment | Purpose | Why |
-|------------|-----------|---------|-----|
-| SearXNG | Docker (searxng/searxng) | Automated source discovery | Self-hosted meta-search engine; no API keys needed, aggregates multiple search engines, configurable per-domain |
-
-**Note:** The PyPI `searxng` package (0.0.0.dev0) is an MCP wrapper, not the actual search engine. Deploy SearXNG via its official Docker image only.
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Orchestration | Dagster | Prefect 3.x | Task-centric model requires building lineage yourself; less natural for data lake zones |
-| Orchestration | Dagster | Airflow 2.x | Heavyweight scheduler, DAG-centric, poor dev experience, no native asset concepts |
-| Document Parsing | Docling | Unstructured | SaaS-first direction, slower OSS iteration, less structured output format |
-| Document Parsing | Docling | Apache Tika | Java dependency, no layout understanding, no table/formula parsing |
-| Web Crawling | Crawl4AI | Scrapy alone | Not AI-focused, no browser automation, requires more code for markdown output |
-| Vector DB | Qdrant | Milvus | Operational complexity (etcd, MinIO, Pulsar dependencies for distributed) |
-| Vector DB | Qdrant | pgvector | Slow at scale, no hybrid search, no multivector, scaling = scaling PG |
-| Vector DB | Qdrant | Weaviate | Less performant filtered search, more complex schema model |
-| Object Storage | boto3 + MinIO | MinIO SDK only | boto3 is the standard S3 client; works with both MinIO and AWS |
-| Corpus Curation | DataTrove | NeMo Curator | Requires NVIDIA GPUs; overkill for non-trillion-token scale |
-| Corpus Curation | DataTrove | Dolma | Less maintained, fewer built-in blocks |
-| LLM Gateway | LiteLLM | Direct SDKs | Vendor lock-in, no unified cost tracking, no fallback routing |
-| DataFrame | Polars | pandas | Slower, higher memory usage, no lazy evaluation, GIL-bound |
-| Language Detection | lingua | langdetect | langdetect is unmaintained (last release 2021), less accurate on short text |
-| Metadata | PostgreSQL | OpenMetadata | Adds operational complexity for MVP; migrate later when catalog features needed |
-| Metadata | PostgreSQL | DataHub | LinkedIn's tool; complex Java/Kafka stack, overkill for MVP |
+---
 
 ## Installation
 
 ```bash
-# Core framework
-pip install dagster dagster-webserver dagster-postgres dagster-docker
-
-# Document processing
-pip install docling sentence-transformers
-
-# Web crawling
-pip install crawl4ai scrapy
-
-# Database & API
-pip install fastapi uvicorn typer sqlalchemy[asyncio] psycopg[binary] alembic pydantic
-
-# Vector search
-pip install qdrant-client
-
-# LLM gateway
-pip install litellm
-
-# Data processing & export
-pip install duckdb pyarrow polars
-
-# Corpus curation
-pip install datatrove
-
-# Object storage
-pip install boto3
-
-# Utilities
-pip install lingua-language-detector structlog tenacity httpx xxhash orjson
-
-# Dev dependencies
-pip install pytest pytest-asyncio pytest-cov ruff mypy pre-commit
+# Two new runtime deps — add to pyproject.toml [project].dependencies
+uv add "mcp>=1.28,<2.0"
+uv add "fastembed>=0.8,<0.9"
+uv lock
 ```
 
-## Docker Compose Services (Development)
+Pin block to append to `pyproject.toml`:
 
-```yaml
-services:
-  postgres:
-    image: postgres:16
-    ports: ["5432:5432"]
-  
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    ports: ["9000:9000", "9001:9001"]
-  
-  qdrant:
-    image: qdrant/qdrant
-    ports: ["6333:6333", "6334:6334"]
-  
-  searxng:
-    image: searxng/searxng
-    ports: ["8888:8080"]
-  
-  dagster-webserver:
-    build: .
-    ports: ["3000:3000"]
-    depends_on: [postgres]
-```
-
-## Version Pinning Strategy
-
-Pin **major.minor** in pyproject.toml, allow patch updates:
 ```toml
-[project]
-dependencies = [
-    "dagster>=1.13,<1.14",
-    "docling>=2.108,<3.0",
-    "crawl4ai>=0.9,<1.0",
-    "qdrant-client>=1.18,<2.0",
-    "litellm>=1.90,<2.0",
-    "datatrove>=0.9,<1.0",
-    "duckdb>=1.5,<2.0",
-    "fastapi>=0.139,<1.0",
-    "sqlalchemy>=2.0,<2.1",
-    "pydantic>=2.13,<3.0",
-    "polars>=1.42,<2.0",
-]
+    "mcp>=1.28,<2.0",        # MCP server (bundles FastMCP; stdio + SSE + streamable-http)
+    "fastembed>=0.8,<0.9",   # client-side BM25 sparse vectors for hybrid search
 ```
 
-Use `uv lock` for reproducible lockfile.
+> `fastembed` pulls `onnxruntime` transitively. For the `Qdrant/bm25` model this is dormant (BM25 uses a pure stemmer/tokenizer, not ONNX), and it is small relative to the `torch` that `sentence-transformers` already installs. No GPU required — matches the DigitalOcean CPU droplet.
 
-## Architecture Notes
+---
 
-### Plugin Protocol Pattern
+## Per-Feature Integration Detail
 
-Every external tool should be behind a Python Protocol:
+### 1. MCP server (stdio + SSE/HTTP) — `mcp>=1.28,<2.0`
 
-```python
-from typing import Protocol, AsyncIterator
-from dataclasses import dataclass
+**SDK choice:** official `mcp` SDK, using its bundled `mcp.server.fastmcp.FastMCP`. **Do NOT add the standalone `fastmcp` package** (v3.4.3) — it duplicates what ships inside `mcp`, drags in its own auth/deploy/OpenAPI machinery, and leaves two MCP stacks to keep in sync. The bundled FastMCP covers decorator tools and every transport this milestone needs.
 
-class DocumentParser(Protocol):
-    async def parse(self, source: bytes, mime_type: str) -> ParsedDocument: ...
+**Transport serving:**
+- `stdio` (`klake mcp`): `FastMCP(...).run(transport="stdio")`. JSON-RPC over stdout.
+- SSE / streamable-HTTP (`klake mcp --sse --port 3001`): serve `FastMCP.streamable_http_app()` (current spec, recommended) or `FastMCP.sse_app()` (legacy SSE, still supported) via uvicorn. Two shapes:
+  - **Standalone (recommended for `klake mcp --sse`):** run the MCP ASGI app on its own uvicorn at port 3001 — clean process isolation from the main API.
+  - **Mounted:** `fastapi_app.mount("/mcp", mcp.streamable_http_app())` on the existing 26-endpoint FastAPI app for single-port. Caveat: streamable-HTTP needs its session-manager lifespan wired into FastAPI's `lifespan` — the standalone form avoids that wiring, so prefer it unless one port is a hard requirement.
+- **SSE is deprecated in the MCP spec in favour of streamable-HTTP.** Implement streamable-HTTP as the real transport; keep the `--sse` flag name to match the requirement but back it with `streamable_http_app()`. Document this.
 
-class WebCrawler(Protocol):
-    async def crawl(self, url: str, config: CrawlConfig) -> AsyncIterator[CrawlResult]: ...
+**Tool surface:** wrap the *same* pipeline functions the CLI/API already call (`search`, `ingest_url`, `crawl`, `crawl_all`, `process_crawled`, `add_source`, `list_sources`, `lineage`, `export`, `init_domain`, `stats`) — do not re-implement behavior (mirrors the existing D-02 "CLI and API call one function" rule).
 
-class VectorStore(Protocol):
-    async def upsert(self, collection: str, points: list[VectorPoint]) -> None: ...
-    async def search(self, collection: str, query: list[float], limit: int) -> list[SearchResult]: ...
+**structlog / stdout pollution (CRITICAL):** `knowledge_lake/__init__.py::_configure_logging()` uses `structlog.PrintLoggerFactory()`, which writes to **stdout**, and selects the renderer from `sys.stdout.isatty()`. Under MCP stdio, stdout is the JSON-RPC channel and is a pipe (not a TTY) → structlog would emit log lines straight into the protocol stream and corrupt every message. **Mitigation (code, not a dependency):** in the `klake mcp` stdio entrypoint, re-point structlog to **stderr** before the server starts — swap `PrintLoggerFactory()` for `PrintLoggerFactory(file=sys.stderr)` (or `WriteLoggerFactory(file=sys.stderr)`) via a small "configure-for-stdio" hook, and/or raise the level to WARNING. The SSE/HTTP transports don't have this hazard (stdout is free), so only the stdio path needs the redirect.
 
-class ObjectStore(Protocol):
-    async def put(self, bucket: str, key: str, data: bytes) -> str: ...
-    async def get(self, bucket: str, key: str) -> bytes: ...
-```
+### 2. Hybrid BM25 + dense search — `fastembed` + existing `qdrant-client`
 
-### Dagster Resource System
+- **Sparse approach:** `fastembed.SparseTextEmbedding("Qdrant/bm25")` client-side for term frequencies, **plus** `sparse_vectors_config={"bm25": SparseVectorParams(modifier=Modifier.IDF)}` on the collection so Qdrant applies corpus-global IDF at query time. This is Qdrant's current recommended BM25 recipe; client-only BM25 lacks corpus IDF. **miniCOIL** (`Qdrant/minicoil`) and **SPLADE** (`prithivida/Splade_PP_en_v1`) are documented upgrade paths (learned/neural sparse, higher quality) but pull ONNX models and more CPU — defer; BM25 is the right default for a CPU droplet and the deterministic-first rule.
+- **Collection shape:** named vectors — keep the existing dense vector, add a named sparse vector `bm25`. This is an additive collection-config change; fold it into the existing alias-based zero-downtime reindex in `qdrant_store.py` so there is no downtime.
+- **Query (RRF):** `client.query_points(collection, prefetch=[Prefetch(query=dense_vec, using="<dense>", limit=k), Prefetch(query=SparseVector(...), using="bm25", limit=k)], query=FusionQuery(fusion=Fusion.RRF), limit=top_k)`. All symbols verified present in `qdrant_client.models` at 1.18.
+- **Search-mode switch (RETR-02):** `hybrid | dense | sparse` selects the prefetch composition — extend the existing `pipeline/search.py` signature; the dense-only branch is exactly today's code (backward compatible).
+- **Server:** the Qdrant image already in Compose supports sparse + IDF; no server version bump.
 
-Map plugins to Dagster resources for dependency injection:
+### 3. Dagster re-crawl sensor — existing `dagster`
 
-```python
-import dagster as dg
+- **Sensor over schedule:** `crawl_schedule` is **per-source** and we want to **skip unchanged** content — that is state/event-driven, i.e. a `@dg.sensor`, not a fixed `@dg.schedule`. Use `RunRequest(run_key=f"{source_id}:{content_hash}")` so unchanged content (same hash) dedupes to a no-op; emit `SkipReason` when nothing is due.
+- **Content-hash detection (SCHED-02):** reuse the existing SHA256 content hashing; store last-seen hash + last-run timestamp in `context.cursor` (JSON) or query the document registry. `minimum_interval_seconds` gates tick frequency; per-source `crawl_schedule` decides due-ness inside the tick.
+- No new package; wire into the existing Dagster `Definitions`.
 
-@dg.resource
-def docling_parser() -> DocumentParser:
-    from klake.parsers.docling import DoclingParser
-    return DoclingParser()
+### 4. OpenAPI export + OpenAI tool defs — existing `fastapi`/`pydantic`/`orjson`
 
-@dg.resource  
-def qdrant_store(context) -> VectorStore:
-    from klake.vectorstores.qdrant import QdrantVectorStore
-    return QdrantVectorStore(url=context.resource_config["url"])
-```
+- **`klake openapi`:** Typer command → `from knowledge_lake.api.app import app; app.openapi()` → `orjson.dumps(..., option=orjson.OPT_INDENT_2)` → write `docs/openapi.json` (committed, static). Add a test asserting the committed file matches `app.openapi()` to prevent drift.
+- **OpenAI tool defs:** build from the request Pydantic models with `model_json_schema()`; wrap in `{"type":"function","function":{...}}`. Two Pydantic-v2 gotchas: (a) `$defs`/`$ref` — OpenAI accepts JSON-Schema refs but some consumers want them inlined, so supply a flat `ref_template` or an inliner; (b) strip Pydantic-only keys if targeting OpenAI "strict" mode. No `openai` SDK dependency — pure Pydantic.
+
+### 5. Adaptive rate limiting — existing `crawl4ai` + `tenacity`
+
+- **Native, no new dep.** `crawl4ai.RateLimiter(base_delay=(min,max), max_delay=60.0, max_retries=3, rate_limit_codes=[429, 503])` gives exponential backoff; **add 403 to `rate_limit_codes`** to satisfy CRAWL-03. Drive it through `MemoryAdaptiveDispatcher` (memory-aware concurrency + the rate limiter) in the Crawl4AI adapter for `crawl-all` batch runs.
+- **Per-host cooldown** already exists in `crawl/ratelimit.py::PerHostLimiter` (keyed by registrable domain via tldextract) — keep it as the outer politeness layer; Crawl4AI's `RateLimiter` is the inner reactive-backoff layer. `tenacity` (already pinned) stays for the non-Crawl4AI single-URL `httpx` ingest path.
+
+---
+
+## What NOT to Add
+
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| standalone `fastmcp` (3.x) | Duplicates the FastMCP bundled inside the official `mcp` SDK; two MCP stacks, extra auth/deploy deps not needed | `mcp.server.fastmcp.FastMCP` from the `mcp` dep |
+| `openai` / `anthropic` SDKs (for tool schemas) | OpenAI tool defs are plain JSON from Pydantic; a provider SDK violates the LiteLLM-only gateway rule | `pydantic.model_json_schema()` + envelope; LiteLLM for any model call |
+| `rank-bm25`, Elasticsearch/OpenSearch, `pyserini` | A second retrieval engine to operate; Qdrant sparse vectors already do BM25 with RRF fusion in-store | Qdrant sparse vector `bm25` + `Modifier.IDF` |
+| `APScheduler`, Celery, cron, `schedule` | New scheduler alongside Dagster; fragments orchestration and breaks the "Dagster from day 1" constraint | Dagster `@sensor` + `RunRequest`/cursor |
+| a new backoff/retry lib (`backoff`, custom loop) for crawling | Crawl4AI `RateLimiter` + existing `tenacity` already cover exponential backoff and retries | Crawl4AI `RateLimiter` (inner) + `PerHostLimiter` (outer) + `tenacity` (HTTP) |
+| re-adding `tenacity` / `httpx` / `orjson` | Already pinned in `pyproject.toml` | reuse existing pins |
+| a second web framework / uvicorn stack for SSE | MCP HTTP transport is an ASGI app; run it on uvicorn (already a dep) or mount on FastAPI | `FastMCP.streamable_http_app()` on uvicorn |
+| `qdrant-client[fastembed]` extra as the install vector | Works, but implicit; prefer an explicit top-level `fastembed` pin so the sparse dep is visible and version-controlled | explicit `fastembed>=0.8,<0.9` |
+| upgrading `qdrant-client` for hybrid | 1.18 already has `FusionQuery`/`Prefetch`/`SparseVectorParams`/`Modifier` (verified) | keep `qdrant-client==1.18.0` |
+
+---
+
+## Version Compatibility
+
+| Package | Constraint | Notes |
+|---------|------------|-------|
+| `mcp` 1.28.x | Python ≥3.10 | Compatible with 3.12; bundles FastMCP + stdio/sse/streamable-http. Built on Starlette/anyio — same async stack as FastAPI, mounts cleanly. |
+| `fastembed` 0.8.x | Python ≥3.10 | Pulls `onnxruntime` (CPU); coexists with `torch` from `sentence-transformers`. `Qdrant/bm25` needs no GPU. |
+| `qdrant-client` 1.18.0 | pinned | Hybrid/RRF API present; matches the running Qdrant server image. Sparse + `Modifier.IDF` supported server-side. |
+| `crawl4ai` 0.9.0 | pinned | `RateLimiter`, `MemoryAdaptiveDispatcher`, `SemaphoreDispatcher` verified importable. |
+| `typer` `<0.25.0` (pinned by docling-core) | UNCHANGED | New `klake mcp` / `klake openapi` subcommands add to the existing Typer app; neither MCP nor fastembed pressures the pin. |
+| `structlog` 26.x | UNCHANGED | Requires a code-level stderr redirect for the stdio MCP path (Feature 1); not a version issue. |
+
+---
 
 ## Sources
 
-All version numbers verified from PyPI (pypi.org) and GitHub releases pages on 2026-07-02:
-- Dagster 1.13.11: https://pypi.org/project/dagster/ (released 2026-06-25)
-- Docling 2.108.0: https://github.com/docling-project/docling/releases (released 2025-07-01)
-- Crawl4AI 0.9.0: https://pypi.org/project/crawl4ai/ (released 2026-06-18)
-- Qdrant Client 1.18.0: https://pypi.org/project/qdrant-client/ (released 2026-05-11)
-- LiteLLM 1.90.2: https://pypi.org/project/litellm/ (released 2026-07-01)
-- DataTrove 0.9.0: https://pypi.org/project/datatrove/ (released 2026-03-04)
-- DuckDB 1.5.4: https://pypi.org/project/duckdb/ (released 2026-06-17)
-- FastAPI 0.139.0: https://pypi.org/project/fastapi/ (released 2026-07-01)
-- Typer 0.26.8: https://pypi.org/project/typer/ (released 2026-06-26)
-- SQLAlchemy 2.0.51: https://pypi.org/project/sqlalchemy/ (released 2026-06-15)
-- Pydantic 2.13.4: https://pypi.org/project/pydantic/ (released 2026-05-06)
-- psycopg 3.3.4: https://pypi.org/project/psycopg/ (released 2026-05-01)
-- PyArrow 24.0.0: https://pypi.org/project/pyarrow/ (released 2026-04-21)
-- Polars 1.42.1: https://pypi.org/project/polars/ (released 2026-06-30)
-- sentence-transformers 5.6.0: https://pypi.org/project/sentence-transformers/ (released 2026-06-16)
-- Scrapy 2.16.0: https://pypi.org/project/scrapy/ (released 2026-05-19)
-- MinIO Python SDK 7.2.20: https://github.com/minio/minio-py/releases
-- boto3 1.43.39: https://pypi.org/project/boto3/ (released 2026-07-01)
-- NeMo Curator 1.2.0: https://github.com/NVIDIA/NeMo-Curator (released 2026-05-14)
-- Unstructured 0.23.1: https://github.com/Unstructured-IO/unstructured/releases (released 2026-06-11)
-- lingua-language-detector 2.2.0: https://pypi.org/project/lingua-language-detector/ (released 2026-03-09)
-- uvicorn 0.49.0: https://pypi.org/project/uvicorn/ (released 2026-06-03)
+- Installed `.venv` introspection (2026-07-08) — `crawl4ai` exports (`RateLimiter` signature `(base_delay, max_delay, max_retries, rate_limit_codes)`, `MemoryAdaptiveDispatcher`, `SemaphoreDispatcher`); `qdrant_client.models` presence of `FusionQuery/Fusion/Prefetch/SparseVector/SparseVectorParams/NamedSparseVector/Modifier`. Confidence HIGH (executed against the exact pinned versions).
+- PyPI JSON API (2026-07-08) — `mcp` 1.28.1 (2026-06-26, requires-python ≥3.10), `fastmcp` 3.4.3 (2026-07-05), `fastembed` 0.8.0 (2026-03-23). Confidence HIGH.
+- Repo `pyproject.toml` — current pins (`qdrant-client==1.18.0`, `crawl4ai==0.9.0`, `dagster==1.13.11`, `fastapi==0.139.0`, `tenacity==9.1.4`, `orjson==3.11.9`, `typer<0.25.0`). Confidence HIGH.
+- `src/knowledge_lake/__init__.py` — structlog `PrintLoggerFactory` → stdout + `sys.stdout.isatty()` renderer switch (the stdio pollution hazard). Confidence HIGH (read directly).
+- `src/knowledge_lake/plugins/builtin/qdrant_store.py`, `crawl/ratelimit.py`, `pipeline/search.py` — integration seams for hybrid search, rate limiting, and search-mode switching. Confidence HIGH (read directly).
+- MCP transport guidance (streamable-HTTP current, SSE deprecated; ASGI mount) — MCP SDK design; Confidence MEDIUM (spec direction — confirm the exact `streamable_http_app()`/lifespan API against the installed 1.28.x during phase planning).
+
+---
+*Stack research for: Knowledge Lake Framework v2.0 (additions to shipped v1.0)*
+*Researched: 2026-07-08*
