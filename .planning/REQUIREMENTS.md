@@ -11,7 +11,7 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 
 ### Metadata & Crawl Maturation
 
-- [ ] **PAYLOAD-01**: Every indexed chunk carries an expanded Qdrant payload — `source_id`, `source_name`, `source_url`, `format`, `tags`, `title`, `organization` — assembled at the index-time enrichment join, backward-compatible with existing points.
+- [x] **PAYLOAD-01**: Every indexed chunk carries an expanded Qdrant payload — `source_id`, `source_name`, `source_url`, `format`, `tags`, `title`, `organization` — assembled at the index-time enrichment join, backward-compatible with existing points.
 - [x] **PAYLOAD-02**: A user can filter search results by `source_name`, `format`, `tags` (array-contains), and `source_id` across both the CLI and the REST API, backed by Qdrant keyword payload indexes on each filterable field.
 - [ ] **CRAWL-01**: A crawl reads per-source `crawl_config` (depth, rate limit) from the source's stored config / `sources.yaml` instead of hard-coded defaults (fixes `crawl_source` passing `source_config=None`; reconciles the `rate_limit_rps` vs `rate_limit_seconds` key mismatch).
 - [ ] **CRAWL-02**: A user can run `klake crawl-all` to batch-crawl every registered source, with an optional `--domain` filter, driven as a loop over the per-source crawl that honors each source's `crawl_config`.
@@ -86,7 +86,7 @@ Which phase covers which requirement. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PAYLOAD-01 | Phase 7 | Pending |
+| PAYLOAD-01 | Phase 7 | Complete |
 | PAYLOAD-02 | Phase 7 | Complete |
 | CRAWL-01 | Phase 8 | Pending |
 | CRAWL-02 | Phase 8 | Pending |
