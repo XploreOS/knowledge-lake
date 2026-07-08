@@ -72,8 +72,8 @@ Every domain resource ingested must be traceable from raw source through every t
 - [ ] CRAWL-01: Per-source crawl_config (depth, rate_limit_rps) from sources.yaml
 - [ ] CRAWL-02: `klake crawl-all` batch crawl with optional --domain filter
 - [ ] CRAWL-03: Adaptive rate limiting (backoff on 429/403, per-host cooldown)
-- [ ] ENRICH-01: Partial JSON recovery on truncated LLM output
-- [ ] INGEST-01: PDF/doc ingest from crawled page links
+- [ ] ENRICH-07: Partial JSON recovery on truncated LLM output
+- [ ] INGEST-10: PDF/doc ingest from crawled page links
 
 **MinIO Domain Segmentation**
 - [ ] STORE-01: Domain/source-scoped S3 keys with `_unclassified` fallback
@@ -91,11 +91,11 @@ Every domain resource ingested must be traceable from raw source through every t
 - [ ] SCHED-01: Dagster sensor for periodic re-crawl (crawl_schedule)
 - [ ] SCHED-02: Content-hash change detection (skip unchanged)
 - [ ] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion)
-- [ ] RETR-02: Configurable search mode (hybrid | dense | sparse)
+- [ ] RETR-03: Configurable search mode (hybrid | dense | sparse)
 
 ### Deferred to v2.1
 
-- EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-01/02 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-01 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy), QUALITY-01 (quality-score search propagation)
+- EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-05/06 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-02 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy), QUALITY-01 (quality-score search propagation)
 
 ### Out of Scope
 
