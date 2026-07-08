@@ -115,7 +115,10 @@ async def crawl_source(
     Returns:
         dict with:
           job_id, source_id, crawler, pages_complete, pages_robots_blocked,
-          pages_failed, pages_total
+          pages_failed, pages_total, linked_docs_failed
+        linked_docs_failed (int): Count of linked .pdf/.docx URLs that were
+          SSRF-rejected or raised an exception during ingest. Does not abort
+          the crawl (D-24).
     """
     s = settings or get_settings()
     effective_max_pages = max_pages if max_pages is not None else s.crawl.max_pages
@@ -315,6 +318,9 @@ async def _crawl_loop(
     pages_robots_blocked = 0
     pages_failed = 0
     pages_total = 0
+    # INGEST-10 (D-24): Count of linked-doc follows that fail (SSRF-rejected or ingest error).
+    # Failed link follows do not abort the parent HTML crawl.
+    linked_docs_failed = 0
 
     storage = StorageBackend(settings.storage)
 
@@ -424,6 +430,56 @@ async def _crawl_loop(
         # CRAWL-03: Reset backoff error state on successful fetch.
         limiter.reset_errors(url)
 
+        # INGEST-10 (D-19): Linked-document ingestion runs AFTER _write_artifacts and
+        # _record_state("complete") so the parent HTML bronze artifact is always committed
+        # before any linked document is followed.
+        if result.html is not None:
+            linked_links = _extract_linked_docs(result.html, url)
+            # _extract_linked_docs already applies MAX_LINKED_DOCS_PER_PAGE cap (D-20).
+            loop = asyncio.get_running_loop()
+            for link_url in linked_links:
+                # D-20/D-23: Deduplicate against the crawl job's seen set.
+                norm_link = normalize_url(link_url)
+                if norm_link in seen:
+                    continue
+                seen.add(norm_link)
+
+                # D-21 (T-08-05-01): SSRF guard on every followed link — defense in depth
+                # even though ingest_url calls validate_public_url internally.
+                try:
+                    validate_public_url(link_url)
+                except ValueError as exc:
+                    log.warning(
+                        "crawl.linked_doc_ssrf_blocked",
+                        url=link_url,
+                        error=str(exc),
+                    )
+                    linked_docs_failed += 1
+                    continue
+
+                # D-22 (Path B — tech debt): ingest_url() does not accept source_id or
+                # job_id; linked artifact receives its own source row. The resulting
+                # artifact is NOT directly linked to the parent HTML page's source_id.
+                # Tracked as tech debt: extend ingest_url() to accept optional source_id
+                # and job_id kwargs so linked docs can share the parent source's lineage.
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        functools.partial(
+                            ingest_url,
+                            link_url,
+                            source_name=_name_from_url(link_url),
+                            settings=settings,
+                        ),
+                    )
+                except Exception as exc:
+                    log.warning(
+                        "crawl.linked_doc_ingest_failed",
+                        url=link_url,
+                        error=str(exc),
+                    )
+                    linked_docs_failed += 1
+
         # Extract and enqueue discovered links (BFS link-following)
         if result.html and pages_total < max_pages:
             discovered = _extract_links(result.html, url, seed_domain)
@@ -438,6 +494,9 @@ async def _crawl_loop(
         "pages_robots_blocked": pages_robots_blocked,
         "pages_failed": pages_failed,
         "pages_total": pages_total,
+        # INGEST-10 (D-24): Count of linked-doc follows that were SSRF-rejected or
+        # raised an exception during ingest_url. Does not abort the parent crawl.
+        "linked_docs_failed": linked_docs_failed,
     }
 
 
