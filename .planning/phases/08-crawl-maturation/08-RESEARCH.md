@@ -559,17 +559,19 @@ finish_reason = response.choices[0].finish_reason
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does CrawlPageResult need a new field, or should adapters map 429/403 to a distinct status string?**
    - What we know: `CrawlPageResult.status` has three string values. Adding `http_status_code: Optional[int]` is clean. Alternatively, a new status string `"rate_limited"` maps 429/403 without a schema change to the dataclass.
    - What's unclear: Whether changing `CrawlPageResult` breaks any existing tests (integration tests check `status == "failed"`).
    - Recommendation: Add `http_status_code: Optional[int] = None` to `CrawlPageResult` — cleaner, backward-compatible (field defaults to None), does not change existing status string values that tests assert.
+   - RESOLVED: Add `http_status_code: Optional[int] = None` to `CrawlPageResult` dataclass (Plan 03 Task 3). Backward-compatible default preserves all existing `status == "failed"` assertions.
 
 2. **Should `ingest_url()` be async or remain sync?**
    - What we know: `ingest_url()` is sync (httpx.Client). INGEST-10 requires calling it from async `_crawl_loop`.
    - What's unclear: Whether to make `ingest_url()` async (httpx.AsyncClient) or use `run_in_executor`.
    - Recommendation: Use `run_in_executor` — avoids refactoring `ingest_url()` and its callers (CLI, API, Dagster assets). Lower risk for Phase 8.
+   - RESOLVED: Use `run_in_executor` wrapping the synchronous `ingest_url()` call inside `_crawl_loop` (Plan 05 Task 2). No changes to `ingest_url()` or its existing callers.
 
 ---
 
