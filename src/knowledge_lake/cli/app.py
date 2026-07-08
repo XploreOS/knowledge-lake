@@ -983,7 +983,7 @@ def cmd_init(
     from knowledge_lake.registry import repo as registry_repo
 
     _DOMAIN_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
-    if not _DOMAIN_NAME_RE.match(domain):
+    if not _DOMAIN_NAME_RE.fullmatch(domain):
         typer.echo(
             f"Error: Invalid domain name {domain!r}: must match "
             r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$ (path traversal guard)",
