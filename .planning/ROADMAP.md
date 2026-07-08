@@ -48,7 +48,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   3. Each filterable field is backed by a Qdrant keyword payload index (array-keyword for `tags`), so filtered search never triggers a full-collection scan.
   4. Filters are documented as only fully effective on points indexed after this phase (or after a reindex), matching the backward-compatibility contract.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -58,7 +58,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-03-PLAN.md — Search backend: ensure_payload_indexes() in qdrant_store.py, search() 4 new filter kwargs + MatchAny (PAYLOAD-02)
+- [x] 07-03-PLAN.md — Search backend: ensure_payload_indexes() in qdrant_store.py, search() 4 new filter kwargs + MatchAny (PAYLOAD-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -145,7 +145,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Metadata Foundation | 2/4 | In Progress|  |
+| 7. Metadata Foundation | 3/4 | In Progress|  |
 | 8. Crawl Maturation | 0/? | Not started | - |
 | 9. Storage Segmentation | 0/? | Not started | - |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
