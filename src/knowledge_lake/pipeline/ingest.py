@@ -234,6 +234,8 @@ def register_source(
     domain: Optional[str] = None,
     license_type: str = "unknown",
     source_type_override: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    organization: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Register a source URL with URL-first dedup (INGEST-01).
@@ -249,6 +251,10 @@ def register_source(
         license_type:         SPDX license identifier.
         source_type_override: Override the default source_type ('web'). Used by
                               discover_sources to set 'discovered' (D-08).
+        tags:                 Optional list of curated source tags (D-05).
+                              Stored in Source.config["tags"] alongside domain.
+        organization:         Optional organization name (D-05, D-06).
+                              Stored in Source.config["organization"] if provided.
         settings:             Settings override.
 
     Returns:
@@ -274,7 +280,16 @@ def register_source(
                 "is_new": False,
             }
 
-        config = {"domain": domain} if domain else None
+        # Build config dict from non-None values (D-05): domain, tags, organization.
+        # Backward-compatible: callers without tags/organization produce identical behavior.
+        config_dict: dict = {}
+        if domain:
+            config_dict["domain"] = domain
+        if tags:
+            config_dict["tags"] = tags
+        if organization:
+            config_dict["organization"] = organization
+        config = config_dict if config_dict else None
         try:
             source = registry_repo.create_source(
                 session,

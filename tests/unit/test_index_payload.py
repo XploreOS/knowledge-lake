@@ -241,6 +241,173 @@ class TestPayloadNewFieldsStub:
         assert "source_id" in payload
 
 
+class TestPayloadSourceFields:
+    """Verify 7 new source-metadata payload fields (PAYLOAD-01, D-01..D-05)."""
+
+    def test_payload_includes_all_7_new_fields_when_source_has_metadata(
+        self, session, fake_vstore
+    ) -> None:
+        """All 7 new payload fields are populated from a Source row with full config."""
+        source = registry_repo.create_source(
+            session,
+            name="IFM",
+            source_type="html",
+            url="https://ifm.org",
+            config={
+                "domain": "healthcare",
+                "tags": ["functional-medicine", "ifm"],
+                "organization": "IFM",
+            },
+        )
+        raw = registry_repo.create_raw_artifact(
+            session,
+            source_id=source.id,
+            content_hash="ifm_raw",
+            storage_uri="s3://b/raw/ifm_raw.html",
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="ifm_parsed",
+            storage_uri="s3://b/silver/ifm_parsed.json",
+        )
+        cleaned = registry_repo.create_cleaned_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ifm_cleaned",
+            storage_uri="s3://b/silver/ifm_cleaned.md",
+        )
+        registry_repo.create_enriched_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=cleaned.id,
+            content_hash="ifm_enriched",
+            metadata={"title": "Functional Medicine Basics", "document_type": "guide"},
+        )
+        session.commit()
+
+        index_module.index([_one_chunk()], [[0.1] * 4], dim=4, parsed_artifact_id=parsed.id)
+        payload = _captured_payload(fake_vstore)
+
+        assert payload["source_id"] == source.id
+        assert payload["source_name"] == "IFM"
+        assert payload["source_url"] == "https://ifm.org"
+        assert payload["format"] == "html"
+        assert payload["tags"] == ["functional-medicine", "ifm"]
+        assert payload["title"] == "Functional Medicine Basics"
+        assert payload["organization"] == "IFM"
+
+    def test_payload_source_fields_degrade_gracefully_when_no_source(
+        self, session, fake_vstore
+    ) -> None:
+        """When a source has config=None, all optional source-metadata fields degrade."""
+        source = registry_repo.create_source(
+            session,
+            name="NoMeta",
+            source_type="web",
+            config=None,
+        )
+        raw = registry_repo.create_raw_artifact(
+            session,
+            source_id=source.id,
+            content_hash="nm_raw",
+            storage_uri="s3://b/raw/nm_raw.pdf",
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="nm_parsed",
+            storage_uri="s3://b/silver/nm_parsed.json",
+        )
+        session.commit()
+
+        index_module.index([_one_chunk()], [[0.1] * 4], dim=4, parsed_artifact_id=parsed.id)
+        payload = _captured_payload(fake_vstore)
+
+        # Source exists but config is None — optional fields degrade gracefully.
+        assert payload["source_name"] == "NoMeta"  # name always present
+        assert payload["source_url"] is None
+        assert payload["format"] == "web"
+        assert payload["tags"] == []
+        assert payload["title"] is None
+        assert payload["organization"] is None
+
+    def test_payload_title_from_enriched_metadata(
+        self, session, fake_vstore
+    ) -> None:
+        """title comes from enriched artifact metadata_ even when source has no org/tags."""
+        source = registry_repo.create_source(
+            session,
+            name="HHS",
+            source_type="pdf",
+            config={"domain": "healthcare"},
+        )
+        raw = registry_repo.create_raw_artifact(
+            session,
+            source_id=source.id,
+            content_hash="hhs_raw",
+            storage_uri="s3://b/raw/hhs_raw.pdf",
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="hhs_parsed",
+            storage_uri="s3://b/silver/hhs_parsed.json",
+        )
+        cleaned = registry_repo.create_cleaned_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="hhs_cleaned",
+            storage_uri="s3://b/silver/hhs_cleaned.md",
+        )
+        registry_repo.create_enriched_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=cleaned.id,
+            content_hash="hhs_enriched",
+            metadata={"title": "HIPAA Security Rule", "document_type": "regulation"},
+        )
+        session.commit()
+
+        index_module.index([_one_chunk()], [[0.1] * 4], dim=4, parsed_artifact_id=parsed.id)
+        payload = _captured_payload(fake_vstore)
+
+        assert payload["title"] == "HIPAA Security Rule"
+        assert payload["tags"] == []
+        assert payload["organization"] is None
+
+    def test_register_source_persists_tags_into_config(
+        self, session, fake_vstore
+    ) -> None:
+        """register_source() persists tags into Source.config alongside domain (D-05)."""
+        from knowledge_lake.pipeline.ingest import register_source
+
+        register_source(
+            "https://hl7.org/fhir",
+            "HL7 FHIR",
+            domain="healthcare",
+            tags=["fhir", "hl7"],
+        )
+
+        # The _patch_engine autouse fixture routes get_session() to the test engine,
+        # so register_source() wrote the source into our in-memory SQLite DB.
+        from sqlalchemy import select
+        from knowledge_lake.registry.models import Source
+
+        with Session(session.bind) as verify_session:
+            stmt = select(Source).where(Source.name == "HL7 FHIR")
+            src = verify_session.execute(stmt).scalar_one()
+
+        assert src.config is not None
+        assert src.config["tags"] == ["fhir", "hl7"]
+        assert src.config["domain"] == "healthcare"
+
+
 class TestEmptyChunksShortCircuit:
     def test_empty_chunks_returns_empty_list_without_touching_vstore(
         self, session, fake_vstore
