@@ -427,7 +427,13 @@ def ingest_url(
             source = registry_repo.get_source_by_normalized_url(session, norm_url)
             if source is None:
                 raise  # unexpected
-        artifact = storage.put_raw(source.id, data, ext, session, mime_type=effective_mime)
+        domain = registry_repo.get_domain_for_source(session, source.id) or "_unclassified"
+        artifact = storage.put_raw(
+            source.id, data, ext, session,
+            mime_type=effective_mime,
+            domain=domain,
+            tags={"domain": domain, "source_name": source_name, "format": ext, "artifact_type": "raw_document"},
+        )
         session.flush()
         result = {
             "source_id": source.id,
@@ -530,7 +536,13 @@ def ingest_file(
                 robots_checked=False,  # local uploads don't need robots.txt check
             )
         session.flush()
-        artifact = storage.put_raw(source.id, data, ext, session, mime_type=effective_mime)
+        domain = registry_repo.get_domain_for_source(session, source.id) or "_unclassified"
+        artifact = storage.put_raw(
+            source.id, data, ext, session,
+            mime_type=effective_mime,
+            domain=domain,
+            tags={"domain": domain, "source_name": source_name, "format": ext, "artifact_type": "raw_document"},
+        )
         session.flush()
         result = {
             "source_id": source.id,
