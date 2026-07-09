@@ -97,7 +97,6 @@ def parse(
     # Content-hash the parsed text for dedup and silver-zone key
     parsed_bytes = parsed_doc.text.encode("utf-8")
     content_hash = hashlib.sha256(parsed_bytes).hexdigest()
-    silver_key = f"{_SILVER_PREFIX}/{source_id}/{content_hash}.md"
 
     # Deterministic title, computed once here and persisted into the
     # parsed_document artifact's metadata_ so callers that only have the
@@ -111,6 +110,10 @@ def parse(
     # conditions under concurrent execution (CR-02). Both the read and the write
     # happen within the same session, making the dedup + insert effectively atomic.
     with get_session() as session:
+        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
+        source_obj = registry_repo.get_source(session, source_id)
+        source_name = source_obj.name if source_obj else "unknown"
+        silver_key = f"{_SILVER_PREFIX}/{domain}/{source_id}/{content_hash}.md"
         existing = registry_repo.get_artifact_by_hash(session, content_hash, "parsed_document")
         if existing is not None:
             log.info(
@@ -126,7 +129,12 @@ def parse(
 
         # Store parsed markdown in silver zone (outside DB transaction but within
         # the same logical block — S3 put_object is idempotent for the same key)
-        storage.put_object(silver_key, parsed_bytes)
+        storage.put_object(silver_key, parsed_bytes, tags={
+            "domain": domain,
+            "source_name": source_name,
+            "format": "md",
+            "artifact_type": "parsed_document",
+        })
         silver_uri = storage.object_uri(silver_key)
         log.info("parse.stored_silver", silver_uri=silver_uri)
 

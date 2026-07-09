@@ -133,10 +133,6 @@ def _fake_parsed_doc():
 class TestParseSilverKeyDomain:
     """RED-state: domain segment must appear in silver key after Plan 09-04."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-01: silver key domain segment pending Plan 09-04",
-    )
     def test_domain_segment_in_silver_key(self, session, source_with_domain, engine):
         """parse() must write parsed document to silver/healthcare/{source_id}/{hash}.md.
 
@@ -176,10 +172,6 @@ class TestParseSilverKeyDomain:
             f"Expected 'silver/healthcare/' in silver key, got: {silver_key!r}"
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-01: silver key domain segment pending Plan 09-04",
-    )
     def test_none_domain_uses_unclassified_segment(self, session, source_no_domain, engine):
         """parse() with a domain-less source must use silver/_unclassified/{source_id}/{hash}.md.
 
