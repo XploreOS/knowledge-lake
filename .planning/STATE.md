@@ -4,17 +4,17 @@ milestone: v2.0
 milestone_name: — Agent-Ready Lake
 current_phase: 9
 current_phase_name: Storage Segmentation
-status: executing
+status: verifying
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-09T16:08:12.432Z"
+last_updated: "2026-07-09T16:33:13.675Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 9 execution started
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 16
-  completed_plans: 15
-  percent: 33
+  completed_plans: 16
+  percent: 50
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 Phase: 9 (Storage Segmentation) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-09 — Phase 9 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -93,6 +93,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09 P02 | 15min | 3 tasks | 3 files |
 | Phase 09 P04 | 27min | 2 tasks | 4 files |
 | Phase 09 P05 | 6min | 2 tasks | 2 files |
+| Phase 09 P06 | 22 | 2 tasks | 2 files |
 
 ### Quick Tasks Completed
 
@@ -171,6 +172,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Wave 0 TDD scaffold: StorageBackend patched at pipeline module level for silver key capture; gold zone xfails use TypeError from missing domain kwarg
 - [Phase ?]: ingest.py source_name is already a function parameter on ingest_url/ingest_file — no extra get_source lookup needed (plan truth D-11)
 - [Phase ?]: crawl.py _write_artifacts uses get_source(session, source_id) for source_name — mirrors parse.py/clean.py pattern from Plan 04 (D-04 session boundary)
+- [Phase ?]: domain kwarg added to all three export functions as Optional[str]=None (Pitfall 2 from RESEARCH.md resolved)
+- [Phase ?]: 3-key tags dict (domain, format, artifact_type) on gold put_object — source_name omitted per D-11 for multi-source exports
 
 ### Pending Todos
 
@@ -207,7 +210,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Phase 9 context gathered
 
-Last session: 2026-07-09T16:06:40.985Z
+Last session: 2026-07-09T16:33:02.196Z
 Resume file: .planning/phases/09-storage-segmentation/09-CONTEXT.md
 
 ## Operator Next Steps

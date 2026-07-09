@@ -107,7 +107,7 @@ Plans:
   3. Every object write applies S3 object tags — `domain`, `source_name`, `format`, `artifact_type` — within the S3 10-tag limit, as convenience metadata only (the registry remains the source of truth).
   4. The gold zone is segmented by domain and dataset type: `gold/{domain}/rag_corpus/`, `gold/{domain}/pretrain/`, `gold/{domain}/finetune/`.
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 0** *(parallel)*
@@ -123,7 +123,7 @@ Plans:
 
 - [x] 09-04-PLAN.md — Silver zone callers: parse.py + clean.py (move key inside session block, domain resolution, tags) (STORE-01/02)
 - [x] 09-05-PLAN.md — Raw/bronze callers: ingest.py + crawl.py (domain resolution + tags on put_raw/put_bronze) (STORE-01/02)
-- [ ] 09-06-PLAN.md — Gold zone: export.py (domain kwarg on 3 export functions, domain-scoped gold keys, tags) (STORE-02/03)
+- [x] 09-06-PLAN.md — Gold zone: export.py (domain kwarg on 3 export functions, domain-scoped gold keys, tags) (STORE-02/03)
 
 ### Phase 10: Hybrid Retrieval
 
@@ -179,7 +179,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
-| 9. Storage Segmentation | 5/6 | In Progress|  |
+| 9. Storage Segmentation | 6/6 | Complete   | 2026-07-09 |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
