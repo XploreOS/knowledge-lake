@@ -947,3 +947,244 @@ class TestTrainEvalContamination:
 
         assert pretrain_result["row_count"] >= 1
         assert mock_storage.put_object.call_count >= 1
+
+
+# ── Task 3: STORE-03 gold-zone domain-scoped key RED tests ────────────────────
+#
+# These four classes are Wave 0 xfail scaffolds. The domain kwarg does NOT yet
+# exist on export_rag_corpus / export_pretrain_corpus / export_finetune_dataset
+# (PATTERNS.md Pitfall 2). Passing domain= raises TypeError, which causes each
+# test to xfail. Plan 09-06 adds the domain kwarg and makes these tests pass.
+
+
+class TestGoldZoneDomainKey:
+    """STORE-03: export_rag_corpus() must write to gold/{domain}/rag_corpus/ prefix."""
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
+    )
+    def test_rag_corpus_key_contains_domain_segment(self, session, source, engine):
+        """export_rag_corpus(domain="healthcare") must use gold/healthcare/rag_corpus/ key."""
+        from knowledge_lake.registry import repo as registry_repo
+        import knowledge_lake.pipeline.export as export_module
+
+        # Seed a minimal chunk so export_rag_corpus has something to write
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_gold_domain_key"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_gold_domain_key",
+        )
+        session.flush()
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_gold_domain_key",
+            metadata={"text": "Gold zone domain test chunk."},
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            # TypeError expected until Plan 09-06 adds domain kwarg
+            export_module.export_rag_corpus(domain="healthcare", settings=settings)
+
+        # After Plan 09-06: the put_object key must contain the domain segment
+        call_args = mock_storage.put_object.call_args
+        key_arg = call_args[0][0]
+        assert "gold/healthcare/rag_corpus/" in key_arg, (
+            f"Expected 'gold/healthcare/rag_corpus/' in key, got: {key_arg!r}"
+        )
+
+
+class TestGoldZoneUnclassified:
+    """STORE-03: export_rag_corpus(domain=None) must write to gold/_unclassified/rag_corpus/."""
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
+    )
+    def test_rag_corpus_none_domain_uses_unclassified(self, session, source, engine):
+        """export_rag_corpus(domain=None) must use gold/_unclassified/rag_corpus/ key."""
+        from knowledge_lake.registry import repo as registry_repo
+        import knowledge_lake.pipeline.export as export_module
+
+        # Seed a minimal chunk
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_gold_unclassified"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_gold_unclassified",
+        )
+        session.flush()
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_gold_unclassified",
+            metadata={"text": "Gold zone unclassified test chunk."},
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            # TypeError expected until Plan 09-06 adds domain kwarg
+            export_module.export_rag_corpus(domain=None, settings=settings)
+
+        call_args = mock_storage.put_object.call_args
+        key_arg = call_args[0][0]
+        assert "gold/_unclassified/rag_corpus/" in key_arg, (
+            f"Expected 'gold/_unclassified/rag_corpus/' in key, got: {key_arg!r}"
+        )
+
+
+class TestGoldZonePretrain:
+    """STORE-03: export_pretrain_corpus() must write to gold/{domain}/pretrain/ prefix."""
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
+    )
+    def test_pretrain_key_contains_domain_segment(self, session, source, engine):
+        """export_pretrain_corpus(domain="healthcare") must use gold/healthcare/pretrain/ key."""
+        from knowledge_lake.registry import repo as registry_repo
+        import knowledge_lake.pipeline.export as export_module
+
+        # Seed a minimal curated document above quality threshold
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_pretrain_domain"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_pretrain_domain",
+        )
+        session.flush()
+        cleaned = registry_repo.create_cleaned_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="cleaned_pretrain_domain",
+            storage_uri="s3://test-bucket/silver/pretrain_domain_doc.md",
+        )
+        session.flush()
+        curated = registry_repo.create_curated_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=cleaned.id,
+            content_hash="curated_pretrain_domain",
+            metadata={"dedup_status": "unique"},
+            quality_score=0.8,
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
+        mock_storage.get_object.return_value = b"Pretrain domain test document text."
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            # TypeError expected until Plan 09-06 adds domain kwarg
+            export_module.export_pretrain_corpus(domain="healthcare", settings=settings)
+
+        call_args = mock_storage.put_object.call_args
+        key_arg = call_args[0][0]
+        assert "gold/healthcare/pretrain/" in key_arg, (
+            f"Expected 'gold/healthcare/pretrain/' in key, got: {key_arg!r}"
+        )
+
+
+class TestGoldZoneFinetune:
+    """STORE-03: export_finetune_dataset() must write to gold/{domain}/finetune/ prefix."""
+
+    @pytest.mark.xfail(
+        strict=False,
+        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
+    )
+    def test_finetune_key_contains_domain_segment(self, session, source, engine):
+        """export_finetune_dataset(dataset_id=..., domain="healthcare") must use gold/healthcare/finetune/ key."""
+        from knowledge_lake.registry import repo as registry_repo
+        import knowledge_lake.pipeline.export as export_module
+
+        # Seed a minimal dataset with one QA example
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_finetune_domain"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_finetune_domain",
+        )
+        session.flush()
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_finetune_domain",
+            metadata={"text": "Finetune domain test chunk."},
+        )
+        session.flush()
+        dataset = registry_repo.get_or_create_dataset(
+            session, name="finetune_domain_test_ds", dataset_type="instruction_tuning"
+        )
+        session.flush()
+        registry_repo.create_dataset_example(
+            session,
+            dataset_id=dataset.id,
+            source_artifact_id=chunk.id,
+            example_index=0,
+            payload={
+                "question": "What is domain segmentation?",
+                "answer": "It routes objects to domain-scoped S3 keys.",
+                "_cache_key": "finetune_domain_key",
+            },
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            # TypeError expected until Plan 09-06 adds domain kwarg
+            export_module.export_finetune_dataset(
+                "finetune_domain_test_ds", domain="healthcare", settings=settings
+            )
+
+        call_args = mock_storage.put_object.call_args
+        key_arg = call_args[0][0]
+        assert "gold/healthcare/finetune/" in key_arg, (
+            f"Expected 'gold/healthcare/finetune/' in key, got: {key_arg!r}"
+        )
