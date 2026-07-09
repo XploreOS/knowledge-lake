@@ -133,10 +133,6 @@ def _seed_parsed_artifact(session, source_id: str) -> Any:
 class TestCleanSilverKeyDomain:
     """RED-state: domain segment must appear in cleaned silver key after Plan 09-04."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-01: cleaned key domain segment pending Plan 09-04",
-    )
     def test_domain_segment_in_cleaned_key(self, session, source_with_domain, engine):
         """clean() must write cleaned document to silver/healthcare/{source_id}/cleaned/{hash}.md.
 
@@ -178,10 +174,6 @@ class TestCleanSilverKeyDomain:
             f"Expected '/cleaned/' sub-path in cleaned key, got: {cleaned_key!r}"
         )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-01: cleaned key domain segment pending Plan 09-04",
-    )
     def test_none_domain_uses_unclassified_segment(self, session, source_no_domain, engine):
         """clean() with a domain-less source must use silver/_unclassified/{source_id}/cleaned/{hash}.md.
 

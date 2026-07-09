@@ -297,8 +297,11 @@ def clean(
     # concurrent clean() calls for the same content from both creating an artifact
     # and hitting the unique constraint with an unhandled IntegrityError.
     # The S3 put_object call is idempotent for the same key, so it is safe here.
-    cleaned_key = f"{_SILVER_PREFIX}/{source_id}/cleaned/{content_hash}.md"
     with get_session() as session:
+        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
+        source_obj = registry_repo.get_source(session, source_id)
+        source_name = source_obj.name if source_obj else "unknown"
+        cleaned_key = f"{_SILVER_PREFIX}/{domain}/{source_id}/cleaned/{content_hash}.md"
         # Step 5: Exact dedup check — same pattern as parse stage (FOUND-04)
         existing = registry_repo.get_artifact_by_hash(session, content_hash, "cleaned_document")
         if existing is not None:
@@ -318,7 +321,12 @@ def clean(
             }
 
         # Step 9: Write cleaned text to silver zone (idempotent for same key)
-        storage.put_object(cleaned_key, cleaned_bytes)
+        storage.put_object(cleaned_key, cleaned_bytes, tags={
+            "domain": domain,
+            "source_name": source_name,
+            "format": "md",
+            "artifact_type": "cleaned_document",
+        })
         cleaned_uri = storage.object_uri(cleaned_key)
         log.info("clean.stored_silver", cleaned_uri=cleaned_uri)
 
