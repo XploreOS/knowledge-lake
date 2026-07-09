@@ -349,6 +349,7 @@ def export_rag_corpus(
 
 def export_pretrain_corpus(
     *,
+    domain: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Export quality-filtered curated_document text as JSONL to the gold zone (EXPORT-02).
@@ -413,8 +414,13 @@ def export_pretrain_corpus(
             jsonl_bytes += b"\n"
 
         export_id = new_id("dataset")
-        key = f"{s.export.gold_prefix}/pretrain/{export_id}.jsonl"
-        storage.put_object(key, jsonl_bytes)
+        domain_seg = domain or "_unclassified"
+        key = f"{s.export.gold_prefix}/{domain_seg}/pretrain/{export_id}.jsonl"
+        storage.put_object(key, jsonl_bytes, tags={
+            "domain": domain_seg,
+            "format": "jsonl",
+            "artifact_type": "pretrain_corpus",
+        })
         uri = storage.object_uri(key)
 
         dataset = registry_repo.create_dataset(
@@ -436,6 +442,7 @@ def export_pretrain_corpus(
 def export_finetune_dataset(
     dataset_name: str,
     *,
+    domain: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Export a named dataset's examples as OpenAI chat-messages JSONL (EXPORT-03).
@@ -527,8 +534,13 @@ def export_finetune_dataset(
         if jsonl_bytes:
             jsonl_bytes += b"\n"
 
-        key = f"{s.export.gold_prefix}/finetune/{dataset.id}.jsonl"
-        storage.put_object(key, jsonl_bytes)
+        domain_seg = domain or "_unclassified"
+        key = f"{s.export.gold_prefix}/{domain_seg}/finetune/{dataset.id}.jsonl"
+        storage.put_object(key, jsonl_bytes, tags={
+            "domain": domain_seg,
+            "format": "jsonl",
+            "artifact_type": "finetune_dataset",
+        })
         uri = storage.object_uri(key)
 
         registry_repo.update_dataset_export(

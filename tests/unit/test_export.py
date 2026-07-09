@@ -867,7 +867,7 @@ class TestTrainEvalContamination:
 
         # Both exports should proceed and call put_object
         mock_storage = MagicMock()
-        mock_storage.put_object.side_effect = lambda key, data: None
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
         mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
         mock_storage.get_object.return_value = b"Pretrain doc text."
 
@@ -938,7 +938,7 @@ class TestTrainEvalContamination:
 
         # export_pretrain_corpus should now succeed
         mock_storage = MagicMock()
-        mock_storage.put_object.side_effect = lambda key, data: None
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
         mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
         mock_storage.get_object.return_value = b"Override doc text."
 
@@ -1055,10 +1055,6 @@ class TestGoldZoneUnclassified:
 class TestGoldZonePretrain:
     """STORE-03: export_pretrain_corpus() must write to gold/{domain}/pretrain/ prefix."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
-    )
     def test_pretrain_key_contains_domain_segment(self, session, source, engine):
         """export_pretrain_corpus(domain="healthcare") must use gold/healthcare/pretrain/ key."""
         from knowledge_lake.registry import repo as registry_repo
@@ -1116,10 +1112,6 @@ class TestGoldZonePretrain:
 class TestGoldZoneFinetune:
     """STORE-03: export_finetune_dataset() must write to gold/{domain}/finetune/ prefix."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
-    )
     def test_finetune_key_contains_domain_segment(self, session, source, engine):
         """export_finetune_dataset(dataset_id=..., domain="healthcare") must use gold/healthcare/finetune/ key."""
         from knowledge_lake.registry import repo as registry_repo
