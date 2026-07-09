@@ -10,7 +10,7 @@ Every domain resource ingested must be traceable from raw source through every t
 
 ## Current State (v1.0 — shipped 2026-07-07)
 
-- **Version:** v2.0 (in progress) — Agent-Ready Lake (Phase 7 complete)
+- **Version:** v2.0 (in progress) — Agent-Ready Lake (Phase 8 complete)
 - **Source lines:** ~17,150 Python
 - **Tests:** 324 unit + integration + e2e
 - **Pipeline:** ingest → parse → clean → chunk → enrich → embed → index → curate → generate-dataset → export
@@ -154,4 +154,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-08 after Phase 7 (Metadata Foundation) complete*
+*Last updated: 2026-07-09 after Phase 8 (Crawl Maturation) complete*
