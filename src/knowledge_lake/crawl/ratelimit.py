@@ -157,8 +157,13 @@ class PerHostLimiter:
 
     @property
     def consecutive_errors(self) -> dict[str, int]:
-        """Read-only view of consecutive error counts per domain key."""
-        return self._consecutive_errors
+        """Read-only snapshot of consecutive error counts per domain key.
+
+        L-02 fix: returns a shallow copy so callers cannot mutate internal
+        backoff state directly (e.g. del limiter.consecutive_errors['host']
+        would bypass reset_errors and leave _cooldown_until stale).
+        """
+        return dict(self._consecutive_errors)
 
     def _get_lock(self, key: str) -> asyncio.Lock:
         """Get or create an asyncio lock for the given domain key."""
