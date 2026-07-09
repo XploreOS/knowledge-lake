@@ -198,6 +198,28 @@ class PlaywrightAdapter:
                 http_status_code=None,
             )
 
+        # WR-01 fix: map HTTP 4xx/5xx responses to status="failed" so the
+        # crawl orchestrator's adaptive-backoff gate (`if result.status ==
+        # "failed":`) fires for Playwright-served 429/403 pages.
+        # page.goto() does NOT raise on 4xx/5xx — it returns a Response
+        # object, so without this check the orchestrator receives
+        # status="complete" with http_status_code=429, bypassing record_error
+        # and incorrectly calling reset_errors instead.
+        if http_status_code is not None and http_status_code >= 400:
+            log.warning(
+                "playwright.http_error",
+                url=url,
+                http_status_code=http_status_code,
+            )
+            return CrawlPageResult(
+                url=url,
+                status="failed",
+                html=None,
+                markdown=None,
+                error=f"HTTP {http_status_code}",
+                http_status_code=http_status_code,
+            )
+
         html_bytes = html.encode("utf-8", errors="replace")
 
         # 5. Size cap (T-02-21)
