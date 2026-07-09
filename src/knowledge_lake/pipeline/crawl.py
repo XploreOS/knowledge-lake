@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import functools
+import os.path as _osp
 import re
 from collections import deque
 from typing import Any, Optional, Union
@@ -635,8 +636,7 @@ def _extract_linked_docs(
 
         # Only LINKED_DOC_EXTENSIONS — no same-domain filter (D-19)
         path_lower = parsed.path.lower()
-        import os.path as _osp
-        ext = _osp.splitext(path_lower)[1]
+        ext = _osp.splitext(path_lower)[1]  # L-03 fix: _osp imported at module level
         if ext not in LINKED_DOC_EXTENSIONS:
             continue
 
