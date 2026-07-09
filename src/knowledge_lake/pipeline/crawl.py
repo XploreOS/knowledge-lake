@@ -675,8 +675,17 @@ def _write_artifacts(
         return None, None
 
     with get_session() as session:
+        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
+        source_obj = registry_repo.get_source(session, source_id)
+        source_name = source_obj.name if source_obj else "unknown"
+
         # Write raw HTML artifact with correct mime_type
-        raw_artifact = storage.put_raw(source_id, html, "html", session, mime_type="text/html")
+        raw_artifact = storage.put_raw(
+            source_id, html, "html", session,
+            mime_type="text/html",
+            domain=domain,
+            tags={"domain": domain, "source_name": source_name, "format": "html", "artifact_type": "raw_document"},
+        )
         session.flush()
         raw_id = raw_artifact.id
 
@@ -687,6 +696,8 @@ def _write_artifacts(
             bronze_artifact = storage.put_bronze(
                 source_id, md_bytes, "md", session,
                 parent_artifact_id=raw_id,
+                domain=domain,
+                tags={"domain": domain, "source_name": source_name, "format": "md", "artifact_type": "bronze_document"},
             )
             session.flush()
             bronze_id = bronze_artifact.id
