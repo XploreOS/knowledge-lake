@@ -159,7 +159,6 @@ async def test_crawl_all_sources_returns_summary():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-02 — not yet implemented")
 async def test_crawl_all_sources_failure_does_not_abort():
     """One source raises, others are still processed; failed count == 1."""
     from unittest.mock import AsyncMock, patch
@@ -192,7 +191,6 @@ async def test_crawl_all_sources_failure_does_not_abort():
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-02 — not yet implemented")
 async def test_crawl_all_sources_domain_filter():
     """Passing domain='healthcare' calls list_sources_for_crawl_all with domain='healthcare'."""
     from unittest.mock import AsyncMock, patch

@@ -79,7 +79,6 @@ class TestResolveDelay:
         assert isinstance(result, float)
         assert result == 3.0
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-01 — not yet implemented")
     def test_rate_limit_rps_tier1(self):
         """resolve_delay({'rate_limit_rps': 2.0}, None, 1.0) returns 0.5."""
         from knowledge_lake.crawl.ratelimit import resolve_delay
@@ -87,7 +86,6 @@ class TestResolveDelay:
         result = resolve_delay({"rate_limit_rps": 2.0}, None, 1.0)
         assert result == pytest.approx(0.5)
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-01 — not yet implemented")
     def test_backoff_extra_raises_floor(self):
         """resolve_delay({}, None, 1.0, backoff_extra=3.0) returns >= 1.0 + 3.0."""
         from knowledge_lake.crawl.ratelimit import resolve_delay
@@ -205,7 +203,6 @@ class TestPerHostLimiter:
 class TestAdaptiveRateLimiter:
     """Phase 8 stubs for CRAWL-03: adaptive rate limiting with error backoff."""
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-03 — not yet implemented")
     def test_record_error_increments_count(self):
         """After record_error('http://example.com'), consecutive_errors for
         'example.com' key is 1.
@@ -216,7 +213,6 @@ class TestAdaptiveRateLimiter:
         limiter.record_error("http://example.com")
         assert limiter.consecutive_errors.get("example.com", 0) == 1
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-03 — not yet implemented")
     def test_reset_errors_clears_count(self):
         """After record_error then reset_errors, consecutive_errors key is absent or 0."""
         from knowledge_lake.crawl.ratelimit import PerHostLimiter
@@ -226,7 +222,6 @@ class TestAdaptiveRateLimiter:
         limiter.reset_errors("http://example.com")
         assert limiter.consecutive_errors.get("example.com", 0) == 0
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-03 — not yet implemented")
     def test_backoff_extra_exponential(self):
         """record_error twice on 'http://example.com', backoff_extra returns
         min(base * 4, MAX_BACKOFF_SECONDS).
@@ -241,7 +236,6 @@ class TestAdaptiveRateLimiter:
         expected = min(base * 4, MAX_BACKOFF_SECONDS)
         assert extra == pytest.approx(expected)
 
-    @pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-03 — not yet implemented")
     def test_backoff_extra_capped(self):
         """After enough errors, backoff_extra must not exceed MAX_BACKOFF_SECONDS."""
         from knowledge_lake.crawl.ratelimit import MAX_BACKOFF_SECONDS, PerHostLimiter

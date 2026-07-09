@@ -20,7 +20,6 @@ except ImportError:
     _extract_linked_docs = None  # type: ignore[assignment]
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 INGEST-10 — not yet implemented")
 def test_extract_linked_docs_pdf_only():
     """_extract_linked_docs with href to .pdf and .html returns only the .pdf link."""
     from knowledge_lake.pipeline.crawl import _extract_linked_docs as _eld
@@ -35,7 +34,6 @@ def test_extract_linked_docs_pdf_only():
     assert result[0].endswith(".pdf")
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 INGEST-10 — not yet implemented")
 def test_extract_linked_docs_docx():
     """href to .docx is also returned by _extract_linked_docs."""
     from knowledge_lake.pipeline.crawl import _extract_linked_docs as _eld
@@ -50,7 +48,6 @@ def test_extract_linked_docs_docx():
     assert result[0].endswith(".docx")
 
 
-@pytest.mark.xfail(strict=False, reason="Phase 8 INGEST-10 — not yet implemented")
 def test_max_linked_docs_cap():
     """When HTML has more than MAX_LINKED_DOCS_PER_PAGE pdf links, only
     MAX_LINKED_DOCS_PER_PAGE are returned.
