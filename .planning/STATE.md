@@ -6,14 +6,14 @@ current_phase: 9
 current_phase_name: Storage Segmentation
 status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-09T11:01:35.311Z"
+last_updated: "2026-07-09T11:08:27.656Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 8 complete, transitioned to Phase 9
+last_activity_desc: Phase 9 execution started
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 16
+  completed_plans: 11
   percent: 33
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 8 — Crawl Maturation
+**Current focus:** Phase 9 — Storage Segmentation
 
 ## Current Position
 
-Phase: 9 — Storage Segmentation
-Plan: Not started
+Phase: 9 (Storage Segmentation) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-09 — Phase 8 complete, transitioned to Phase 9
+Last activity: 2026-07-09 — Phase 9 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -89,6 +89,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08 P04 | 38m | 3 tasks | 2 files |
 | Phase 08 P05 | 19m | 2 tasks | 1 files |
 | Phase 08 P06 | 8m | 3 tasks | 3 files |
+| Phase 09 P01 | 8min | 3 tasks | 4 files |
 
 ### Quick Tasks Completed
 
@@ -162,6 +163,8 @@ Recent decisions affecting current work:
 - [Phase ?]: resolve_delay extended with backoff_extra and rate_limit_rps support; rate_limit_seconds wins when both present (D-03)
 - [Phase ?]: PerHostLimiter extended with adaptive backoff state; CrawlPageResult gains http_status_code field
 - [Phase ?]: ENRICH-07: partial JSON recovery via finish_reason check + balanced-brace scan; partial: cache key prevents partial serving as complete
+- [Phase ?]: Wave 0 test scaffold
+- [Phase ?]: ImportError guard pattern
 
 ### Pending Todos
 
@@ -198,7 +201,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Phase 9 context gathered
 
-Last session: 2026-07-09T10:29:34.942Z
+Last session: 2026-07-09T11:08:24.272Z
 Resume file: .planning/phases/09-storage-segmentation/09-CONTEXT.md
 
 ## Operator Next Steps
