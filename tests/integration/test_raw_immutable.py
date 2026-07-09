@@ -3,7 +3,10 @@ Integration tests for put_raw: content-addressed immutable raw zone (FOUND-04).
 
 These tests verify the four enforcement layers of Pattern 1:
 
-1. Content-addressed key: raw/{source_id}/{sha256}.{ext}
+1. Content-addressed key: raw/{domain}/{source_id}/{sha256}.{ext} — when no domain
+   is configured for the source, the ``_unclassified`` segment is used as a real
+   routed fallback (STORE-01, D-01). New writes always use domain-scoped keys;
+   existing raw keys are never rewritten (forward-only, D-06).
 2. Registry no-op: re-ingesting identical content returns the existing artifact
    with no new S3 write and no new registry node
 3. head_object guard: overwriting an existing raw key is refused (RuntimeError)
@@ -178,7 +181,7 @@ class TestPutRawFirstStore:
     ) -> None:
         """After put_raw, the content-addressed key must exist in S3."""
         backend.put_raw(source_id, SAMPLE_DATA, SAMPLE_EXT, session)
-        expected_key = f"raw/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
+        expected_key = f"raw/_unclassified/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
         assert backend.exists(expected_key), (
             f"Expected S3 key {expected_key!r} to exist after put_raw"
         )
@@ -186,9 +189,9 @@ class TestPutRawFirstStore:
     def test_put_raw_key_is_content_addressed(
         self, backend: StorageBackend, session: Session, source_id: str
     ) -> None:
-        """Raw key format must be raw/{source_id}/{sha256}.{ext}."""
+        """Raw key format must be raw/_unclassified/{source_id}/{sha256}.{ext} when no domain is configured."""
         artifact = backend.put_raw(source_id, SAMPLE_DATA, SAMPLE_EXT, session)
-        expected_uri = f"s3://{TEST_BUCKET}/raw/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
+        expected_uri = f"s3://{TEST_BUCKET}/raw/_unclassified/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
         assert artifact.storage_uri == expected_uri, (
             f"Expected storage_uri {expected_uri!r}, got {artifact.storage_uri!r}"
         )
@@ -290,7 +293,8 @@ class TestPutRawOverwriteGuard:
     ) -> None:
         """If key exists but no registry artifact: put_raw must raise RuntimeError."""
         # Pre-write the key directly (bypassing registry) to simulate key collision
-        key = f"raw/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
+        # No domain is passed — key uses _unclassified segment (new format)
+        key = f"raw/_unclassified/{source_id}/{SAMPLE_HASH}.{SAMPLE_EXT}"
         backend._client.put_object(Bucket=TEST_BUCKET, Key=key, Body=SAMPLE_DATA)
 
         # Now attempt put_raw with same data — registry says no artifact,
