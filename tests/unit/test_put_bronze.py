@@ -178,3 +178,51 @@ class TestPutBronzeNoop:
         assert mock_client.put_object.call_count == initial_put_count, (
             "No-op should not call put_object"
         )
+
+
+class TestPutBronzeDomainKey:
+    """put_bronze with domain kwarg produces domain-scoped S3 keys (STORE-01)."""
+
+    @pytest.mark.xfail(strict=False, reason="STORE-01: put_bronze domain kwarg pending Plan 09-03")
+    def test_domain_segment_in_bronze_key(self, mock_storage, source_and_raw, session):
+        """put_bronze(domain='healthcare') produces key starting with 'bronze/healthcare/'."""
+        import hashlib
+
+        backend, mock_client = mock_storage
+        source, raw = source_and_raw
+        bronze_data = b"bronze content data"
+        expected_hash = hashlib.sha256(bronze_data).hexdigest()
+
+        backend.put_bronze(
+            source.id, bronze_data, "md", session,
+            parent_artifact_id=raw.id,
+            domain="healthcare",
+        )
+        assert mock_client.put_object.called
+        call_kwargs = mock_client.put_object.call_args[1]
+        key = call_kwargs["Key"]
+        assert key.startswith("bronze/healthcare/"), (
+            f"Expected key to start with 'bronze/healthcare/', got: {key!r}"
+        )
+        assert key.endswith(f"{expected_hash}.md"), (
+            f"Expected key to end with '{expected_hash}.md', got: {key!r}"
+        )
+
+    @pytest.mark.xfail(strict=False, reason="STORE-01: put_bronze domain kwarg pending Plan 09-03")
+    def test_none_domain_uses_unclassified_segment(self, mock_storage, source_and_raw, session):
+        """put_bronze(domain=None) produces key starting with 'bronze/_unclassified/'."""
+        backend, mock_client = mock_storage
+        source, raw = source_and_raw
+        bronze_data = b"bronze content data unclassified"
+
+        backend.put_bronze(
+            source.id, bronze_data, "md", session,
+            parent_artifact_id=raw.id,
+            domain=None,
+        )
+        assert mock_client.put_object.called
+        call_kwargs = mock_client.put_object.call_args[1]
+        key = call_kwargs["Key"]
+        assert key.startswith("bronze/_unclassified/"), (
+            f"Expected key to start with 'bronze/_unclassified/', got: {key!r}"
+        )
