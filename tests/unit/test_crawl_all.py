@@ -145,20 +145,6 @@ class TestListSourcesForCrawlAll:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=False, reason="Phase 8 CRAWL-02 — not yet implemented")
-async def test_crawl_all_sources_returns_summary():
-    """crawl_all_sources() returns dict with keys total, succeeded, failed, results."""
-    from knowledge_lake.pipeline.crawl import crawl_all_sources as _crawl_all
-
-    result = await _crawl_all()
-    assert isinstance(result, dict)
-    assert "total" in result
-    assert "succeeded" in result
-    assert "failed" in result
-    assert "results" in result
-
-
-@pytest.mark.asyncio
 async def test_crawl_all_sources_failure_does_not_abort():
     """One source raises, others are still processed; failed count == 1."""
     from unittest.mock import AsyncMock, patch
