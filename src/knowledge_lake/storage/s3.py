@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import urllib.parse
 from typing import TYPE_CHECKING, Optional
 
 import boto3
@@ -35,6 +36,16 @@ if TYPE_CHECKING:
     from knowledge_lake.registry.models import Artifact
 
 log = logging.getLogger(__name__)
+
+
+def _format_tags(tags: dict[str, str]) -> str:
+    """Encode a tag dict to the URL-encoded string S3's Tagging= parameter expects.
+
+    S3 tag value limit is 256 characters. Values are truncated defensively.
+    The resulting format is ``key=val&key2=val2`` as required by the S3 API.
+    """
+    safe = {k: v[:256] for k, v in tags.items()}
+    return urllib.parse.urlencode(safe)
 
 
 class StorageBackend:
@@ -78,7 +89,12 @@ class StorageBackend:
 
     # ── Core operations ───────────────────────────────────────────────────────
 
-    def put_object(self, key: str, data: bytes) -> None:
+    def put_object(
+        self,
+        key: str,
+        data: bytes,
+        tags: Optional[dict[str, str]] = None,
+    ) -> None:
         """Write bytes to an arbitrary key in the configured bucket.
 
         Does NOT enforce immutability — use ``put_raw`` for the raw zone.
@@ -89,8 +105,27 @@ class StorageBackend:
             S3 object key (path within the bucket).
         data:
             Raw bytes to store.
+        tags:
+            Optional dict of tag key-value pairs. When provided, encoded as a
+            URL-encoded string and passed to the S3 ``Tagging=`` parameter (D-07,
+            D-08). Tagging is best-effort: if the S3 call fails due to a
+            ``ClientError``, a tagless retry is attempted so the object is always
+            written (D-10). Registry remains the source of truth (D-07).
         """
-        self._client.put_object(Bucket=self._bucket, Key=key, Body=data)
+        kwargs: dict = {"Bucket": self._bucket, "Key": key, "Body": data}
+        if tags:
+            kwargs["Tagging"] = _format_tags(tags)
+        try:
+            self._client.put_object(**kwargs)
+        except ClientError:
+            if tags:
+                # Best-effort: retry without tags so the object is always written (D-10)
+                log.warning(
+                    "put_object: tagging failed, retrying without tags (key=%s)", key
+                )
+                self._client.put_object(Bucket=self._bucket, Key=key, Body=data)
+            else:
+                raise
         log.debug("stored", bucket=self._bucket, key=key, size=len(data))
 
     def get_object(self, key: str) -> bytes:

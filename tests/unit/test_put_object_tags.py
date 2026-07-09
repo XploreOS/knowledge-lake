@@ -1,6 +1,5 @@
 """
-RED-state tests for StorageBackend.put_object tags support (STORE-02, D-07, D-08, D-10).
-Tests are xfail(strict=False) until Plan 09-03 adds the tags kwarg to put_object.
+Tests for StorageBackend.put_object tags support (STORE-02, D-07, D-08, D-10).
 """
 
 from __future__ import annotations
@@ -59,7 +58,6 @@ def mock_storage():
 class TestPutObjectTagging:
     """put_object passes Tagging= kwarg when tags dict provided (STORE-02, D-07, D-08)."""
 
-    @pytest.mark.xfail(strict=False, reason="STORE-02: put_object tags kwarg pending Plan 09-03")
     def test_tags_passed_as_tagging_kwarg(self, mock_storage):
         """put_object with tags= passes URL-encoded Tagging= to boto3 put_object."""
         backend, mock_client = mock_storage
@@ -82,7 +80,6 @@ class TestPutObjectTagging:
 class TestTaggingBestEffortFallback:
     """put_object retries without tags on ClientError (STORE-02, D-10)."""
 
-    @pytest.mark.xfail(strict=False, reason="STORE-02: put_object tags kwarg pending Plan 09-03")
     def test_clienterror_retries_without_tags(self, mock_storage):
         """ClientError on first put_object (with Tagging) triggers a tagless retry."""
         backend, mock_client = mock_storage
