@@ -532,7 +532,7 @@ def cmd_crawl_all(
                 typer.echo(f"  {source_id}: {status} — {error}")
             else:
                 typer.echo(f"  {source_id}: {status}")
-    except ValueError as exc:
+    except Exception as exc:  # L-01 fix: OperationalError, ValidationError etc. need clean output
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
