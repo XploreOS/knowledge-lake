@@ -23,7 +23,7 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 
 - [x] **STORE-01**: Objects are written under domain/source-scoped S3 keys `{zone}/{domain}/{source_id}/{hash}.{ext}` with an `_unclassified` fallback segment, while preserving content-addressed dedup and lineage (the `get_artifact_by_hash` no-op stays ordered before key construction; forward-only — existing raw keys are never rewritten).
 - [x] **STORE-02**: Every object write applies S3 object tags — `domain`, `source_name`, `format`, `artifact_type` — within the S3 10-tag limit, as convenience metadata only (the registry remains the source of truth).
-- [ ] **STORE-03**: The gold zone is segmented by domain and dataset type — `gold/{domain}/rag_corpus/`, `gold/{domain}/pretrain/`, `gold/{domain}/finetune/`.
+- [x] **STORE-03**: The gold zone is segmented by domain and dataset type — `gold/{domain}/rag_corpus/`, `gold/{domain}/pretrain/`, `gold/{domain}/finetune/`.
 
 ### AI Agent Skills
 
@@ -95,7 +95,7 @@ Which phase covers which requirement. Populated during roadmap creation.
 | INGEST-10 | Phase 8 | Complete |
 | STORE-01 | Phase 9 | Complete |
 | STORE-02 | Phase 9 | Complete |
-| STORE-03 | Phase 9 | Pending |
+| STORE-03 | Phase 9 | Complete |
 | RETR-01 | Phase 10 | Pending |
 | RETR-03 | Phase 10 | Pending |
 | SCHED-01 | Phase 11 | Pending |

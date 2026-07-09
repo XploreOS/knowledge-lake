@@ -107,13 +107,13 @@ Plans:
   3. Every object write applies S3 object tags — `domain`, `source_name`, `format`, `artifact_type` — within the S3 10-tag limit, as convenience metadata only (the registry remains the source of truth).
   4. The gold zone is segmented by domain and dataset type: `gold/{domain}/rag_corpus/`, `gold/{domain}/pretrain/`, `gold/{domain}/finetune/`.
 
-**Plans**: 1/6 plans executed
+**Plans**: 2/6 plans executed
 
 Plans:
 **Wave 0** *(parallel)*
 
 - [x] 09-01-PLAN.md — Storage layer test scaffold: test_put_raw_domain.py, test_format_tags.py, test_put_object_tags.py, TestPutBronzeDomainKey (STORE-01/02 RED tests)
-- [ ] 09-02-PLAN.md — Pipeline test scaffold: test_parse_silver_key.py, test_clean_silver_key.py, TestGoldZone* in test_export.py (STORE-01/03 RED tests)
+- [x] 09-02-PLAN.md — Pipeline test scaffold: test_parse_silver_key.py, test_clean_silver_key.py, TestGoldZone* in test_export.py (STORE-01/03 RED tests)
 
 **Wave 1** *(depends on Wave 0)*
 
@@ -179,7 +179,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
-| 9. Storage Segmentation | 1/6 | In Progress|  |
+| 9. Storage Segmentation | 2/6 | In Progress|  |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
