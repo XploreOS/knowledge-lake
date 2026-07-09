@@ -174,7 +174,7 @@ class TestPretrain:
 
         written_data: dict[str, bytes] = {}
 
-        def mock_put_object(key, data):
+        def mock_put_object(key, data, **kwargs):
             written_data[key] = data
 
         def mock_get_object(key):
@@ -324,7 +324,7 @@ class TestFinetune:
 
         written_data: dict[str, bytes] = {}
 
-        def mock_put_object(key, data):
+        def mock_put_object(key, data, **kwargs):
             written_data[key] = data
 
         mock_storage = MagicMock()
@@ -393,7 +393,7 @@ class TestFinetune:
 
         written_data: dict[str, bytes] = {}
 
-        def mock_put_object(key, data):
+        def mock_put_object(key, data, **kwargs):
             written_data[key] = data
 
         mock_storage = MagicMock()
@@ -453,7 +453,7 @@ class TestRagCorpus:
 
         written_data: dict[str, bytes] = {}
 
-        def mock_put_object(key, data):
+        def mock_put_object(key, data, **kwargs):
             written_data[key] = data
 
         mock_storage = MagicMock()
@@ -960,10 +960,6 @@ class TestTrainEvalContamination:
 class TestGoldZoneDomainKey:
     """STORE-03: export_rag_corpus() must write to gold/{domain}/rag_corpus/ prefix."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
-    )
     def test_rag_corpus_key_contains_domain_segment(self, session, source, engine):
         """export_rag_corpus(domain="healthcare") must use gold/healthcare/rag_corpus/ key."""
         from knowledge_lake.registry import repo as registry_repo
@@ -1012,10 +1008,6 @@ class TestGoldZoneDomainKey:
 class TestGoldZoneUnclassified:
     """STORE-03: export_rag_corpus(domain=None) must write to gold/_unclassified/rag_corpus/."""
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="STORE-03: export domain kwarg pending Plan 09-06 (Pitfall 2: domain kwarg not yet on export signatures)",
-    )
     def test_rag_corpus_none_domain_uses_unclassified(self, session, source, engine):
         """export_rag_corpus(domain=None) must use gold/_unclassified/rag_corpus/ key."""
         from knowledge_lake.registry import repo as registry_repo

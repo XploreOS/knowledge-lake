@@ -235,6 +235,7 @@ def _enforce_no_contamination(s: Settings) -> None:
 
 def export_rag_corpus(
     *,
+    domain: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Export all chunk artifacts as a Parquet file to the gold zone (EXPORT-01).
@@ -269,8 +270,9 @@ def export_rag_corpus(
 
         rows: list[dict] = []
         for chunk in chunks:
-            # Resolve domain and enrichment sibling — same pattern as pipeline/index.py
-            domain = registry_repo.get_domain_for_source(session, chunk.source_id)
+            # Resolve per-row domain for row data enrichment — same pattern as pipeline/index.py
+            # Note: use row_domain (not domain) to avoid shadowing the function's domain kwarg
+            row_domain = registry_repo.get_domain_for_source(session, chunk.source_id)
 
             parsed_id = chunk.parent_artifact_id  # chunk -> parsed
             enriched = (
@@ -290,7 +292,7 @@ def export_rag_corpus(
                 "section_path": meta.get("section_path", chunk.section_path or ""),
                 "page": meta.get("page", chunk.page_ref or 1),
                 "text": meta.get("text", ""),
-                "domain": domain,
+                "domain": row_domain,
                 "document_type": enrichment_metadata.get("document_type"),
                 "keywords": enrichment_metadata.get("keywords", []),
                 "quality_score": quality_score,
@@ -320,8 +322,13 @@ def export_rag_corpus(
         buf.seek(0)
 
         export_id = new_id("dataset")
-        key = f"{s.export.gold_prefix}/rag_corpus/{export_id}.parquet"
-        storage.put_object(key, buf.getvalue())
+        domain_seg = domain or "_unclassified"
+        key = f"{s.export.gold_prefix}/{domain_seg}/rag_corpus/{export_id}.parquet"
+        storage.put_object(key, buf.getvalue(), tags={
+            "domain": domain_seg,
+            "format": "parquet",
+            "artifact_type": "rag_corpus",
+        })
         uri = storage.object_uri(key)
 
         dataset = registry_repo.create_dataset(
