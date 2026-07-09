@@ -461,8 +461,13 @@ async def _crawl_loop(
         # INGEST-10 (D-19): Linked-document ingestion runs AFTER _write_artifacts and
         # _record_state("complete") so the parent HTML bronze artifact is always committed
         # before any linked document is followed.
+        #
+        # L-04 fix: decode HTML bytes once here and share the string with both
+        # _extract_linked_docs and _extract_links, avoiding a double decode per page.
+        html_text: str | None = None
         if result.html is not None:
-            linked_links = _extract_linked_docs(result.html, url)
+            html_text = result.html.decode("utf-8", errors="replace")
+            linked_links = _extract_linked_docs(html_text, url)
             # _extract_linked_docs already applies MAX_LINKED_DOCS_PER_PAGE cap (D-20).
             loop = asyncio.get_running_loop()
             for link_url in linked_links:
@@ -508,9 +513,10 @@ async def _crawl_loop(
                     )
                     linked_docs_failed += 1
 
-        # Extract and enqueue discovered links (BFS link-following)
-        if result.html and pages_total < max_pages:
-            discovered = _extract_links(result.html, url, seed_domain)
+        # Extract and enqueue discovered links (BFS link-following).
+        # Re-uses html_text decoded above — no second decode (L-04 fix).
+        if html_text is not None and pages_total < max_pages:
+            discovered = _extract_links(html_text, url, seed_domain)
             for link in discovered:
                 norm = normalize_url(link)
                 if norm not in seen:
@@ -528,16 +534,21 @@ async def _crawl_loop(
     }
 
 
-def _extract_links(html: bytes, base_url: str, seed_domain: str) -> list[str]:
+def _extract_links(html: Union[bytes, str], base_url: str, seed_domain: str) -> list[str]:
     """Extract same-domain HTTP(S) links from raw HTML.
 
+    Accepts bytes or str so the caller can decode once and share the
+    string with _extract_linked_docs (L-04 fix — avoids double decode).
     Filters out fragments, non-http schemes, and cross-domain links.
     Returns deduplicated absolute URLs.
     """
-    try:
-        text = html.decode("utf-8", errors="replace")
-    except Exception:
-        return []
+    if isinstance(html, bytes):
+        try:
+            text = html.decode("utf-8", errors="replace")
+        except Exception:
+            return []
+    else:
+        text = html
 
     links: list[str] = []
     seen_in_page: set[str] = set()
