@@ -192,6 +192,8 @@ class StorageBackend:
         ext: str,
         session: "Session",
         mime_type: Optional[str] = None,
+        domain: Optional[str] = None,
+        tags: Optional[dict[str, str]] = None,
     ) -> "Artifact":
         """Write bytes to the content-addressed immutable raw zone.
 
@@ -250,8 +252,10 @@ class StorageBackend:
             )
             return existing
 
-        # Layer 3: build content-addressed key
-        key = f"raw/{source_id}/{content_hash}.{ext}"
+        # Layer 3: build content-addressed key (domain-scoped, D-01)
+        # domain enters ONLY here — after Layer 2 no-op check — preserving WORM ordering (D-05)
+        domain_seg = domain or "_unclassified"
+        key = f"raw/{domain_seg}/{source_id}/{content_hash}.{ext}"
 
         # Layer 4: head_object guard — refuse overwrite if key already exists
         if self.exists(key):
@@ -262,7 +266,7 @@ class StorageBackend:
             )
 
         # Layer 5: write bytes to S3 (NO If-None-Match:'*')
-        self.put_object(key, data)
+        self.put_object(key, data, tags=tags)
         log.info("put_raw stored new raw artifact", key=key, size=len(data))
 
         # Layer 6: create registry artifact node
@@ -303,6 +307,8 @@ class StorageBackend:
         session: "Session",
         *,
         parent_artifact_id: str,
+        domain: Optional[str] = None,
+        tags: Optional[dict[str, str]] = None,
     ) -> "Artifact":
         """Write bytes to the content-addressed bronze zone with lineage.
 
@@ -354,8 +360,10 @@ class StorageBackend:
             )
             return existing
 
-        # Layer 3: build content-addressed key
-        key = f"bronze/{source_id}/{content_hash}.{ext}"
+        # Layer 3: build content-addressed key (domain-scoped, D-03)
+        # domain enters ONLY here — after Layer 2 no-op check — preserving WORM ordering (D-05)
+        domain_seg = domain or "_unclassified"
+        key = f"bronze/{domain_seg}/{source_id}/{content_hash}.{ext}"
 
         # Layer 4: head_object guard — refuse overwrite if key already exists
         if self.exists(key):
@@ -366,7 +374,7 @@ class StorageBackend:
             )
 
         # Layer 5: write bytes to S3
-        self.put_object(key, data)
+        self.put_object(key, data, tags=tags)
         log.info("put_bronze stored new bronze artifact", key=key, size=len(data))
 
         # Layer 6: create registry artifact node with parent linkage

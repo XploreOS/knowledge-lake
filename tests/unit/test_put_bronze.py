@@ -183,7 +183,6 @@ class TestPutBronzeNoop:
 class TestPutBronzeDomainKey:
     """put_bronze with domain kwarg produces domain-scoped S3 keys (STORE-01)."""
 
-    @pytest.mark.xfail(strict=False, reason="STORE-01: put_bronze domain kwarg pending Plan 09-03")
     def test_domain_segment_in_bronze_key(self, mock_storage, source_and_raw, session):
         """put_bronze(domain='healthcare') produces key starting with 'bronze/healthcare/'."""
         import hashlib
@@ -208,7 +207,6 @@ class TestPutBronzeDomainKey:
             f"Expected key to end with '{expected_hash}.md', got: {key!r}"
         )
 
-    @pytest.mark.xfail(strict=False, reason="STORE-01: put_bronze domain kwarg pending Plan 09-03")
     def test_none_domain_uses_unclassified_segment(self, mock_storage, source_and_raw, session):
         """put_bronze(domain=None) produces key starting with 'bronze/_unclassified/'."""
         backend, mock_client = mock_storage

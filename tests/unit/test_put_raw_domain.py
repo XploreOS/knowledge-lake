@@ -1,7 +1,6 @@
 """
-RED-state tests for StorageBackend.put_raw domain-scoped key construction and
-dedup ordering (STORE-01). Tests are xfail(strict=False) until Plan 09-03 adds
-the domain kwarg to put_raw.
+Tests for StorageBackend.put_raw domain-scoped key construction and
+dedup ordering (STORE-01).
 """
 
 from __future__ import annotations
@@ -75,7 +74,6 @@ def source(session):
 class TestPutRawDomainKey:
     """put_raw with domain kwarg produces domain-scoped S3 keys (STORE-01)."""
 
-    @pytest.mark.xfail(strict=False, reason="STORE-01: put_raw domain kwarg pending Plan 09-03")
     def test_domain_segment_in_raw_key(self, mock_storage, source, session):
         """put_raw(domain='healthcare') produces key starting with 'raw/healthcare/'."""
         backend, mock_client = mock_storage
@@ -90,7 +88,6 @@ class TestPutRawDomainKey:
             f"Expected key to end with '{SAMPLE_HASH}.{SAMPLE_EXT}', got: {key!r}"
         )
 
-    @pytest.mark.xfail(strict=False, reason="STORE-01: put_raw domain kwarg pending Plan 09-03")
     def test_none_domain_uses_unclassified_segment(self, mock_storage, source, session):
         """put_raw(domain=None) produces key starting with 'raw/_unclassified/'."""
         backend, mock_client = mock_storage
@@ -109,7 +106,6 @@ class TestPutRawDomainKey:
 class TestDeduplicationOrderPreserved:
     """Registry no-op fires before key construction — domain kwarg does not affect dedup (STORE-01)."""
 
-    @pytest.mark.xfail(strict=False, reason="STORE-01: put_raw domain kwarg pending Plan 09-03")
     def test_no_put_object_when_artifact_already_in_registry(
         self, mock_storage, source, session
     ):
