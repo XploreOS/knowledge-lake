@@ -5,8 +5,8 @@ milestone_name: — Agent-Ready Lake
 current_phase: 10
 current_phase_name: hybrid-retrieval
 status: executing
-stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-07-10T08:49:23.585Z"
+stopped_at: Phase 11 context gathered
+last_updated: "2026-07-10T09:42:15.329Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 10 execution resumed (wave continue)
 progress:
@@ -221,10 +221,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** Completed 10-04-PLAN.md
+**Stopped at:** Phase 11 context gathered
 
-Last session: 2026-07-10T08:49:00.546Z
-Resume file: None
+Last session: 2026-07-10T09:42:15.320Z
+Resume file: .planning/phases/11-crawl-scheduling/11-CONTEXT.md
 
 ## Operator Next Steps
 
