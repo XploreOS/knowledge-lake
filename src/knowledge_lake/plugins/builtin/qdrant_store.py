@@ -203,6 +203,10 @@ class QdrantVectorStore:
             ]
         )
         self.ensure_payload_indexes(physical)
+        # Invalidate any stale _named_cache entry so the first index() call after
+        # collection creation re-queries the server and sees the correct named-vector
+        # shape (CR-02).
+        self._named_cache.pop(alias, None)
         return (physical, True)
 
     def ensure_payload_indexes(self, collection: str) -> None:
@@ -367,6 +371,11 @@ class QdrantVectorStore:
         self._client.update_collection_aliases(
             change_aliases_operations=change_aliases_operations
         )
+
+        # Invalidate the stale cache entry for the alias so the first index()
+        # call after migration re-queries the server and sees the new named-vector
+        # shape (CR-02).
+        self._named_cache.pop(alias, None)
 
         log.info(
             "qdrant_store.reindex.complete",
