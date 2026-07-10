@@ -205,8 +205,9 @@ class QdrantVectorStore:
         self.ensure_payload_indexes(physical)
         # Invalidate any stale _named_cache entry so the first index() call after
         # collection creation re-queries the server and sees the correct named-vector
-        # shape (CR-02).
-        self._named_cache.pop(alias, None)
+        # shape (CR-02).  Use __dict__.get() rather than self._named_cache so this
+        # is safe when __init__ was bypassed (e.g. test mocks constructed via __new__).
+        self.__dict__.get("_named_cache", {}).pop(alias, None)
         return (physical, True)
 
     def ensure_payload_indexes(self, collection: str) -> None:
@@ -374,8 +375,9 @@ class QdrantVectorStore:
 
         # Invalidate the stale cache entry for the alias so the first index()
         # call after migration re-queries the server and sees the new named-vector
-        # shape (CR-02).
-        self._named_cache.pop(alias, None)
+        # shape (CR-02).  Use __dict__.get() so this is safe when __init__ was
+        # bypassed (e.g. test mocks constructed via __new__).
+        self.__dict__.get("_named_cache", {}).pop(alias, None)
 
         log.info(
             "qdrant_store.reindex.complete",

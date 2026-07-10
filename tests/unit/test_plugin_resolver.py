@@ -86,6 +86,14 @@ class DummyStore:
     ) -> list[Hit]:
         return []
 
+    def assert_server_supports_hybrid(self) -> None:
+        pass
+
+    def reembed_all_points(
+        self, source: str, dest: str, sparse_doc_fn, batch_size: int = 256
+    ) -> int:
+        return 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: Protocols are runtime_checkable
