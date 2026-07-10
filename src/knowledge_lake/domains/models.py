@@ -10,6 +10,7 @@ from pre-loaded YAML dicts, not from environment variables.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -39,6 +40,9 @@ class SourceEntry(BaseModel):
 
     crawl_config: dict = {}
     """Crawler configuration overrides (depth, rate_limit_rps, robots_txt, etc.)."""
+
+    crawl_schedule: Optional[str] = None
+    """Optional 5-field UTC cron string from sources.yaml (D-05a). NULL means no auto-recrawl."""
 
     ingest_type: str = "crawl"
     """How to ingest: 'crawl' (auto-crawl) or 'upload' (manual bulk file download)."""
