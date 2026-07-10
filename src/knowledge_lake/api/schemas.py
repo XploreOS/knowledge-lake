@@ -658,7 +658,10 @@ class SourceListItem(BaseModel):
     source_id: str = Field(description="Source registry ID (src_...).")
     name: str = Field(description="Human-readable source name.")
     url: Optional[str] = Field(default=None, description="Canonical source URL.")
-    source_type: str = Field(description="Kind of source: 'web', 'upload', 'crawler', etc.")
+    source_type: str = Field(
+        default="unknown",
+        description="Kind of source: 'web', 'upload', 'crawler', etc.",
+    )
     license_type: Optional[str] = Field(default=None, description="SPDX license identifier.")
     domain: Optional[str] = Field(
         default=None,
