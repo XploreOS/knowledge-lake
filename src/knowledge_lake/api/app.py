@@ -100,6 +100,22 @@ def _safe_upload_path(raw: str) -> Path:
     return p
 
 
+def _safe_int_page(raw: object) -> int:
+    """Convert a Qdrant payload 'page' value to int, falling back to 1 on failure (WR-03).
+
+    Points from legacy collections or external tools can carry non-integer page
+    values (e.g. "unknown", "n/a").  int() on such a string would propagate a
+    ValueError as an unhandled 500.  This helper returns 1 as a safe default
+    instead.
+    """
+    if raw is None:
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 1
+
+
 # Collection names must be alphanumeric with underscores/hyphens, max 64 chars (WR-04).
 # Rejects arbitrary strings that could enumerate Qdrant collections or cause confusion.
 _COLLECTION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -302,7 +318,7 @@ def search_endpoint(
                 score=hit.score,
                 document=payload.get("document", ""),
                 section_path=payload.get("section_path", ""),
-                page=int(payload.get("page") or 1),
+                page=_safe_int_page(payload.get("page")),
                 chunk_id=payload.get("chunk_id", hit.id),
                 text=payload.get("text", ""),
                 domain=payload.get("domain"),
