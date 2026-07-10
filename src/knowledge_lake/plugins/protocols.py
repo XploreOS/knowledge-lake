@@ -23,7 +23,7 @@ No core code edits required (FOUND-08, D-11).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +363,39 @@ class VectorStorePlugin(Protocol):
 
         Returns:
             List of Hit objects ordered by score descending.
+        """
+        ...
+
+    def assert_server_supports_hybrid(self) -> None:
+        """Assert the vector store server supports hybrid/sparse retrieval.
+
+        Must raise RuntimeError (or a subclass) when the server version is
+        too old to support sparse/hybrid search.  Implementations may memoize
+        the check so the round-trip is at most once per process.
+        """
+        ...
+
+    def reembed_all_points(
+        self,
+        source: str,
+        dest: str,
+        sparse_doc_fn: Callable[[str], Any],
+        batch_size: int = 256,
+    ) -> int:
+        """Re-embed all points from ``source`` into ``dest`` with added sparse vectors.
+
+        Scrolls every point from ``source``, reuses the existing dense vector,
+        synthesizes a sparse vector via ``sparse_doc_fn(text)``, and upserts
+        named {dense+sparse} PointStructs into ``dest``.
+
+        Args:
+            source:         Physical collection name to scroll from.
+            dest:           Physical collection name to upsert into.
+            sparse_doc_fn:  Callable(str) → SparseVector — encodes payload text.
+            batch_size:     Number of points to scroll/upsert per batch.
+
+        Returns:
+            Total number of points upserted into ``dest``.
         """
         ...
 
