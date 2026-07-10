@@ -29,6 +29,7 @@ Functions:
 from __future__ import annotations
 
 import datetime
+from collections import namedtuple
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -63,6 +64,7 @@ def create_source(
     license_url: Optional[str] = None,
     robots_checked: bool = False,
     config: Optional[Any] = None,
+    crawl_schedule: Optional[str] = None,
 ) -> Source:
     """Register a new source and add it to the session.
 
@@ -88,6 +90,8 @@ def create_source(
         Whether robots.txt was checked before crawling.
     config:
         Arbitrary JSON-serialisable configuration dict.
+    crawl_schedule:
+        5-field UTC cron string (SCHED-01). None means not auto-recrawled.
 
     Returns
     -------
@@ -104,6 +108,7 @@ def create_source(
         license_url=license_url,
         robots_checked=robots_checked,
         config=config,
+        crawl_schedule=crawl_schedule,
         created_at=datetime.datetime.now(datetime.timezone.utc),
     )
     session.add(source)
@@ -900,6 +905,104 @@ def list_sources_for_crawl_all(
     if domain is None:
         return all_sources
     return [s for s in all_sources if (s.config or {}).get("domain") == domain]
+
+
+# ── Crawl scheduling helpers (SCHED-01, SCHED-02) ────────────────────────────
+
+
+_ScheduledSource = namedtuple(
+    "_ScheduledSource",
+    ["id", "url", "crawl_schedule", "last_crawled_at", "last_content_hash", "created_at", "config"],
+)
+
+
+def list_scheduled_sources(session: Session) -> list:
+    """Return sources with a non-NULL crawl_schedule as namedtuples.
+
+    Materializes every field inside the session to avoid DetachedInstanceError
+    when the sensor iterates rows after session close.
+
+    Returns
+    -------
+    list[_ScheduledSource]
+        Namedtuples with id, url, crawl_schedule, last_crawled_at,
+        last_content_hash, created_at, config.
+    """
+    rows = session.execute(
+        select(Source).where(Source.crawl_schedule.is_not(None))
+    ).scalars()
+    return [
+        _ScheduledSource(
+            id=s.id,
+            url=s.url,
+            crawl_schedule=s.crawl_schedule,
+            last_crawled_at=s.last_crawled_at,
+            last_content_hash=s.last_content_hash,
+            created_at=s.created_at,
+            config=(s.config or {}),
+        )
+        for s in rows
+    ]
+
+
+def set_source_schedule(
+    session: Session,
+    source_id: str,
+    crawl_schedule: Optional[str],
+) -> bool:
+    """Update or clear the crawl_schedule column for a source.
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    source_id:
+        Primary key of the Source to update.
+    crawl_schedule:
+        New cron string, or None to clear (disable scheduling).
+
+    Returns
+    -------
+    bool
+        True if the source existed and was updated; False if source not found.
+    """
+    source = session.get(Source, source_id)
+    if source is None:
+        return False
+    source.crawl_schedule = crawl_schedule
+    return True
+
+
+def touch_source_crawl(
+    source_id: str,
+    *,
+    last_crawled_at: datetime.datetime,
+    last_content_hash: Optional[str] = None,
+) -> None:
+    """Update crawl watermarks after a re-crawl attempt (D-11/D-17).
+
+    Opens its own session so the Dagster op can call it without holding one.
+    When last_content_hash is None (skip path), leaves the existing hash
+    unchanged.
+
+    Parameters
+    ----------
+    source_id:
+        Primary key of the Source to update.
+    last_crawled_at:
+        UTC timestamp of the crawl attempt.
+    last_content_hash:
+        New content hash, or None to leave the existing value.
+    """
+    from knowledge_lake.registry.db import get_session
+
+    with get_session() as session:
+        src = session.get(Source, source_id)
+        if src is None:
+            return
+        src.last_crawled_at = last_crawled_at
+        if last_content_hash is not None:
+            src.last_content_hash = last_content_hash
 
 
 # ── Vector collection alias registry (INDEX-02, D-06) ───────────────────────

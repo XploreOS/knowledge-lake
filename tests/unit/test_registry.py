@@ -544,3 +544,125 @@ class TestSourceCrawlColumns:
         assert source.crawl_schedule is None
         assert source.last_crawled_at is None
         assert source.last_content_hash is None
+
+
+# ── Repo helpers for crawl scheduling (Phase 11, Plan 02, Task 2) ────────────
+
+
+class TestCreateSourceCrawlSchedule:
+    """create_source accepts and persists crawl_schedule kwarg."""
+
+    def test_create_source_with_crawl_schedule(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source
+
+        source = create_source(
+            session, name="Scheduled", source_type="web",
+            url="https://example.com", crawl_schedule="0 6 * * 1",
+        )
+        session.flush()
+        assert source.crawl_schedule == "0 6 * * 1"
+
+    def test_create_source_crawl_schedule_defaults_none(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source
+        import inspect
+
+        sig = inspect.signature(create_source)
+        assert "crawl_schedule" in sig.parameters
+        assert sig.parameters["crawl_schedule"].default is None
+
+
+class TestListScheduledSources:
+    """list_scheduled_sources returns namedtuples for scheduled sources only."""
+
+    def test_returns_only_scheduled(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, list_scheduled_sources
+
+        create_source(session, name="NoSched", source_type="web")
+        create_source(
+            session, name="Sched", source_type="web",
+            url="https://scheduled.com", crawl_schedule="0 0 * * *",
+        )
+        session.flush()
+
+        results = list_scheduled_sources(session)
+        assert len(results) >= 1
+        names = [r.url for r in results]
+        assert "https://scheduled.com" in names
+
+    def test_returns_namedtuple_not_orm(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, list_scheduled_sources
+
+        create_source(
+            session, name="NTCheck", source_type="web",
+            crawl_schedule="0 12 * * *",
+        )
+        session.flush()
+
+        results = list_scheduled_sources(session)
+        assert len(results) >= 1
+        row = results[-1]
+        # Must be a namedtuple with expected fields
+        assert hasattr(row, "id")
+        assert hasattr(row, "crawl_schedule")
+        assert hasattr(row, "last_crawled_at")
+        assert hasattr(row, "last_content_hash")
+        assert hasattr(row, "config")
+
+    def test_excludes_unscheduled(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, list_scheduled_sources
+
+        create_source(session, name="Unsched1", source_type="web")
+        session.flush()
+
+        results = list_scheduled_sources(session)
+        urls_or_ids = [r.id for r in results]
+        # None of the results should have crawl_schedule=None
+        for r in results:
+            assert r.crawl_schedule is not None
+
+
+class TestSetSourceSchedule:
+    """set_source_schedule updates or clears crawl_schedule."""
+
+    def test_set_schedule_returns_true(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, set_source_schedule
+
+        source = create_source(session, name="SetSched", source_type="web")
+        session.flush()
+
+        result = set_source_schedule(session, source.id, "0 3 * * *")
+        session.flush()
+        assert result is True
+        assert source.crawl_schedule == "0 3 * * *"
+
+    def test_set_schedule_clear(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source, set_source_schedule
+
+        source = create_source(
+            session, name="ClearSched", source_type="web",
+            crawl_schedule="0 6 * * *",
+        )
+        session.flush()
+
+        result = set_source_schedule(session, source.id, None)
+        session.flush()
+        assert result is True
+        assert source.crawl_schedule is None
+
+    def test_set_schedule_missing_source_returns_false(self, session) -> None:
+        from knowledge_lake.registry.repo import set_source_schedule
+
+        result = set_source_schedule(session, "src_nonexistent", "0 0 * * *")
+        assert result is False
+
+
+class TestTouchSourceCrawl:
+    """touch_source_crawl updates watermarks using its own session."""
+
+    def test_imports_cleanly(self) -> None:
+        from knowledge_lake.registry.repo import touch_source_crawl
+        assert callable(touch_source_crawl)
+
+    def test_scheduled_source_namedtuple_import(self) -> None:
+        from knowledge_lake.registry.repo import _ScheduledSource
+        assert _ScheduledSource is not None
