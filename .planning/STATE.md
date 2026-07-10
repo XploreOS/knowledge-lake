@@ -5,15 +5,15 @@ milestone_name: — Agent-Ready Lake
 current_phase: 10
 current_phase_name: hybrid-retrieval
 status: executing
-stopped_at: null
-last_updated: "2026-07-10T05:35:38.343Z"
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-07-10T05:45:02.592Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 10 execution resumed (wave continue)
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 24
-  completed_plans: 19
+  completed_plans: 20
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 10 (hybrid-retrieval) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 10 execution resumed (wave continue)
 
@@ -97,6 +97,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 09 P06 | 22 | 2 tasks | 2 files |
 | Phase 10 P02 | 4m | 3 tasks | 5 files |
 | Phase 10 P03 | 3 | - tasks | - files |
+| Phase 10 P04 | 4m | 2 tasks | 3 files |
 
 ### Quick Tasks Completed
 
@@ -178,6 +179,9 @@ Recent decisions affecting current work:
 - [Phase ?]: domain kwarg added to all three export functions as Optional[str]=None (Pitfall 2 from RESEARCH.md resolved)
 - [Phase ?]: 3-key tags dict (domain, format, artifact_type) on gold put_object — source_name omitted per D-11 for multi-source exports
 - [Phase ?]: fastembed==0.8.0 verified CPU-only on target host
+- [Phase ?]: SearchSettings nested model uses Literal[hybrid,dense,sparse] for fail-closed pydantic validation (T-10-02, D-08, RETR-03)
+- [Phase ?]: VectorPoint.sparse defaults to None — additive back-compat (RETR-01, D-09)
+- [Phase ?]: VectorStorePlugin.search keyword-only mode/sparse_query/offset with additive defaults (D-09)
 
 ### Pending Todos
 
@@ -212,10 +216,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** context exhaustion at 100% (2026-07-10)
+**Stopped at:** Completed 10-04-PLAN.md
 
-Last session: 2026-07-10T05:32:10.533Z
-Resume file: .planning/phases/10-hybrid-retrieval/10-CONTEXT.md
+Last session: 2026-07-10T05:45:02.583Z
+Resume file: None
 
 ## Operator Next Steps
 
