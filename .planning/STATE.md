@@ -6,14 +6,14 @@ current_phase: 11
 current_phase_name: crawl-scheduling
 status: executing
 stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-07-10T12:30:33.693Z"
+last_updated: "2026-07-10T16:19:23.072Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 27
   percent: 67
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 11 (crawl-scheduling) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 11 execution started
 
@@ -102,6 +102,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 10 P08 | 7m | 2 tasks | 3 files |
 | Phase 11 P01 | 3m | 3 tasks | 4 files |
 | Phase 11 P02 | 5m | 3 tasks | 5 files |
+| Phase 11 P03 | 4m | 1 tasks | 1 files |
 
 ### Quick Tasks Completed
 
@@ -191,6 +192,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Query(pattern=^(hybrid|dense|sparse)$) on FastAPI endpoint: automatic 422 on invalid mode before handler runs (T-10-02, ASVS V5)
 - [Phase ?]: Sensor tests use _get_now monkeypatch for deterministic time control; gate tests use FakeCrawler adapter; migration head-chain uses skipif on 0009 module import
 - [Phase ?]: touch_source_crawl uses own get_session() — Dagster op calls without holding a session
+- [Phase ?]: D-06: reuse remove_boilerplate for content signature (same normalizer as silver stage)
 
 ### Pending Todos
 
@@ -227,7 +229,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Completed 11-01-PLAN.md
 
-Last session: 2026-07-10T12:30:28.517Z
+Last session: 2026-07-10T16:19:13.394Z
 Resume file: None
 
 ## Operator Next Steps

@@ -177,7 +177,7 @@ Plans:
   3. A max-staleness threshold forces an occasional refresh to catch change-detection false negatives.
   4. A Dagster `@sensor` triggers periodic re-crawl of a source based on its `crawl_schedule`, using a deterministic `run_key` and a cursor watermark (plus per-source concurrency) to avoid duplicate runs and tick storms.
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 0**
@@ -190,7 +190,7 @@ Plans:
 
 **Wave 2** *(parallel, depends on Wave 1)*
 
-- [ ] 11-03-PLAN.md — Change gate: recrawl_source() normalized-text SHA256 gate before put_raw + staleness override + SSRF probe (SCHED-02)
+- [x] 11-03-PLAN.md — Change gate: recrawl_source() normalized-text SHA256 gate before put_raw + staleness override + SSRF probe (SCHED-02)
 - [ ] 11-04-PLAN.md — CLI surface: SourceEntry.crawl_schedule, domain-init persistence, klake set-schedule verb with is_valid_cron_string validation (SCHED-01)
 
 **Wave 3** *(depends on Wave 2)*
@@ -225,5 +225,5 @@ Plans:
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 8/8 | Complete   | 2026-07-10 |
-| 11. Crawl Scheduling | 2/5 | In Progress|  |
+| 11. Crawl Scheduling | 3/5 | In Progress|  |
 | 12. Agent Surfaces | 0/? | Not started | - |
