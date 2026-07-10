@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import functools
+import hashlib
 import os.path as _osp
 import re
 from collections import deque
@@ -36,11 +37,13 @@ import tldextract
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.crawl.ratelimit import PerHostLimiter, resolve_delay
 from knowledge_lake.crawl.robots import fetch_robots
+from knowledge_lake.pipeline.clean import remove_boilerplate
 from knowledge_lake.pipeline.ingest import normalize_url, register_source, validate_public_url, ingest_url
 from knowledge_lake.plugins.resolver import get_crawler
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.repo import list_sources_for_crawl_all as _repo_list_sources_for_crawl_all
+from knowledge_lake.registry.repo import touch_source_crawl
 from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
@@ -52,6 +55,114 @@ _LINK_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 # LINKED_DOC_EXTENSIONS is the set of file extensions that trigger linked-doc ingestion.
 MAX_LINKED_DOCS_PER_PAGE: int = 10
 LINKED_DOC_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx"})
+
+
+def _signature(markdown: str) -> str:
+    """Compute content signature: normalize then SHA256.
+
+    Reuses the silver-stage ``remove_boilerplate`` so the gate and the clean
+    stage agree on what constitutes meaningful content change (D-06).
+    """
+    return hashlib.sha256(
+        remove_boilerplate(markdown or "").encode("utf-8")
+    ).hexdigest()
+
+
+def _get_source_for_recrawl(source_id: str) -> dict:
+    """Load source metadata needed by the recrawl gate.
+
+    Opens its own session so recrawl_source can call it without holding one.
+    Returns a dict with id, url, last_content_hash, last_crawled_at,
+    and crawl_config.
+    """
+    with get_session() as session:
+        source = registry_repo.get_source(session, source_id)
+        if source is None:
+            raise ValueError(f"recrawl_source: source {source_id!r} not found")
+        crawl_config = registry_repo.get_source_crawl_config(session, source_id)
+        return {
+            "id": source.id,
+            "url": source.url,
+            "last_content_hash": source.last_content_hash,
+            "last_crawled_at": source.last_crawled_at,
+            "crawl_config": crawl_config,
+        }
+
+
+async def recrawl_source(
+    source_id: str,
+    *,
+    settings: Optional[Settings] = None,
+) -> dict:
+    """Change-detection gate: probe the seed URL, compare signature, skip or crawl.
+
+    SCHED-02: Probes the source's canonical URL, normalizes the markdown with
+    remove_boilerplate, SHA256s, and compares to Source.last_content_hash. If
+    unchanged within the staleness window, skips (no put_raw, no crawl_source).
+    Otherwise triggers a full crawl_source() and records the new hash.
+
+    Parameters
+    ----------
+    source_id:
+        Primary key of the Source to re-crawl.
+    settings:
+        Settings override (uses get_settings() if None).
+
+    Returns
+    -------
+    dict with source_id and status ('skipped_unchanged' or 'recrawled').
+    """
+    s = settings or get_settings()
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Load source metadata (opens own session)
+    src_data = _get_source_for_recrawl(source_id)
+    url = src_data["url"]
+    last_hash = src_data["last_content_hash"]
+    last_at = src_data["last_crawled_at"]
+    crawl_config = src_data.get("crawl_config") or {}
+
+    # D-10: per-source staleness override
+    max_days = crawl_config.get("max_staleness_days", s.crawl.max_staleness_days)
+    stale = (
+        last_at is not None
+        and (now - last_at) > datetime.timedelta(days=max_days)
+    )
+
+    # SSRF guard BEFORE any outbound HTTP (T-11-SSRF)
+    validate_public_url(url)
+
+    # Build adapter and probe the seed page
+    adapter = get_crawler(
+        type("_S", (), {"crawler": s.crawler})()
+    )
+    probe = await adapter.fetch_page(url)
+    sig = _signature(probe.markdown or "")
+
+    # Decision: skip or crawl
+    if last_hash is not None and sig == last_hash and not stale:
+        # Skip path: bump last_crawled_at only (D-11)
+        touch_source_crawl(source_id, last_crawled_at=now)
+        log.info(
+            "recrawl.skipped_unchanged",
+            source_id=source_id,
+            url=url,
+        )
+        return {"source_id": source_id, "status": "skipped_unchanged"}
+
+    # Crawl path: NULL hash, changed signature, or stale
+    crawl_result = await crawl_source(url, settings=s)
+    touch_source_crawl(source_id, last_crawled_at=now, last_content_hash=sig)
+    log.info(
+        "recrawl.recrawled",
+        source_id=source_id,
+        url=url,
+        reason="null_hash" if last_hash is None else ("stale" if stale else "changed"),
+    )
+    output: dict = {"source_id": source_id, "status": "recrawled"}
+    if isinstance(crawl_result, dict):
+        output.update(crawl_result)
+    return output
 
 
 def list_sources_for_crawl_all(domain: Optional[str] = None) -> list[Any]:
