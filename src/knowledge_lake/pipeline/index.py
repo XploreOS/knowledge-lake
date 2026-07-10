@@ -255,7 +255,7 @@ def reindex_collection(
             physical_collection=result["new_physical"],
             dim=dim,
         )
-        session.flush()
+        session.commit()
 
     log.info(
         "index.reindex.complete",
