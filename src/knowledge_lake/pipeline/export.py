@@ -30,6 +30,7 @@ Security mitigations implemented:
 from __future__ import annotations
 
 import io
+import re
 from typing import Optional
 
 import orjson
@@ -49,6 +50,12 @@ log = structlog.get_logger(__name__)
 # Lives beside the pipeline stage that uses it, not inside storage/s3.py (which is
 # zone-agnostic).
 _GOLD_PREFIX = "gold"
+
+# ── verify_export: SQL injection guard (WR-02) ────────────────────────────────
+# DuckDB SET statements are constructed via f-string interpolation. Validate
+# export_uri format and reject any config value that contains a single-quote
+# character before it can terminate a string literal early.
+_S3_URI_RE = re.compile(r"^s3://[a-zA-Z0-9_./()\-]+$")
 
 # ── RAG corpus column allow-list (T-05-08, ASVS V5 information-disclosure) ───
 
@@ -601,6 +608,21 @@ def verify_export(
 
     s = settings or get_settings()
     st = s.storage
+
+    # WR-02: Validate export_uri format and reject config values that contain a
+    # single-quote character before they reach f-string DuckDB SET statements.
+    if not _S3_URI_RE.match(export_uri):
+        raise ValueError(f"verify_export: invalid export_uri format: {export_uri!r}")
+    for _value, _name in [
+        (st.endpoint_url or "", "s3_endpoint"),
+        (st.access_key_id or "", "s3_access_key_id"),
+        (st.secret_access_key or "", "s3_secret_access_key"),
+    ]:
+        if "'" in _value:
+            raise ValueError(
+                f"Storage setting {_name!r} contains a single-quote character"
+                " — cannot safely construct DuckDB SET statement"
+            )
 
     con = duckdb.connect()
     try:
