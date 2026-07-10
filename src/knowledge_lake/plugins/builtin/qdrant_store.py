@@ -1,19 +1,21 @@
 """Qdrant-backed VectorStorePlugin for Knowledge Lake (D-11).
 
 Wraps qdrant-client 1.18 to provide:
-  - ensure_collection(): idempotently create a named collection with cosine distance
+  - ensure_collection(): idempotently create a named dense+sparse collection
   - ensure_aliased_collection(): idempotently bootstrap the first versioned
     collection behind a stable alias (D-06, INDEX-02)
   - ensure_payload_indexes(): create KEYWORD payload indexes for the 7 filterable
     fields (domain, document_type, source_name, format, source_id, tags, keywords)
     so filtered searches never trigger a full-collection scan (D-07, D-09, PAYLOAD-02)
-  - reindex(): zero-downtime reindex — new physical collection, populate, then
-    atomically repoint the alias in a single update_collection_aliases() call
+  - reindex(): zero-downtime reindex — new physical collection, populate, count-parity
+    gate, then atomically repoint the alias in a single update_collection_aliases() call
   - copy_all_points(): scroll+upsert all points between two collections
-  - get_collection_dim(): read back a collection's configured vector size
-  - upsert(): batch-upsert VectorPoints with citation payload fields (D-07)
-  - search(): ANN search returning Hits with score and citation payload,
-    optionally narrowed by a Qdrant Filter (query_filter, INDEX-03)
+  - reembed_all_points(): scroll+re-embed (reuse dense, synthesize sparse) for migration
+  - get_collection_dim(): read back a collection's configured vector size (named or unnamed)
+  - upsert(): batch-upsert VectorPoints with citation payload fields (D-07), branching
+    on named vs legacy unnamed collection shape (Pitfall 1, D-09)
+  - search(): dense/sparse/hybrid ANN search with fail-loud mode enforcement (D-10),
+    server-version preflight (D-07), and server-side RRF fusion (D-11)
 
 Citation payload fields preserved in each Qdrant point (D-07, D-14):
   document     — parsed document artifact ID this chunk came from
@@ -27,11 +29,31 @@ Registered as entry point:
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import structlog
 
 from knowledge_lake.plugins.protocols import Hit, VectorPoint, VectorStorePlugin
+
+
+def assert_server_supports_hybrid(client: Any) -> None:
+    """Assert the connected Qdrant server is >= 1.10 (required for hybrid/sparse, D-07).
+
+    Raises RuntimeError naming the server version and the >= 1.10 requirement if
+    the server is too old.  Pass the QdrantClient instance as ``client``.
+
+    This is a module-level helper so tests can call it directly without constructing
+    a full QdrantVectorStore.
+    """
+    from packaging.version import Version
+
+    info = client.info()  # VersionInfo(title, version, commit) — SERVER version
+    if Version(info.version) < Version("1.10"):
+        raise RuntimeError(
+            f"Qdrant server {info.version!r} is too old for hybrid/sparse retrieval. "
+            f"The Query API and IDF sparse vectors require server >= 1.10 "
+            f"(client is 1.18). Upgrade the running Qdrant server."
+        )
 
 log = structlog.get_logger(__name__)
 
@@ -52,12 +74,32 @@ class QdrantVectorStore:
 
     def __init__(self, qdrant_url: str = "http://localhost:6333") -> None:
         from qdrant_client import QdrantClient
-        from qdrant_client.models import Distance, PointStruct, VectorParams
+        from qdrant_client.models import (
+            Distance,
+            Fusion,
+            FusionQuery,
+            Modifier,
+            PointStruct,
+            Prefetch,
+            SparseVector,
+            SparseVectorParams,
+            VectorParams,
+        )
 
         self._Distance = Distance
         self._PointStruct = PointStruct
         self._VectorParams = VectorParams
+        self._SparseVectorParams = SparseVectorParams
+        self._Modifier = Modifier
+        self._SparseVector = SparseVector
+        self._Prefetch = Prefetch
+        self._FusionQuery = FusionQuery
+        self._Fusion = Fusion
         self._client = QdrantClient(url=qdrant_url)
+        # Cache for _is_named() results keyed by collection name
+        self._named_cache: dict[str, bool] = {}
+        # Sentinel: True once assert_server_supports_hybrid() has passed
+        self._hybrid_preflight_ok: bool = False
         log.debug("qdrant_store.connect", url=qdrant_url)
 
     def _distance_from_name(self, distance: str):
@@ -93,10 +135,15 @@ class QdrantVectorStore:
 
         dist = self._distance_from_name(distance)
 
+        from qdrant_client.models import Modifier, SparseVectorParams
+
         log.info("qdrant_store.create_collection", collection=name, dim=dim, distance=distance)
         self._client.create_collection(
             collection_name=name,
-            vectors_config=self._VectorParams(size=dim, distance=dist),
+            vectors_config={"dense": self._VectorParams(size=dim, distance=dist)},
+            sparse_vectors_config={
+                "sparse": SparseVectorParams(modifier=Modifier.IDF)
+            },
         )
         self.ensure_payload_indexes(name)
 
@@ -123,12 +170,20 @@ class QdrantVectorStore:
             dim=dim,
             distance=distance,
         )
-        self._client.create_collection(
-            collection_name=physical,
-            vectors_config=self._VectorParams(size=dim, distance=dist),
+        from qdrant_client.models import (
+            CreateAlias,
+            CreateAliasOperation,
+            Modifier,
+            SparseVectorParams,
         )
 
-        from qdrant_client.models import CreateAlias, CreateAliasOperation
+        self._client.create_collection(
+            collection_name=physical,
+            vectors_config={"dense": self._VectorParams(size=dim, distance=dist)},
+            sparse_vectors_config={
+                "sparse": SparseVectorParams(modifier=Modifier.IDF)
+            },
+        )
 
         self._client.update_collection_aliases(
             change_aliases_operations=[
@@ -252,13 +307,34 @@ class QdrantVectorStore:
             old_physical=old_physical,
             next_physical=next_physical,
         )
+        from qdrant_client.models import Modifier as _Modifier, SparseVectorParams as _SVP
+
         self._client.create_collection(
             collection_name=next_physical,
-            vectors_config=self._VectorParams(size=dim, distance=dist),
+            vectors_config={"dense": self._VectorParams(size=dim, distance=dist)},
+            sparse_vectors_config={
+                "sparse": _SVP(modifier=_Modifier.IDF)
+            },
         )
 
         upsert_fn(next_physical)
         self.ensure_payload_indexes(next_physical)
+
+        # D-06 — Count-parity gate: verify new collection point count matches old
+        # BEFORE the alias swap.  A mismatch means the upsert_fn produced an
+        # incomplete collection; abort so the alias keeps pointing at old_physical.
+        # Skip on first-ever reindex (old_physical is None).
+        if old_physical is not None:
+            old_count = self._client.count(old_physical, exact=True).count
+            new_count = self._client.count(next_physical, exact=True).count
+            if old_count != new_count:
+                raise ValueError(
+                    f"Reindex parity gate failed for alias '{alias}': "
+                    f"old collection '{old_physical}' has {old_count} points but "
+                    f"new collection '{next_physical}' has {new_count} points. "
+                    f"The alias swap was NOT applied — '{alias}' still points at "
+                    f"'{old_physical}'. Inspect the new collection and re-run reindex."
+                )
 
         from qdrant_client.models import (
             CreateAlias,
@@ -291,12 +367,54 @@ class QdrantVectorStore:
         return {"new_physical": next_physical, "old_physical": old_physical}
 
     def get_collection_dim(self, alias: str) -> int:
-        """Return the configured vector dimension for ``alias`` (or a physical collection name)."""
+        """Return the configured vector dimension for ``alias`` (or a physical collection name).
+
+        Branches on the collection's vector shape (Pitfall 2, D-05):
+        - Named collections: params.vectors is a dict → return vectors["dense"].size
+        - Legacy unnamed collections: params.vectors is a VectorParams → return vectors.size
+        """
         info = self._client.get_collection(alias)
-        return info.config.params.vectors.size
+        vectors = info.config.params.vectors
+        if isinstance(vectors, dict):
+            return vectors["dense"].size
+        return vectors.size
+
+    def _is_named(self, collection: str) -> bool:
+        """Return True when ``collection`` uses the named-vector shape (dense+sparse dict).
+
+        Reads ``get_collection(...).config.params.vectors``; caches the result per
+        collection name to avoid repeated server round-trips (Pitfall 1, D-09).
+        """
+        if collection not in self._named_cache:
+            info = self._client.get_collection(collection)
+            self._named_cache[collection] = isinstance(
+                info.config.params.vectors, dict
+            )
+        return self._named_cache[collection]
+
+    def _collection_has_sparse(self, collection: str) -> bool:
+        """Return True when ``collection`` has a 'sparse' vector configured (D-10)."""
+        params = self._client.get_collection(collection).config.params
+        sparse = params.sparse_vectors  # Optional[Dict[str, SparseVectorParams]]
+        return bool(sparse and "sparse" in sparse)
+
+    def assert_server_supports_hybrid(self) -> None:
+        """Memoized server-version preflight — asserts the running Qdrant server >= 1.10.
+
+        Calls the module-level helper on the first invocation, then memoizes success
+        so the check is at most one round-trip per process (D-07).
+        """
+        if not self._hybrid_preflight_ok:
+            assert_server_supports_hybrid(self._client)
+            self._hybrid_preflight_ok = True
 
     def upsert(self, collection: str, points: list[VectorPoint]) -> None:
         """Batch-upsert VectorPoints into a Qdrant collection.
+
+        Branches on the collection's vector shape (Pitfall 1, D-09):
+        - Named collections: builds vector={"dense": v, "sparse": SparseVector(…)}
+          (sparse only when VectorPoint.sparse is not None)
+        - Legacy unnamed collections: keeps the bare vector=v (no sparse)
 
         Each VectorPoint's payload is passed through intact, preserving the
         citation fields (document, section_path, page, chunk_id) required
@@ -306,14 +424,21 @@ class QdrantVectorStore:
             collection: Target collection name.
             points:     List of VectorPoint objects to upsert.
         """
-        qdrant_points = [
-            self._PointStruct(
-                id=p.id,
-                vector=p.vector,
-                payload=p.payload,
-            )
-            for p in points
-        ]
+        named = self._is_named(collection)
+        qdrant_points = []
+        for p in points:
+            if named:
+                vec: Any = {"dense": p.vector}
+                sparse_val = getattr(p, "sparse", None)
+                if sparse_val is not None:
+                    vec["sparse"] = sparse_val
+                qdrant_points.append(
+                    self._PointStruct(id=p.id, vector=vec, payload=p.payload)
+                )
+            else:
+                qdrant_points.append(
+                    self._PointStruct(id=p.id, vector=p.vector, payload=p.payload)
+                )
 
         log.info("qdrant_store.upsert", collection=collection, count=len(points))
         self._client.upsert(
@@ -321,36 +446,169 @@ class QdrantVectorStore:
             points=qdrant_points,
         )
 
+    def reembed_all_points(
+        self,
+        source: str,
+        dest: str,
+        sparse_doc_fn: Callable[[str], Any],
+        batch_size: int = 256,
+    ) -> int:
+        """Scroll all points from ``source``, reuse dense vectors, synthesize sparse via
+        ``sparse_doc_fn``, and upsert named {dense+sparse} points into ``dest``.
+
+        This is the re-embedding migration helper for the unnamed→named migration (D-05).
+        Dense vectors are reused from the scroll; only the sparse vector is synthesized.
+        ``sparse_doc_fn`` is caller-injected (Plan 10-07 passes embed_sparse_doc) — the
+        store stays generic and imports no encoder (D-01 seam).
+
+        Returns the total number of points upserted.
+        Uses explicit ``next_offset is None`` end-of-scroll sentinel (never falsy check).
+        """
+        total = 0
+        next_offset: Any = None
+        while True:
+            records, next_offset = self._client.scroll(
+                collection_name=source,
+                limit=batch_size,
+                offset=next_offset,
+                with_vectors=True,
+                with_payload=True,
+            )
+            if not records:
+                break
+
+            batch = []
+            for r in records:
+                # Reuse the scrolled dense vector — it hasn't changed (D-05)
+                if isinstance(r.vector, list):
+                    dense = r.vector
+                else:
+                    dense = r.vector.get("dense")  # type: ignore[union-attr]
+                text = (r.payload or {}).get("text", "")
+                sparse = sparse_doc_fn(text)
+                batch.append(
+                    self._PointStruct(
+                        id=r.id,
+                        vector={"dense": dense, "sparse": sparse},
+                        payload=r.payload,
+                    )
+                )
+            self._client.upsert(collection_name=dest, points=batch)
+            total += len(batch)
+
+            if next_offset is None:
+                break
+
+        log.info(
+            "qdrant_store.reembed_all_points", source=source, dest=dest, count=total
+        )
+        return total
+
     def search(
         self,
         collection: str,
         query: list[float],
         top_k: int,
         query_filter: Optional[Any] = None,
+        *,
+        mode: str = "dense",
+        sparse_query: Optional[Any] = None,
+        offset: int = 0,
     ) -> list[Hit]:
-        """Perform approximate nearest-neighbour search.
+        """Perform ANN search in dense, sparse, or hybrid mode.
 
-        Uses the Qdrant query_points API (qdrant-client 1.18 preferred method).
-        Returns a list of Hit objects ordered by score descending, carrying the
-        citation payload from the matched VectorPoint.
+        For hybrid/sparse modes: asserts server >= 1.10 and that the collection has a
+        'sparse' vector — raises a clear error if absent (fail-loud, D-10, RETR-03).
+
+        Hybrid uses two Prefetch branches (dense + sparse) with server-side RRF fusion
+        (D-11). Each branch limit = top_k + offset (D-12). Dense and sparse filters
+        are the same query_filter object applied on all branches and the top level
+        (D-14).
+
+        For named collections, dense uses using="dense". For legacy unnamed collections,
+        bare query is used (Pitfall 1, D-09).
 
         Args:
             collection:   Collection to search.
-            query:        Query vector (must have the same dimension as the collection).
+            query:        Dense query vector.
             top_k:        Maximum number of results to return.
-            query_filter: Optional Qdrant Filter to narrow results (INDEX-03).
+            query_filter: Optional Qdrant Filter to narrow results (INDEX-03, D-14).
+            mode:         'dense' (default), 'sparse', or 'hybrid' (keyword-only, D-09).
+            sparse_query: SparseVector for sparse/hybrid modes (keyword-only).
+            offset:       Pagination offset (keyword-only).
 
         Returns:
             List of Hit objects ordered by score descending.
         """
-        log.info("qdrant_store.search", collection=collection, top_k=top_k)
-
-        result = self._client.query_points(
-            collection_name=collection,
-            query=query,
-            limit=top_k,
-            query_filter=query_filter,
+        log.info(
+            "qdrant_store.search",
+            collection=collection,
+            top_k=top_k,
+            mode=mode,
+            offset=offset,
         )
+
+        if mode in ("hybrid", "sparse"):
+            # D-07: assert server capability
+            self.assert_server_supports_hybrid()
+            # D-10: fail loud when sparse vector is absent
+            if not self._collection_has_sparse(collection):
+                raise ValueError(
+                    f"mode={mode!r} requires a 'sparse' vector, but collection "
+                    f"{collection!r} has none. Run the hybrid reindex "
+                    f"(klake reindex --hybrid) to migrate this collection. "
+                    f"(dense mode still works against it.)"
+                )
+
+        branch_limit = top_k + offset  # D-12: tight — not 10×
+
+        if mode == "hybrid":
+            result = self._client.query_points(
+                collection_name=collection,
+                prefetch=[
+                    self._Prefetch(
+                        query=query,
+                        using="dense",
+                        filter=query_filter,
+                        limit=branch_limit,
+                    ),
+                    self._Prefetch(
+                        query=sparse_query,
+                        using="sparse",
+                        filter=query_filter,
+                        limit=branch_limit,
+                    ),
+                ],
+                query=self._FusionQuery(fusion=self._Fusion.RRF),
+                query_filter=query_filter,
+                limit=top_k,
+                offset=offset,
+                with_payload=True,
+            )
+        elif mode == "sparse":
+            result = self._client.query_points(
+                collection_name=collection,
+                query=sparse_query,
+                using="sparse",
+                query_filter=query_filter,
+                limit=top_k,
+                offset=offset,
+                with_payload=True,
+            )
+        else:
+            # mode == "dense" (default)
+            named = self._is_named(collection)
+            query_kwargs: dict[str, Any] = dict(
+                collection_name=collection,
+                query=query,
+                query_filter=query_filter,
+                limit=top_k,
+                offset=offset,
+                with_payload=True,
+            )
+            if named:
+                query_kwargs["using"] = "dense"
+            result = self._client.query_points(**query_kwargs)
 
         hits: list[Hit] = [
             Hit(
