@@ -32,7 +32,7 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend
+from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
 
@@ -298,9 +298,9 @@ def clean(
     # and hitting the unique constraint with an unhandled IntegrityError.
     # The S3 put_object call is idempotent for the same key, so it is safe here.
     with get_session() as session:
-        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
         source_obj = registry_repo.get_source(session, source_id)
         source_name = source_obj.name if source_obj else "unknown"
+        domain = (source_obj.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN if source_obj else _UNCLASSIFIED_DOMAIN
         cleaned_key = f"{_SILVER_PREFIX}/{domain}/{source_id}/cleaned/{content_hash}.md"
         # Step 5: Exact dedup check — same pattern as parse stage (FOUND-04)
         existing = registry_repo.get_artifact_by_hash(session, content_hash, "cleaned_document")

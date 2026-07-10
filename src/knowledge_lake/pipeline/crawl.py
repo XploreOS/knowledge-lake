@@ -41,7 +41,7 @@ from knowledge_lake.plugins.resolver import get_crawler
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.repo import list_sources_for_crawl_all as _repo_list_sources_for_crawl_all
-from knowledge_lake.storage.s3 import StorageBackend
+from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
 
@@ -675,9 +675,9 @@ def _write_artifacts(
         return None, None
 
     with get_session() as session:
-        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
         source_obj = registry_repo.get_source(session, source_id)
         source_name = source_obj.name if source_obj else "unknown"
+        domain = (source_obj.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN if source_obj else _UNCLASSIFIED_DOMAIN
 
         # Write raw HTML artifact with correct mime_type
         raw_artifact = storage.put_raw(

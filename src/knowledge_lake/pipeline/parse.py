@@ -21,7 +21,7 @@ from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.plugins.resolver import get_parser, parse_with_fallback
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend
+from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
 
@@ -110,9 +110,9 @@ def parse(
     # conditions under concurrent execution (CR-02). Both the read and the write
     # happen within the same session, making the dedup + insert effectively atomic.
     with get_session() as session:
-        domain = registry_repo.get_domain_for_source(session, source_id) or "_unclassified"
         source_obj = registry_repo.get_source(session, source_id)
         source_name = source_obj.name if source_obj else "unknown"
+        domain = (source_obj.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN if source_obj else _UNCLASSIFIED_DOMAIN
         silver_key = f"{_SILVER_PREFIX}/{domain}/{source_id}/{content_hash}.md"
         existing = registry_repo.get_artifact_by_hash(session, content_hash, "parsed_document")
         if existing is not None:
