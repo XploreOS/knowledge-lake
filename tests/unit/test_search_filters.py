@@ -183,3 +183,64 @@ class TestSearchSourceFilters:
 
         call_kwargs = fake_vstore.search.call_args.kwargs
         assert call_kwargs["query_filter"] is None
+
+
+class TestFilterPrefetchParity:
+    """Phase-7 filter is preserved unchanged when mode='hybrid' (D-14 continuity).
+
+    Encodes: must_have truth §6 (D-14) — the reused Phase-7 filter builder output
+    attaches to each prefetch branch AND the top level in hybrid mode. At the
+    pipeline layer this means asserting fake_vstore.search.call_args.kwargs still
+    carries the built query_filter unchanged when mode='hybrid'.
+
+    The per-branch attachment (each Prefetch's filter= field) is asserted at the
+    store layer in tests/unit/test_qdrant_hybrid.py::test_hybrid_prefetch_limits.
+    """
+
+    @pytest.mark.xfail(
+        reason="Plan 10-06/10-07: mode kwarg not yet wired in pipeline.search",
+        strict=False,
+    )
+    def test_filter_attaches_each_prefetch_branch(self, fake_vstore) -> None:
+        """search('q', mode='hybrid', domain='healthcare') carries the built Filter
+        unchanged in vstore.search.call_args.kwargs['query_filter'] (D-14).
+
+        This asserts the pipeline layer preserves the Phase-7 filter builder output
+        when mode='hybrid' — the filter is not dropped, replaced, or None.
+        """
+        search_module.search(  # type: ignore[call-arg]
+            "q",
+            collection="c",
+            top_k=5,
+            mode="hybrid",
+            domain="healthcare",
+        )
+
+        call_kwargs = fake_vstore.search.call_args.kwargs
+
+        # The filter must be present and non-None (domain='healthcare' triggers builder)
+        query_filter = call_kwargs.get("query_filter")
+        assert query_filter is not None, (
+            "query_filter must not be None when domain='healthcare' is passed with mode='hybrid'. "
+            "The Phase-7 filter builder must still run in hybrid mode (D-14)."
+        )
+
+        # The filter must be a qdrant Filter with the correct domain condition
+        assert isinstance(query_filter, Filter), (
+            f"Expected qdrant_client.models.Filter, got {type(query_filter)}"
+        )
+        assert len(query_filter.must) >= 1, (
+            f"Filter.must must contain at least 1 condition, got {len(query_filter.must)}"
+        )
+        domain_conditions = [
+            c for c in query_filter.must
+            if isinstance(c, FieldCondition) and c.key == "domain"
+        ]
+        assert len(domain_conditions) == 1, (
+            f"Expected 1 domain FieldCondition in query_filter.must, "
+            f"got {len(domain_conditions)}: {domain_conditions}"
+        )
+        assert domain_conditions[0].match.value == "healthcare", (
+            f"domain filter value must be 'healthcare', "
+            f"got {domain_conditions[0].match.value!r}"
+        )
