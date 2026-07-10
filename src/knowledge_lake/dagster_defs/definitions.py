@@ -55,6 +55,7 @@ from knowledge_lake.dagster_defs.resources import (
     PostgresResource,
     QdrantResource,
 )
+from knowledge_lake.dagster_defs.sensors import recrawl_sensor, recrawl_source_job
 
 logger = structlog.get_logger(__name__)
 
@@ -79,7 +80,8 @@ defs = Definitions(
         export_pretrain_corpus,
         export_finetune_dataset,
     ],
-    jobs=[healthcare_e2e_job],
+    jobs=[healthcare_e2e_job, recrawl_source_job],
+    sensors=[recrawl_sensor],
     resources={
         "postgres": PostgresResource(
             database_url=EnvVar("KLAKE_DATABASE_URL"),
