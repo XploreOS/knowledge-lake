@@ -181,6 +181,7 @@ def test_e2e_search_returns_result(e2e_results: list[dict[str, Any]]) -> None:
         "medical record",
         collection=E2E_COLLECTION,
         top_k=1,
+        mode="dense",  # e2e collection is pre-hybrid (dense-only); hybrid default requires sparse vectors
     )
     assert len(hits) >= 1, (
         f"Search returned 0 results for 'medical record' in collection '{E2E_COLLECTION}'. "
