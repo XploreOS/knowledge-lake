@@ -137,7 +137,32 @@ Plans:
   3. A user can set `KLAKE_SEARCH__MODE=hybrid|dense|sparse` (default `hybrid`); a request for a mode whose vectors are absent fails loudly rather than silently degrading.
   4. Phase 7 payload filters continue to work in hybrid mode; the running Qdrant server is confirmed ≥ 1.10 before the migration runs.
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+**Wave 1** *(parallel — RED test scaffolds + dependency)*
+
+- [ ] 10-01-PLAN.md — Store/migration RED tests: test_qdrant_hybrid.py + test_qdrant_hybrid_migration.py (RETR-01, D-07)
+- [ ] 10-02-PLAN.md — Mode-surface RED tests: settings/search-mode/CLI/API + extend test_search_filters.py (RETR-03, D-14)
+- [ ] 10-03-PLAN.md — fastembed>=0.8,<0.9 dependency + Qdrant/bm25 install checkpoint (RETR-01, D-01) *(checkpoint — autonomous:false)*
+
+**Wave 2** *(parallel — contracts + sparse encoder)*
+
+- [ ] 10-04-PLAN.md — SearchSettings + settings.search; VectorPoint.sparse + VectorStorePlugin.search signature (RETR-03/01, D-08/D-09)
+- [ ] 10-05-PLAN.md — plugins/builtin/sparse_embedder.py fastembed Qdrant/bm25 wrapper (RETR-01, D-01/D-03)
+
+**Wave 3** *(store core)*
+
+- [ ] 10-06-PLAN.md — qdrant_store.py: named create-paths, get_collection_dim, _is_named, server preflight, upsert shape branch, reembed helper, hybrid RRF search + fail-loud, reindex parity gate (RETR-01/03, D-05/D-06/D-07/D-10/D-11/D-12/D-13)
+
+**Wave 4** *(pipeline wiring)*
+
+- [ ] 10-07-PLAN.md — index.py (sparse build + live re-embed migration + preflight) + search.py (mode + sparse_query) (RETR-01/03, D-03/D-05/D-09)
+
+**Wave 5** *(interface surface)*
+
+- [ ] 10-08-PLAN.md — cli/app.py (search --mode, reindex --hybrid) + api/app.py + api/schemas.py (?mode= with fail-closed validation) (RETR-01/03, D-04/D-09)
+
 **Migration note**: LIVE DATA MIGRATION (Qdrant unnamed→named-vector collection recreate + re-embedding upsert). Flag for `--research-phase` at plan time — verify `query_points`/`FusionQuery`/`SparseVectorParams`/`Modifier.IDF` against installed qdrant-client 1.18, confirm Qdrant server ≥ 1.10, and validate the re-embedding reindex on a collection copy first. Rollback: alias keeps old collections until parity is verified.
 
 ### Phase 11: Crawl Scheduling
@@ -180,6 +205,6 @@ Plans:
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
-| 10. Hybrid Retrieval | 0/? | Not started | - |
+| 10. Hybrid Retrieval | 0/8 | Planned | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
