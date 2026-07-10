@@ -11,7 +11,7 @@
 
 - [x] **Phase 7: Metadata Foundation** - Expanded chunk payload + searchable metadata filters (CLI + API) (completed 2026-07-08)
 - [x] **Phase 8: Crawl Maturation** - Per-source config, adaptive rate limiting, linked-doc ingest, `crawl-all`, partial-JSON recovery (completed 2026-07-09)
-- [ ] **Phase 9: Storage Segmentation** - Domain/source-scoped S3 keys, object tags, gold-zone sub-zones (forward-only)
+- [x] **Phase 9: Storage Segmentation** - Domain/source-scoped S3 keys, object tags, gold-zone sub-zones (forward-only) (completed 2026-07-10)
 - [ ] **Phase 10: Hybrid Retrieval** - BM25 + dense named vectors with server-side RRF, mode-switchable *(LIVE MIGRATION)*
 - [ ] **Phase 11: Crawl Scheduling** - Dagster re-crawl sensor + normalized-text change gate *(LIVE MIGRATION)*
 - [ ] **Phase 12: Agent Surfaces** - Curated MCP server (stdio + Streamable HTTP), OpenAPI/OpenAI tool defs, Claude Code skills
@@ -179,7 +179,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
-| 9. Storage Segmentation | 6/6 | Complete   | 2026-07-09 |
+| 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 0/? | Not started | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
