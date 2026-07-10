@@ -99,6 +99,17 @@ class VectorPoint:
     payload: dict[str, Any] = field(default_factory=dict)
     """Metadata payload. Must include: document, section_path, page, chunk_id."""
 
+    sparse: Optional[Any] = None
+    """Optional BM25 sparse vector for named collections (RETR-01, D-09).
+
+    Carries the Qdrant SparseVector (indices + values) produced by the fastembed
+    BM25 encoder. Defaults to None so all existing VectorPoint constructions
+    remain valid without modification — additive-default convention (mirrors
+    CrawlPageResult.http_status_code). Points without sparse vectors work in
+    dense-only mode; hybrid/sparse modes require the field to be populated
+    (populated at index time after the named-vector reindex, D-05).
+    """
+
 
 @dataclass
 class Hit:
@@ -317,18 +328,38 @@ class VectorStorePlugin(Protocol):
         query: list[float],
         top_k: int,
         query_filter: Optional[Any] = None,
+        *,
+        mode: str = "dense",
+        sparse_query: Optional[Any] = None,
+        offset: int = 0,
     ) -> list[Hit]:
         """Perform approximate nearest-neighbour search.
 
         Args:
-            collection:   Collection to search.
-            query:        Query vector (must have the same dimension as the collection).
-            top_k:        Maximum number of results to return.
-            query_filter: Optional backend-specific filter object (Qdrant's
-                          ``Filter`` for the built-in implementation) — an
-                          acknowledged simplification for this MVP phase since
-                          there is currently only one VectorStorePlugin
-                          implementation.
+            collection:    Collection to search.
+            query:         Dense query vector (must have the same dimension as the
+                           collection). Used for 'dense' and 'hybrid' modes.
+            top_k:         Maximum number of results to return.
+            query_filter:  Optional backend-specific filter object (Qdrant's
+                           ``Filter`` for the built-in implementation) — an
+                           acknowledged simplification for this MVP phase since
+                           there is currently only one VectorStorePlugin
+                           implementation.
+            mode:          Retrieval mode — 'dense' | 'sparse' | 'hybrid'.
+                           Keyword-only. Defaults to 'dense' so existing callers
+                           are unaffected until they opt in (additive-default
+                           back-compat convention, D-09). The concrete
+                           implementation (Plan 10-06) enforces fail-loud when
+                           the requested mode's vectors are absent (D-10).
+            sparse_query:  Query-side SparseVector (indices + values) for
+                           'sparse' and 'hybrid' modes. Keyword-only. Defaults
+                           to None — existing callers are unaffected. Must be
+                           provided for sparse/hybrid when the concrete
+                           implementation requires it.
+            offset:        Number of results to skip for pagination. Keyword-only.
+                           The concrete implementation uses this for prefetch-limit
+                           headroom: prefetch limit == top_k + offset (D-12).
+                           Defaults to 0.
 
         Returns:
             List of Hit objects ordered by score descending.
