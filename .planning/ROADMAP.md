@@ -205,6 +205,6 @@ Plans:
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
-| 10. Hybrid Retrieval | 0/8 | Planned | - |
+| 10. Hybrid Retrieval | 0/8 | Planned (ready for execution) | - |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |

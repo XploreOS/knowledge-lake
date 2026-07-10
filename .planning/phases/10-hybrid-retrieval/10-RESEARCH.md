@@ -420,17 +420,17 @@ def re_embed_fn(new_physical: str) -> None:
 | A3 | Every legacy point carries a usable `payload["text"]` to re-embed from. | Migration | If some pre-Phase-1 point lacks text, its sparse vector is empty; parity gate + a guard (example h) surface it. Low risk (text stored since Phase 1). |
 | A4 | fastembed 0.8.x installs cleanly CPU-only on the droplet (onnxruntime, no torch). | Environment Availability | If a heavy/conflicting dep appears, fall back to `rank_bm25` (D-01 fallback). Must be verified at install time — fastembed isn't in the venv yet. Flagged in Environment Availability + Validation. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Back-compat for `dense` mode against un-migrated collections (Pitfall 1).**
+1. **Back-compat for `dense` mode against un-migrated collections (Pitfall 1).** ✅ RESOLVED → Plan 10-06 implements cached `_is_named(collection)` branch in `upsert()`/`search()` per recommendation.
    - What we know: fresh collections should be born-named; legacy collections stay unnamed until the operator reindexes. D-09 requires `dense` to work on both.
    - What's unclear: whether the planner wants a shape-detection branch in `upsert()`/`search()` (recommended) or to require migration before any further indexing (simpler but breaks continued indexing into a legacy collection).
    - Recommendation: implement the cached `_is_named(collection)` branch — it fully honors D-09 and is ~10 lines. Cover it with a unit test.
-2. **fastembed install footprint on the droplet.**
+2. **fastembed install footprint on the droplet.** ✅ RESOLVED → Plan 10-03 includes a `checkpoint:human-verify` step after `uv add fastembed`.
    - What we know: it's qdrant-client's own CPU extra (onnxruntime), and the model downloads on first use.
    - What's unclear: exact transitive size and whether outbound HF access is available at runtime on the droplet.
    - Recommendation: a `checkpoint:human-verify` after `uv add fastembed` — install, import `SparseTextEmbedding("Qdrant/bm25")`, embed one string, confirm no torch/GPU pulled and the model caches. If it fails, D-01 fallback to `rank_bm25`.
-3. **Migration surface: `klake reindex --hybrid` flag vs new subcommand (Claude's discretion, D-04).**
+3. **Migration surface: `klake reindex --hybrid` flag vs new subcommand (Claude's discretion, D-04).** ✅ RESOLVED → Plan 10-08 adds `--hybrid` flag on the existing `reindex` CLI path.
    - Recommendation: a `--hybrid` flag on the existing `reindex` command path is lowest-surface and reuses `reindex_collection()`; the flag swaps `_copy_fn` → `re_embed_fn` and asserts the server preflight first.
 
 ## Environment Availability
