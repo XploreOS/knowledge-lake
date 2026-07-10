@@ -697,6 +697,10 @@ def cmd_search(
         None, "--tag",
         help="Filter results to chunks tagged with this tag (repeatable: --tag a --tag b uses OR logic)."
     ),
+    mode: Optional[str] = typer.Option(
+        None, "--mode",
+        help="Search mode: hybrid|dense|sparse (default from KLAKE_SEARCH__MODE, else hybrid)."
+    ),
 ) -> None:
     """Embed a query and return the top-K matching chunks with citation.
 
@@ -704,6 +708,10 @@ def cmd_search(
 
     New filter flags (Phase 7 PAYLOAD-02):
         --source-name, --format, --source-id, --tag (repeatable).
+
+    Mode selection (Phase 10 RETR-03):
+        --mode hybrid|dense|sparse — overrides KLAKE_SEARCH__MODE for this call.
+        Omitting --mode lets pipeline.search fall back to settings.search.mode (default hybrid).
 
     D-13 backward-compat note:
         source_name, format, tags, source_id filters are only effective on points indexed
@@ -723,6 +731,7 @@ def cmd_search(
         format=format,
         source_id=source_id,
         tags=tag,  # CLI param is named 'tag' (list[str]); search() expects 'tags'
+        mode=mode,
     )
 
     if not hits:
@@ -759,21 +768,36 @@ def cmd_reindex(
     collection: str = typer.Option(
         "klake_chunks", "--collection", "-c", help="Qdrant alias to reindex."
     ),
+    hybrid: bool = typer.Option(
+        False, "--hybrid",
+        help=(
+            "Migrate the alias to named dense+sparse vectors via a re-embedding reindex "
+            "(RETR-01 live migration). "
+            "Runs assert_server_supports_hybrid preflight first — aborts cleanly if the "
+            "server is too old or the parity gate fails; the alias keeps the old collection "
+            "on any preflight/parity abort (rollback)."
+        ),
+    ),
 ) -> None:
     """Reindex a Qdrant alias with zero search downtime (INDEX-02).
 
     Creates the next versioned physical collection, copies all existing points
     into it, then atomically repoints the alias. The prior physical collection
     is retained (never auto-dropped).
+
+    With --hybrid: triggers the RETR-01 operator live migration — re-embeds all
+    existing points with dense+sparse named vectors.  The D-07 server preflight
+    and D-06 parity gate run before any data is touched; on failure the alias
+    continues to point at the old collection (safe rollback).
     """
     from knowledge_lake.pipeline.index import reindex_collection
 
     try:
-        result = reindex_collection(collection)
+        result = reindex_collection(collection, hybrid=hybrid)
         typer.echo(f"Reindexed: {result['collection']}")
         typer.echo(f"  new_physical: {result['new_physical']}")
         typer.echo(f"  old_physical: {result.get('old_physical')}")
-    except (ValueError, LookupError) as exc:
+    except (ValueError, LookupError, RuntimeError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
