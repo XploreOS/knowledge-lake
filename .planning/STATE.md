@@ -6,15 +6,15 @@ current_phase: 10
 current_phase_name: hybrid-retrieval
 status: executing
 stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-07-10T08:36:45.558Z"
+last_updated: "2026-07-10T08:49:23.585Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 10 execution resumed (wave continue)
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 24
-  completed_plans: 23
-  percent: 50
+  completed_plans: 24
+  percent: 67
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 10 (hybrid-retrieval) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 10 execution resumed (wave continue)
 
@@ -99,6 +99,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 10 P03 | 3 | - tasks | - files |
 | Phase 10 P04 | 4m | 2 tasks | 3 files |
 | Phase 10 P07 | 38 | 3 tasks | 3 files |
+| Phase 10 P08 | 7m | 2 tasks | 3 files |
 
 ### Quick Tasks Completed
 
@@ -183,6 +184,9 @@ Recent decisions affecting current work:
 - [Phase ?]: SearchSettings nested model uses Literal[hybrid,dense,sparse] for fail-closed pydantic validation (T-10-02, D-08, RETR-03)
 - [Phase ?]: VectorPoint.sparse defaults to None — additive back-compat (RETR-01, D-09)
 - [Phase ?]: VectorStorePlugin.search keyword-only mode/sparse_query/offset with additive defaults (D-09)
+- [Phase ?]: mode=None passes through to pipeline.search; effective_mode resolved in pipeline (hybrid default) — no settings mutation at CLI/API layer (RETR-03, D-09)
+- [Phase ?]: RuntimeError added to cmd_reindex except tuple: D-07 preflight and D-06 parity gate abort surfaces cleanly with typer.Exit(code=1)
+- [Phase ?]: Query(pattern=^(hybrid|dense|sparse)$) on FastAPI endpoint: automatic 422 on invalid mode before handler runs (T-10-02, ASVS V5)
 
 ### Pending Todos
 
@@ -219,7 +223,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Completed 10-04-PLAN.md
 
-Last session: 2026-07-10T08:36:45.549Z
+Last session: 2026-07-10T08:49:00.546Z
 Resume file: None
 
 ## Operator Next Steps

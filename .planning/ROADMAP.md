@@ -137,7 +137,7 @@ Plans:
   3. A user can set `KLAKE_SEARCH__MODE=hybrid|dense|sparse` (default `hybrid`); a request for a mode whose vectors are absent fails loudly rather than silently degrading.
   4. Phase 7 payload filters continue to work in hybrid mode; the running Qdrant server is confirmed ≥ 1.10 before the migration runs.
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans complete
 
 Plans:
 **Wave 1** *(parallel — RED test scaffolds + dependency)*
@@ -161,7 +161,7 @@ Plans:
 
 **Wave 5** *(interface surface)*
 
-- [ ] 10-08-PLAN.md — cli/app.py (search --mode, reindex --hybrid) + api/app.py + api/schemas.py (?mode= with fail-closed validation) (RETR-01/03, D-04/D-09)
+- [x] 10-08-PLAN.md — cli/app.py (search --mode, reindex --hybrid) + api/app.py + api/schemas.py (?mode= with fail-closed validation) (RETR-01/03, D-04/D-09)
 
 **Migration note**: LIVE DATA MIGRATION (Qdrant unnamed→named-vector collection recreate + re-embedding upsert). Flag for `--research-phase` at plan time — verify `query_points`/`FusionQuery`/`SparseVectorParams`/`Modifier.IDF` against installed qdrant-client 1.18, confirm Qdrant server ≥ 1.10, and validate the re-embedding reindex on a collection copy first. Rollback: alias keeps old collections until parity is verified.
 
@@ -205,6 +205,6 @@ Plans:
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
-| 10. Hybrid Retrieval | 7/8 | In Progress|  |
+| 10. Hybrid Retrieval | 8/8 | Complete   | 2026-07-10 |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
