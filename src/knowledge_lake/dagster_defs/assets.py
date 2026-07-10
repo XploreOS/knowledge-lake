@@ -684,6 +684,18 @@ def curate_document_asset(
 # ── Export assets (EXPORT-01..03) ─────────────────────────────────────────────
 
 
+class ExportRagConfig(Config):
+    """Dagster run config for the export_rag_corpus asset (EXPORT-01).
+
+    Pass domain at materialize time so gold-zone exports land under the correct
+    domain segment (STORE-03).  Leave empty to fall back to ``_unclassified``.
+    """
+
+    domain: str = ""
+    """Domain classification for the export (e.g. ``healthcare``).  Empty string
+    falls back to the ``_unclassified`` segment — matches CLI/API default behaviour."""
+
+
 @asset(
     description=(
         "Export all chunk artifacts as a Parquet file to the gold zone (EXPORT-01). "
@@ -694,6 +706,7 @@ def curate_document_asset(
     retry_policy=_EXPORT_RETRY,
 )
 def export_rag_corpus(
+    config: ExportRagConfig,
     postgres: PostgresResource,
     minio: MinIOResource,
 ) -> dict[str, Any]:
@@ -722,10 +735,22 @@ def export_rag_corpus(
         _env_file=None,  # type: ignore[call-arg]
     )
 
-    log.info("dagster.export_rag_corpus.start")
-    result = export_rag_fn(settings=settings)
+    log.info("dagster.export_rag_corpus.start", domain=config.domain or "_unclassified")
+    result = export_rag_fn(domain=config.domain or None, settings=settings)
     log.info("dagster.export_rag_corpus.complete", row_count=result.get("row_count"))
     return result
+
+
+class ExportPretrainConfig(Config):
+    """Dagster run config for the export_pretrain_corpus asset (EXPORT-02).
+
+    Pass domain at materialize time so gold-zone exports land under the correct
+    domain segment (STORE-03).  Leave empty to fall back to ``_unclassified``.
+    """
+
+    domain: str = ""
+    """Domain classification for the export (e.g. ``healthcare``).  Empty string
+    falls back to the ``_unclassified`` segment — matches CLI/API default behaviour."""
 
 
 @asset(
@@ -738,6 +763,7 @@ def export_rag_corpus(
     retry_policy=_EXPORT_RETRY,
 )
 def export_pretrain_corpus(
+    config: ExportPretrainConfig,
     postgres: PostgresResource,
     minio: MinIOResource,
 ) -> dict[str, Any]:
@@ -764,8 +790,8 @@ def export_pretrain_corpus(
         _env_file=None,  # type: ignore[call-arg]
     )
 
-    log.info("dagster.export_pretrain_corpus.start")
-    result = export_pretrain_fn(settings=settings)
+    log.info("dagster.export_pretrain_corpus.start", domain=config.domain or "_unclassified")
+    result = export_pretrain_fn(domain=config.domain or None, settings=settings)
     log.info("dagster.export_pretrain_corpus.complete", row_count=result.get("row_count"))
     return result
 
@@ -778,6 +804,10 @@ class ExportFinetuneConfig(Config):
 
     dataset_name: str = ""
     """Name of the logical Dataset row to export (must already exist in the registry)."""
+
+    domain: str = ""
+    """Domain classification for the export (e.g. ``healthcare``).  Empty string
+    falls back to the ``_unclassified`` segment — matches CLI/API default behaviour."""
 
 
 @asset(
@@ -818,8 +848,8 @@ def export_finetune_dataset(
         _env_file=None,  # type: ignore[call-arg]
     )
 
-    log.info("dagster.export_finetune_dataset.start", dataset_name=config.dataset_name)
-    result = export_finetune_fn(config.dataset_name, settings=settings)
+    log.info("dagster.export_finetune_dataset.start", dataset_name=config.dataset_name, domain=config.domain or "_unclassified")
+    result = export_finetune_fn(config.dataset_name, domain=config.domain or None, settings=settings)
     log.info(
         "dagster.export_finetune_dataset.complete",
         row_count=result.get("row_count"),
