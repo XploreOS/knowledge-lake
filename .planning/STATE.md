@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — Agent-Ready Lake
-current_phase: 10
-current_phase_name: hybrid-retrieval
+current_phase: 11
+current_phase_name: crawl-scheduling
 status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-07-10T09:42:15.329Z"
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-07-10T10:59:42.684Z"
 last_activity: 2026-07-10
-last_activity_desc: Phase 10 execution resumed (wave continue)
+last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 29
+  completed_plans: 25
   percent: 67
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 10 — hybrid-retrieval
+**Current focus:** Phase 11 — crawl-scheduling
 
 ## Current Position
 
-Phase: 10 (hybrid-retrieval) — EXECUTING
-Plan: 8 of 8
+Phase: 11 (crawl-scheduling) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-10 — Phase 10 execution resumed (wave continue)
+Last activity: 2026-07-10 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -100,6 +100,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 10 P04 | 4m | 2 tasks | 3 files |
 | Phase 10 P07 | 38 | 3 tasks | 3 files |
 | Phase 10 P08 | 7m | 2 tasks | 3 files |
+| Phase 11 P01 | 3m | 3 tasks | 4 files |
 
 ### Quick Tasks Completed
 
@@ -187,6 +188,7 @@ Recent decisions affecting current work:
 - [Phase ?]: mode=None passes through to pipeline.search; effective_mode resolved in pipeline (hybrid default) — no settings mutation at CLI/API layer (RETR-03, D-09)
 - [Phase ?]: RuntimeError added to cmd_reindex except tuple: D-07 preflight and D-06 parity gate abort surfaces cleanly with typer.Exit(code=1)
 - [Phase ?]: Query(pattern=^(hybrid|dense|sparse)$) on FastAPI endpoint: automatic 422 on invalid mode before handler runs (T-10-02, ASVS V5)
+- [Phase ?]: Sensor tests use _get_now monkeypatch for deterministic time control; gate tests use FakeCrawler adapter; migration head-chain uses skipif on 0009 module import
 
 ### Pending Todos
 
@@ -221,10 +223,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** Phase 11 context gathered
+**Stopped at:** Completed 11-01-PLAN.md
 
-Last session: 2026-07-10T09:42:15.320Z
-Resume file: .planning/phases/11-crawl-scheduling/11-CONTEXT.md
+Last session: 2026-07-10T10:59:42.675Z
+Resume file: None
 
 ## Operator Next Steps
 
