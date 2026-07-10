@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 import typer
 
 import knowledge_lake
+from knowledge_lake.registry.repo import set_source_schedule
 
 app = typer.Typer(
     name="klake",
@@ -1165,6 +1166,51 @@ def cmd_index(
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command(name="set-schedule")
+def cmd_set_schedule(
+    source_id: str = typer.Argument(..., help="Source ID to update."),
+    cron: Optional[str] = typer.Option(
+        None, "--cron", help="5-field UTC cron string (e.g. '0 3 * * *')."
+    ),
+    clear: bool = typer.Option(False, "--clear", help="Clear the crawl schedule."),
+) -> None:
+    """Set or clear a source's crawl schedule.
+
+    Validates the cron expression with Dagster's is_valid_cron_string before
+    persisting. A malformed cron is rejected with a non-zero exit.
+    Use --clear to remove the schedule (disable auto-recrawl).
+    """
+    from dagster._utils.schedules import is_valid_cron_string
+
+    from knowledge_lake.registry.db import get_session
+
+    if clear:
+        with get_session() as session:
+            result = set_source_schedule(session, source_id, None)
+            if not result:
+                typer.echo(f"Error: Source '{source_id}' not found.", err=True)
+                raise typer.Exit(code=1)
+            session.commit()
+        typer.echo(f"Cleared crawl schedule for source '{source_id}'.")
+        return
+
+    if cron is None:
+        typer.echo("Error: Must provide --cron <expression> or --clear.", err=True)
+        raise typer.Exit(code=1)
+
+    if not is_valid_cron_string(cron):
+        typer.echo(f"Error: Invalid cron expression '{cron}'.", err=True)
+        raise typer.Exit(code=1)
+
+    with get_session() as session:
+        result = set_source_schedule(session, source_id, cron)
+        if not result:
+            typer.echo(f"Error: Source '{source_id}' not found.", err=True)
+            raise typer.Exit(code=1)
+        session.commit()
+    typer.echo(f"Set crawl schedule for source '{source_id}': {cron}")
 
 
 if __name__ == "__main__":
