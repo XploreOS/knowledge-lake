@@ -39,7 +39,7 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.ids import new_id
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
-from knowledge_lake.storage.s3 import StorageBackend
+from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
 
@@ -322,7 +322,7 @@ def export_rag_corpus(
         buf.seek(0)
 
         export_id = new_id("dataset")
-        domain_seg = domain or "_unclassified"
+        domain_seg = domain or _UNCLASSIFIED_DOMAIN
         key = f"{s.export.gold_prefix}/{domain_seg}/rag_corpus/{export_id}.parquet"
         storage.put_object(key, buf.getvalue(), tags={
             "domain": domain_seg,
@@ -414,7 +414,7 @@ def export_pretrain_corpus(
             jsonl_bytes += b"\n"
 
         export_id = new_id("dataset")
-        domain_seg = domain or "_unclassified"
+        domain_seg = domain or _UNCLASSIFIED_DOMAIN
         key = f"{s.export.gold_prefix}/{domain_seg}/pretrain/{export_id}.jsonl"
         storage.put_object(key, jsonl_bytes, tags={
             "domain": domain_seg,
@@ -534,7 +534,7 @@ def export_finetune_dataset(
         if jsonl_bytes:
             jsonl_bytes += b"\n"
 
-        domain_seg = domain or "_unclassified"
+        domain_seg = domain or _UNCLASSIFIED_DOMAIN
         key = f"{s.export.gold_prefix}/{domain_seg}/finetune/{dataset.id}.jsonl"
         storage.put_object(key, jsonl_bytes, tags={
             "domain": domain_seg,

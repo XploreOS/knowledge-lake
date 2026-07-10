@@ -37,6 +37,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# Fallback domain segment used when no domain has been assigned to a source.
+# Defined once here so all zones (raw, bronze, gold) use the same literal string
+# — a rename never silently splits the storage namespace across modules.
+_UNCLASSIFIED_DOMAIN = "_unclassified"
+
 
 def _format_tags(tags: dict[str, str]) -> str:
     """Encode a tag dict to the URL-encoded string S3's Tagging= parameter expects.
@@ -254,7 +259,7 @@ class StorageBackend:
 
         # Layer 3: build content-addressed key (domain-scoped, D-01)
         # domain enters ONLY here — after Layer 2 no-op check — preserving WORM ordering (D-05)
-        domain_seg = domain or "_unclassified"
+        domain_seg = domain or _UNCLASSIFIED_DOMAIN
         key = f"raw/{domain_seg}/{source_id}/{content_hash}.{ext}"
 
         # Layer 4: head_object guard — refuse overwrite if key already exists
@@ -362,7 +367,7 @@ class StorageBackend:
 
         # Layer 3: build content-addressed key (domain-scoped, D-03)
         # domain enters ONLY here — after Layer 2 no-op check — preserving WORM ordering (D-05)
-        domain_seg = domain or "_unclassified"
+        domain_seg = domain or _UNCLASSIFIED_DOMAIN
         key = f"bronze/{domain_seg}/{source_id}/{content_hash}.{ext}"
 
         # Layer 4: head_object guard — refuse overwrite if key already exists
