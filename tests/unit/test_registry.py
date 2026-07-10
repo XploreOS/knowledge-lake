@@ -472,3 +472,75 @@ class TestEnrichedArtifactAndSpend:
         session.flush()
 
         assert get_domain_for_source(session, source.id) is None
+
+
+# ── Alembic 0009 migration + Source crawl columns (Phase 11, SCHED-01/02) ────
+
+
+class TestAlembic0009Migration:
+    """Verify 0009 migration module exposes correct revision chain."""
+
+    def test_0009_revision_identifiers(self) -> None:
+        import importlib
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0009_crawl_scheduling"
+        )
+        assert mod.revision == "0009"
+        assert mod.down_revision == "0008"
+
+    def test_0009_upgrade_has_three_add_columns(self) -> None:
+        import importlib
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0009_crawl_scheduling"
+        )
+        import inspect
+        src = inspect.getsource(mod.upgrade)
+        assert "crawl_schedule" in src
+        assert "last_crawled_at" in src
+        assert "last_content_hash" in src
+
+    def test_0009_downgrade_drops_in_reverse(self) -> None:
+        import importlib
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0009_crawl_scheduling"
+        )
+        import inspect
+        src = inspect.getsource(mod.downgrade)
+        # Reverse order: hash, crawled_at, schedule
+        hash_pos = src.index("last_content_hash")
+        crawled_pos = src.index("last_crawled_at")
+        schedule_pos = src.index("crawl_schedule")
+        assert hash_pos < crawled_pos < schedule_pos
+
+
+class TestSourceCrawlColumns:
+    """Source ORM has the three nullable crawl columns (SCHED-01/02)."""
+
+    def test_source_has_crawl_schedule_attr(self) -> None:
+        from knowledge_lake.registry.models import Source
+        assert hasattr(Source, "crawl_schedule")
+
+    def test_source_has_last_crawled_at_attr(self) -> None:
+        from knowledge_lake.registry.models import Source
+        assert hasattr(Source, "last_crawled_at")
+
+    def test_source_has_last_content_hash_attr(self) -> None:
+        from knowledge_lake.registry.models import Source
+        assert hasattr(Source, "last_content_hash")
+
+    def test_crawl_columns_are_nullable(self, engine) -> None:
+        from sqlalchemy import inspect as sa_inspect
+        insp = sa_inspect(engine)
+        cols = {c["name"]: c for c in insp.get_columns("sources")}
+        assert cols["crawl_schedule"]["nullable"] is True
+        assert cols["last_crawled_at"]["nullable"] is True
+        assert cols["last_content_hash"]["nullable"] is True
+
+    def test_source_crawl_columns_default_none(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source
+
+        source = create_source(session, name="NoCrawl", source_type="web")
+        session.flush()
+        assert source.crawl_schedule is None
+        assert source.last_crawled_at is None
+        assert source.last_content_hash is None

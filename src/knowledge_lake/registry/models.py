@@ -93,6 +93,20 @@ class Source(Base):
     config: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
     """Arbitrary source configuration (crawl parameters, credentials refs, etc.)."""
 
+    crawl_schedule: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    """5-field UTC cron string (SCHED-01, D-02/D-03). NULL means source is not
+    auto-recrawled."""
+
+    last_crawled_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    """UTC timestamp of the last re-crawl ATTEMPT (updated on skip and crawl
+    alike, D-11)."""
+
+    last_content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    """SHA256 over normalized silver-stage seed-page text (D-06/D-07). NULL means
+    always crawl."""
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
