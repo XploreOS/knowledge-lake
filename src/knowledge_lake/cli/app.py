@@ -1101,6 +1101,19 @@ def cmd_init(
                     already_existed += 1
                     continue
 
+                # Validate crawl_schedule before persisting (D-05a, T-11-CRON)
+                validated_schedule = entry.crawl_schedule
+                if validated_schedule is not None:
+                    from dagster._utils.schedules import is_valid_cron_string
+
+                    if not is_valid_cron_string(validated_schedule):
+                        typer.echo(
+                            f"Warning: Invalid cron '{validated_schedule}' for source "
+                            f"'{entry.name}' — schedule will not be persisted.",
+                            err=True,
+                        )
+                        validated_schedule = None
+
                 registry_repo.create_source(
                     session,
                     name=entry.name,
@@ -1108,6 +1121,7 @@ def cmd_init(
                     url=entry.url,
                     normalized_url=norm_url,
                     license_type=entry.license,
+                    crawl_schedule=validated_schedule,
                     config={
                         "domain": domain,
                         "tags": entry.tags,
