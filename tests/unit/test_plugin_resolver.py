@@ -91,8 +91,8 @@ class DummyStore:
 
     def reembed_all_points(
         self, source: str, dest: str, sparse_doc_fn, batch_size: int = 256
-    ) -> int:
-        return 0
+    ) -> tuple[int, int]:
+        return 0, 0
 
 
 # ---------------------------------------------------------------------------
