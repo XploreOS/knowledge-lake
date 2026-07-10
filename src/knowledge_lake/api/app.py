@@ -195,6 +195,17 @@ def search_endpoint(
         description="Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
         max_length=64,  # bounds the number of tags in the list
     ),
+    mode: Optional[str] = Query(
+        default=None,
+        pattern=r"^(hybrid|dense|sparse)$",
+        description=(
+            "Search mode: hybrid|dense|sparse. "
+            "Defaults to KLAKE_SEARCH__MODE setting (hybrid). "
+            "An unrecognised value is rejected with 422 (T-10-02, ASVS V5, fail-closed). "
+            "A hybrid or sparse request against a sparse-less collection returns the "
+            "store's clear error (fail-loud, D-10)."
+        ),
+    ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
 
@@ -205,6 +216,9 @@ def search_endpoint(
         - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.
         - ``tags`` list max_length=64 bounds number of tags; each element is also
           validated to max 64 characters (T-07-04-01).
+        - ``mode`` is bounded to the Literal set {hybrid, dense, sparse} via the
+          Query pattern — any other value is automatically rejected with 422 before
+          the handler body runs (T-10-02, ASVS V5).
         - Empty/whitespace queries return an empty list (not an error).
 
     Args:
@@ -218,6 +232,7 @@ def search_endpoint(
         format:            Optional filter — payload['format'] must match exactly.
         source_id:         Optional filter — payload['source_id'] must match exactly.
         tags:              Optional OR filter — payload['tags'] must contain any of these values.
+        mode:              Optional search mode override (hybrid|dense|sparse). None → settings default.
 
     D-13 backward-compat note:
         source_name, format, tags, source_id filters are only effective on points indexed
@@ -254,6 +269,7 @@ def search_endpoint(
         format=format,
         source_id=source_id,
         tags=tags,
+        mode=mode,
     )
     hits = search(
         q,
@@ -266,6 +282,7 @@ def search_endpoint(
         format=format,
         source_id=source_id,
         tags=tags,
+        mode=mode,
     )
 
     # Map Hit → SearchHit, extracting citation + enrichment fields from payload

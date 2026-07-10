@@ -49,6 +49,15 @@ class SearchParams(BaseModel):
         default="klake_chunks",
         description="Qdrant collection to search.",
     )
+    mode: Optional[str] = Field(
+        default=None,
+        pattern=r"^(hybrid|dense|sparse)$",
+        description=(
+            "Search mode; default resolves from KLAKE_SEARCH__MODE (hybrid). "
+            "Must be one of: hybrid, dense, sparse. "
+            "An unrecognised value is rejected with 422 (T-10-02, ASVS V5)."
+        ),
+    )
 
 
 # ── Response schemas ───────────────────────────────────────────────────────────
