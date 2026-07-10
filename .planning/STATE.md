@@ -4,17 +4,17 @@ milestone: v2.0
 milestone_name: — Agent-Ready Lake
 current_phase: 11
 current_phase_name: crawl-scheduling
-status: executing
+status: verifying
 stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-07-10T16:44:05.483Z"
+last_updated: "2026-07-10T17:15:27.667Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 29
-  completed_plans: 28
-  percent: 67
+  completed_plans: 29
+  percent: 83
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 Phase: 11 (crawl-scheduling) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-10 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -104,6 +104,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 11 P02 | 5m | 3 tasks | 5 files |
 | Phase 11 P03 | 4m | 1 tasks | 1 files |
 | Phase 11 P04 | 3m | 3 tasks | 2 files |
+| Phase 11 P05 | 4m | 3 tasks | 4 files |
 
 ### Quick Tasks Completed
 
@@ -196,6 +197,7 @@ Recent decisions affecting current work:
 - [Phase ?]: D-06: reuse remove_boilerplate for content signature (same normalizer as silver stage)
 - [Phase ?]: D-05a: crawl_schedule persisted as column kwarg, never inside Source.config
 - [Phase ?]: D-03: Both write paths validate cron with is_valid_cron_string before DB persist
+- [Phase ?]: Cron helpers sourced from dagster._utils.schedules (no external croniter dependency; T-11-SC)
 
 ### Pending Todos
 
@@ -232,7 +234,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Completed 11-01-PLAN.md
 
-Last session: 2026-07-10T16:43:53.084Z
+Last session: 2026-07-10T17:15:17.449Z
 Resume file: None
 
 ## Operator Next Steps

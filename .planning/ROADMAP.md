@@ -177,7 +177,7 @@ Plans:
   3. A max-staleness threshold forces an occasional refresh to catch change-detection false negatives.
   4. A Dagster `@sensor` triggers periodic re-crawl of a source based on its `crawl_schedule`, using a deterministic `run_key` and a cursor watermark (plus per-source concurrency) to avoid duplicate runs and tick storms.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 **Wave 0**
@@ -195,7 +195,7 @@ Plans:
 
 **Wave 3** *(depends on Wave 2)*
 
-- [ ] 11-05-PLAN.md — Dagster: sensors.py (recrawl_sensor + recrawl_op + recrawl_source_job + RecrawlConfig), Definitions registration, dagster.yaml QueuedRunCoordinator swap (SCHED-01)
+- [x] 11-05-PLAN.md — Dagster: sensors.py (recrawl_sensor + recrawl_op + recrawl_source_job + RecrawlConfig), Definitions registration, dagster.yaml QueuedRunCoordinator swap (SCHED-01)
 
 **Migration note**: LIVE DATA MIGRATION (additive `crawl_schedule` / `last_crawled_at` / `last_content_hash` columns on the Source registry). Flag for `--research-phase` at plan time. Rollback: forward-only additive columns; the sensor can be disabled independently of the schema change.
 
@@ -225,5 +225,5 @@ Plans:
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 8/8 | Complete   | 2026-07-10 |
-| 11. Crawl Scheduling | 4/5 | In Progress|  |
+| 11. Crawl Scheduling | 5/5 | Complete   | 2026-07-10 |
 | 12. Agent Surfaces | 0/? | Not started | - |
