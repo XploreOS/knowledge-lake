@@ -69,6 +69,12 @@ class CrawlSettings(BaseModel):
     same_domain_only: bool = True
     """If True, only follow links on the same registrable domain as the seed."""
 
+    max_staleness_days: int = 30
+    """Force a full re-ingest when now - last_crawled_at exceeds this, even if
+    the content signature is unchanged (SCHED-02, D-10).
+    Env: KLAKE_CRAWL__MAX_STALENESS_DAYS.
+    Per-source override at Source.config['crawl_config']['max_staleness_days']."""
+
 
 class ParseSettings(BaseModel):
     """Parser chain and quality-scoring configuration (PARSE-01..05, D-01, D-02, D-04).
