@@ -131,6 +131,8 @@ class TestSourcesSchema:
     REQUIRED_COLUMNS = [
         "id", "name", "source_type", "url", "license_type",
         "license_url", "robots_checked", "config", "created_at",
+        # Phase 11 (crawl-scheduling) columns — Alembic 0009
+        "crawl_schedule", "last_crawled_at", "last_content_hash",
     ]
 
     def test_sources_columns(self, engine) -> None:
@@ -263,3 +265,31 @@ class TestMigrationRoundTrip:
             "llm_spend", "vector_collections",
         ):
             assert expected in tables, f"{expected} missing after re-upgrade"
+
+
+# ── Migration head chain assertion (Phase 11) ────────────────────────────────
+
+try:
+    from knowledge_lake.registry.alembic.versions import (
+        _0009_crawl_scheduling as _mig_0009,  # type: ignore[attr-defined]
+    )
+    _HAS_0009 = True
+except Exception:
+    _HAS_0009 = False
+
+
+@pytest.mark.skipif(not _HAS_0009, reason="0009 migration not yet created (Plan 11-02)")
+class TestMigrationHeadChain:
+    """Migration 0009 must chain correctly from 0008."""
+
+    def test_0009_revision_is_0009(self) -> None:
+        """Migration module declares revision == '0009'."""
+        assert _mig_0009.revision == "0009", (
+            f"Expected revision='0009', got {_mig_0009.revision!r}"
+        )
+
+    def test_0009_down_revision_is_0008(self) -> None:
+        """Migration 0009 must declare down_revision == '0008'."""
+        assert _mig_0009.down_revision == "0008", (
+            f"Expected down_revision='0008', got {_mig_0009.down_revision!r}"
+        )
