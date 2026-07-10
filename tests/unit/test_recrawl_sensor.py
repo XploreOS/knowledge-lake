@@ -121,13 +121,13 @@ def test_skips_not_due() -> None:
     from dagster import SkipReason, build_sensor_context
 
     sid = "src_not_due"
-    # Last crawled 1 minute ago; daily schedule means next fire is ~23h59m away
-    now = datetime(2026, 7, 10, 3, 1, 0, tzinfo=timezone.utc)
-    last_crawled = datetime(2026, 7, 10, 3, 0, 0, tzinfo=timezone.utc)
+    # Last crawled 1 minute after the 03:00 tick; next fire is ~23h59m away
+    now = datetime(2026, 7, 10, 3, 2, 0, tzinfo=timezone.utc)
+    last_crawled = datetime(2026, 7, 10, 3, 1, 0, tzinfo=timezone.utc)
 
     source = _make_source(sid=sid, last_crawled_at=last_crawled)
 
-    # Verify the source is actually not due
+    # Verify the source is actually not due (next fire is tomorrow 03:00)
     next_fire = get_next_cron_tick(source.crawl_schedule, last_crawled, "UTC")
     assert now < next_fire, "Test setup error: source should not be due yet"
 
