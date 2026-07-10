@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -295,6 +295,31 @@ class IndexSettings(BaseModel):
     an operator/CLI step drops it after confirming the swap (D-06)."""
 
 
+class SearchSettings(BaseModel):
+    """Hybrid-retrieval mode configuration (RETR-03, D-08).
+
+    Nested under Settings as settings.search. Environment variable pattern:
+    KLAKE_SEARCH__MODE=hybrid|dense|sparse
+
+    Defaults to 'hybrid' per RETR-03 / D-08. The Literal constraint is the
+    fail-closed input-validation boundary (T-10-02): unknown values raise a
+    pydantic ValidationError at config load time, never reaching the store.
+    """
+
+    mode: Literal["hybrid", "dense", "sparse"] = "hybrid"
+    """Retrieval mode.
+
+    - 'hybrid'  — server-side RRF fusion of dense + sparse branches (default, D-08).
+    - 'dense'   — ANN search on the named dense vector only (works on pre-migration
+                  collections; no sparse vector required).
+    - 'sparse'  — BM25-style search on the named sparse vector only (requires
+                  named-vector collection after the hybrid reindex, D-05).
+
+    Override via KLAKE_SEARCH__MODE env var (no custom parsing needed — the
+    existing env_nested_delimiter='__' resolves it automatically).
+    """
+
+
 # Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
 _SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
@@ -396,6 +421,12 @@ class Settings(BaseSettings):
 
     index: IndexSettings = Field(default_factory=IndexSettings)
     """Vector index / alias configuration (INDEX-02)."""
+
+    search: SearchSettings = Field(default_factory=SearchSettings)
+    """Hybrid-retrieval mode configuration (RETR-03, D-08).
+
+    Resolved via KLAKE_SEARCH__MODE=hybrid|dense|sparse (env_nested_delimiter='__').
+    """
 
     export: ExportSettings = Field(default_factory=ExportSettings)
     """Gold-zone export configuration (EXPORT-01..03)."""
