@@ -230,8 +230,8 @@ def search_endpoint(
     Security (T-01-14 / ASVS V5):
         - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.
         - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.
-        - ``tags`` list max_length=64 bounds number of tags; each element is also
-          validated to max 64 characters (T-07-04-01).
+        - ``tags`` list: element count capped at 64 by the handler guard (WR-02);
+          each element also validated to max 64 characters (T-07-04-01).
         - ``mode`` is bounded to the Literal set {hybrid, dense, sparse} via the
           Query pattern — any other value is automatically rejected with 422 before
           the handler body runs (T-10-02, ASVS V5).
@@ -274,8 +274,8 @@ def search_endpoint(
         raise HTTPException(status_code=422, detail="At most 64 tags may be specified.")
 
     # Validate per-element tag string length (WR-05, T-07-04-01).
-    # FastAPI's Query(max_length=64) on a list bounds the number of elements,
-    # not the length of each element string.  Enforce element length manually.
+    # FastAPI's Query(max_length=64) on a list[str] constrains each element's
+    # character length (not the list size — that's guarded above).
     if tags and any(len(t) > 64 for t in tags):
         raise HTTPException(status_code=422, detail="Tag values must not exceed 64 characters.")
 

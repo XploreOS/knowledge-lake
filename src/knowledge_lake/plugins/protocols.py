@@ -381,7 +381,7 @@ class VectorStorePlugin(Protocol):
         dest: str,
         sparse_doc_fn: Callable[[str], Any],
         batch_size: int = 256,
-    ) -> int:
+    ) -> tuple[int, int]:
         """Re-embed all points from ``source`` into ``dest`` with added sparse vectors.
 
         Scrolls every point from ``source``, reuses the existing dense vector,
@@ -395,7 +395,9 @@ class VectorStorePlugin(Protocol):
             batch_size:     Number of points to scroll/upsert per batch.
 
         Returns:
-            Total number of points upserted into ``dest``.
+            Tuple of (total_upserted, total_skipped). Points whose dense vector
+            is absent are skipped with a warning (WR-04); the caller (reindex)
+            uses total_skipped to adjust the D-06 count-parity gate.
         """
         ...
 

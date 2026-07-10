@@ -233,10 +233,12 @@ def reindex_collection(
         # D-07: preflight — assert server >= 1.10 BEFORE creating any collection
         vstore.assert_server_supports_hybrid()
 
-        def _re_embed_fn(new_physical: str) -> None:
+        def _re_embed_fn(new_physical: str) -> tuple[int, int]:
             # D-05: re-embed reads payload['text'] from the Qdrant scroll;
             # no registry join needed for chunk text.
-            vstore.reembed_all_points(collection, new_physical, embed_sparse_doc)
+            # Returns (total, skipped) so reindex()'s D-06 parity gate can
+            # account for corrupt source points with no dense vector (WR-04).
+            return vstore.reembed_all_points(collection, new_physical, embed_sparse_doc)
 
         upsert_fn = _re_embed_fn
     else:

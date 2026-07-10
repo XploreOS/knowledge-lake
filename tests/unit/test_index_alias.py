@@ -108,6 +108,7 @@ class TestReindex:
         mock_client.get_collections.return_value = MagicMock(
             collections=[_collection_desc("col_v1")]
         )
+        mock_client.count.return_value.count = 2  # D-06 parity gate: old == new
         store._client = mock_client
 
         calls: list[str] = []
@@ -137,6 +138,7 @@ class TestReindex:
         mock_client.get_collections.return_value = MagicMock(
             collections=[_collection_desc("col_v1")]
         )
+        mock_client.count.return_value.count = 2  # D-06 parity gate: old == new
         store._client = mock_client
 
         call_order: list[str] = []

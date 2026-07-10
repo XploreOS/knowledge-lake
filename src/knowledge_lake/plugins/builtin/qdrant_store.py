@@ -332,20 +332,27 @@ class QdrantVectorStore:
             },
         )
 
-        upsert_fn(next_physical)
+        upsert_result = upsert_fn(next_physical)
+        # upsert_fn may return (total, skipped) when it skips corrupt points (WR-04).
+        # Extract skipped so the D-06 parity gate can account for them; default to 0.
+        _skipped = upsert_result[1] if isinstance(upsert_result, tuple) else 0
         self.ensure_payload_indexes(next_physical)
 
         # D-06 — Count-parity gate: verify new collection point count matches old
         # BEFORE the alias swap.  A mismatch means the upsert_fn produced an
         # incomplete collection; abort so the alias keeps pointing at old_physical.
         # Skip on first-ever reindex (old_physical is None).
+        # _skipped accounts for corrupt source points with no dense vector (WR-04):
+        # those points were intentionally omitted, so expected new count is
+        # old_count - _skipped rather than old_count.
         if old_physical is not None:
             old_count = self._client.count(old_physical, exact=True).count
             new_count = self._client.count(next_physical, exact=True).count
-            if old_count != new_count:
+            if old_count - _skipped != new_count:
                 raise ValueError(
                     f"Reindex parity gate failed for alias '{alias}': "
-                    f"old collection '{old_physical}' has {old_count} points but "
+                    f"old collection '{old_physical}' has {old_count} points "
+                    f"({_skipped} skipped due to missing dense vector) but "
                     f"new collection '{next_physical}' has {new_count} points. "
                     f"The alias swap was NOT applied — '{alias}' still points at "
                     f"'{old_physical}'. Inspect the new collection and re-run reindex."
@@ -486,7 +493,7 @@ class QdrantVectorStore:
         dest: str,
         sparse_doc_fn: Callable[[str], Any],
         batch_size: int = 256,
-    ) -> int:
+    ) -> tuple[int, int]:
         """Scroll all points from ``source``, reuse dense vectors, synthesize sparse via
         ``sparse_doc_fn``, and upsert named {dense+sparse} points into ``dest``.
 
@@ -495,10 +502,14 @@ class QdrantVectorStore:
         ``sparse_doc_fn`` is caller-injected (Plan 10-07 passes embed_sparse_doc) — the
         store stays generic and imports no encoder (D-01 seam).
 
-        Returns the total number of points upserted.
+        Returns (total_upserted, total_skipped). Points with no dense vector are skipped
+        with a warning rather than upserted as null-vector points (WR-04). The caller
+        (reindex) accounts for skipped points in the D-06 count-parity gate so that
+        corrupt legacy points don't abort an otherwise-successful migration.
         Uses explicit ``next_offset is None`` end-of-scroll sentinel (never falsy check).
         """
         total = 0
+        skipped = 0
         next_offset: Any = None
         while True:
             records, next_offset = self._client.scroll(
@@ -526,6 +537,7 @@ class QdrantVectorStore:
                         "qdrant_store.reembed_all_points.missing_dense_vector",
                         point_id=r.id,
                     )
+                    skipped += 1
                     continue
                 text = (r.payload or {}).get("text", "")
                 sparse = sparse_doc_fn(text)
@@ -543,9 +555,13 @@ class QdrantVectorStore:
                 break
 
         log.info(
-            "qdrant_store.reembed_all_points", source=source, dest=dest, count=total
+            "qdrant_store.reembed_all_points",
+            source=source,
+            dest=dest,
+            count=total,
+            skipped=skipped,
         )
-        return total
+        return total, skipped
 
     def search(
         self,
