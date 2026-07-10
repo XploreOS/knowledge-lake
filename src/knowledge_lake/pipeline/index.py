@@ -41,6 +41,7 @@ from typing import Optional
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.plugins.builtin.sparse_embedder import embed_sparse_doc
 from knowledge_lake.plugins.protocols import VectorPoint
 from knowledge_lake.plugins.resolver import get_vectorstore
 from knowledge_lake.registry import repo as registry_repo
@@ -175,6 +176,7 @@ def index(
                 id=qdrant_point_id,
                 vector=vector,
                 payload=payload,
+                sparse=embed_sparse_doc(chunk.get("text", "")),
             )
         )
 
@@ -189,17 +191,34 @@ def index(
 def reindex_collection(
     collection: str = "klake_chunks",
     *,
+    hybrid: bool = False,
     settings: Optional[Settings] = None,
 ) -> dict:
     """Zero-downtime reindex of an alias-backed collection (INDEX-02, D-06).
 
-    Creates the next versioned physical collection, copies every existing
-    point into it via copy_all_points(), atomically repoints the alias, and
-    registers the new alias->physical mapping in the registry. The prior
-    physical collection is retained — never auto-dropped.
+    Creates the next versioned physical collection, populates it, atomically
+    repoints the alias, and registers the new alias->physical mapping in the
+    registry. The prior physical collection is retained — never auto-dropped.
+
+    When ``hybrid=False`` (default):
+        Copies every existing point via copy_all_points() — the existing
+        behavior, unchanged for back-compatibility.
+
+    When ``hybrid=True`` (operator-triggered live re-embedding migration):
+        1. Asserts the running Qdrant server is >= 1.10 (D-07 preflight) —
+           aborts loudly before touching any data if the server is too old.
+        2. Scrolls existing points and synthesizes sparse vectors from their
+           payload['text'] via embed_sparse_doc, writing named {dense+sparse}
+           points to the new physical collection via vstore.reembed_all_points.
+        3. Delegates the count-parity gate and alias swap to vstore.reindex —
+           no duplication here (Plan 10-06 owns the safety contract).
+        No new get_session block is needed for chunk text — text is read
+        directly from the Qdrant scroll payload['text'] (research simplification).
 
     Args:
         collection: Qdrant alias name to reindex (default: 'klake_chunks').
+        hybrid:     When True, perform the re-embedding migration with the D-07
+                    server preflight and reembed_all_points upsert_fn.
         settings:   Settings override.
 
     Returns:
@@ -210,11 +229,24 @@ def reindex_collection(
 
     dim = vstore.get_collection_dim(collection)
 
-    def _copy_fn(new_physical: str) -> None:
-        vstore.copy_all_points(collection, new_physical)
+    if hybrid:
+        # D-07: preflight — assert server >= 1.10 BEFORE creating any collection
+        vstore.assert_server_supports_hybrid()
 
-    log.info("index.reindex.start", collection=collection, dim=dim)
-    result = vstore.reindex(collection, dim=dim, upsert_fn=_copy_fn)
+        def _re_embed_fn(new_physical: str) -> None:
+            # D-05: re-embed reads payload['text'] from the Qdrant scroll;
+            # no registry join needed for chunk text.
+            vstore.reembed_all_points(collection, new_physical, embed_sparse_doc)
+
+        upsert_fn = _re_embed_fn
+    else:
+        def _copy_fn(new_physical: str) -> None:
+            vstore.copy_all_points(collection, new_physical)
+
+        upsert_fn = _copy_fn
+
+    log.info("index.reindex.start", collection=collection, dim=dim, hybrid=hybrid)
+    result = vstore.reindex(collection, dim=dim, upsert_fn=upsert_fn)
 
     with get_session() as session:
         registry_repo.register_vector_collection(

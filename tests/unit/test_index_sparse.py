@@ -205,8 +205,13 @@ class TestReindexCollectionHybrid:
 
     @pytest.fixture()
     def fake_vstore_reindex(self, monkeypatch):
-        """Fake vstore configured for reindex path (get_collection_dim + reindex)."""
-        vstore = MagicMock()
+        """Fake vstore configured for reindex path (get_collection_dim + reindex).
+
+        Uses MagicMock(unsafe=True) so attribute access on names that start with
+        'assert' (e.g. assert_server_supports_hybrid) is not blocked by MagicMock's
+        safety check.
+        """
+        vstore = MagicMock(unsafe=True)
         vstore.get_collection_dim.return_value = 4
         # reindex captures the upsert_fn and records it
         captured: dict = {}
@@ -218,7 +223,6 @@ class TestReindexCollectionHybrid:
 
         vstore.reindex.side_effect = _reindex
         monkeypatch.setattr(index_module, "get_vectorstore", lambda _s: vstore)
-        monkeypatch.setattr(index_module, "get_session", MagicMock())
         return vstore, captured
 
     def test_hybrid_true_calls_assert_server_supports_hybrid_before_reindex(
