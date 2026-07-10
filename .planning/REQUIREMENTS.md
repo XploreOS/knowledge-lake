@@ -37,8 +37,8 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 
 - [ ] **SCHED-01**: A Dagster sensor triggers periodic re-crawl of a source based on its `crawl_schedule`, using a deterministic `run_key` and a cursor watermark to avoid duplicate runs and tick storms.
 - [ ] **SCHED-02**: On re-crawl, a content-change comparison over the **normalized silver-stage text** (not raw bytes) decides whether to re-ingest, so dynamic timestamps/nonces don't thrash the immutable raw zone; a max-staleness threshold forces an occasional refresh to catch false negatives.
-- [ ] **RETR-01**: Search supports hybrid BM25 + dense retrieval using Qdrant named sparse + dense vectors with server-side RRF fusion, delivered via the existing alias-swap reindex (unnamed→named-vector collection recreate with a re-embedding upsert so all points get sparse vectors).
-- [ ] **RETR-03**: The search mode is configurable via `KLAKE_SEARCH__MODE=hybrid|dense|sparse` (default `hybrid`), and a request for a mode whose vectors are absent fails loudly rather than silently degrading.
+- [x] **RETR-01**: Search supports hybrid BM25 + dense retrieval using Qdrant named sparse + dense vectors with server-side RRF fusion, delivered via the existing alias-swap reindex (unnamed→named-vector collection recreate with a re-embedding upsert so all points get sparse vectors).
+- [x] **RETR-03**: The search mode is configurable via `KLAKE_SEARCH__MODE=hybrid|dense|sparse` (default `hybrid`), and a request for a mode whose vectors are absent fails loudly rather than silently degrading.
 
 ## Deferred Requirements (v2.1+)
 
@@ -96,8 +96,8 @@ Which phase covers which requirement. Populated during roadmap creation.
 | STORE-01 | Phase 9 | Complete |
 | STORE-02 | Phase 9 | Complete |
 | STORE-03 | Phase 9 | Complete |
-| RETR-01 | Phase 10 | Pending |
-| RETR-03 | Phase 10 | Pending |
+| RETR-01 | Phase 10 | Complete |
+| RETR-03 | Phase 10 | Complete |
 | SCHED-01 | Phase 11 | Pending |
 | SCHED-02 | Phase 11 | Pending |
 | MCP-01 | Phase 12 | Pending |
