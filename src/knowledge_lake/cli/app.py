@@ -718,6 +718,14 @@ def cmd_search(
         after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points
         will not match.
     """
+    VALID_MODES = {"hybrid", "dense", "sparse"}
+    if mode is not None and mode not in VALID_MODES:
+        typer.echo(
+            f"Error: --mode must be one of {sorted(VALID_MODES)}, got {mode!r}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     from knowledge_lake.pipeline.search import search
 
     hits = search(
