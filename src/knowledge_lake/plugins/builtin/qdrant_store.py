@@ -515,7 +515,16 @@ class QdrantVectorStore:
                 if isinstance(r.vector, list):
                     dense = r.vector
                 else:
-                    dense = r.vector.get("dense")  # type: ignore[union-attr]
+                    dense = r.vector.get("dense") if isinstance(r.vector, dict) else r.vector  # type: ignore[union-attr]
+                # Guard: skip points whose dense vector is absent rather than
+                # upsert a null-vector point that would silently corrupt the
+                # new physical collection (WR-04).
+                if dense is None:
+                    log.warning(
+                        "qdrant_store.reembed_all_points.missing_dense_vector",
+                        point_id=r.id,
+                    )
+                    continue
                 text = (r.payload or {}).get("text", "")
                 sparse = sparse_doc_fn(text)
                 batch.append(
