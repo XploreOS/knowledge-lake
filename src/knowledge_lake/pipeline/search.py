@@ -19,12 +19,13 @@ Returns: list[Hit], each Hit has .id, .score, .payload with citation fields.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, Range
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.plugins.builtin.sparse_embedder import embed_sparse_query
 from knowledge_lake.plugins.protocols import Hit
 from knowledge_lake.plugins.resolver import get_embedder, get_vectorstore
 
@@ -43,6 +44,7 @@ def search(
     format: Optional[str] = None,  # noqa: A002
     tags: Optional[list[str]] = None,
     source_id: Optional[str] = None,
+    mode: Optional[str] = None,
     settings: Optional[Settings] = None,
 ) -> list[Hit]:
     """Embed a query and return the top-k nearest chunk hits.
@@ -59,6 +61,14 @@ def search(
         tags:              Optional filter — payload['tags'] must contain the given tag(s).
                            Single tag uses MatchValue; multiple tags uses MatchAny (D-11).
         source_id:         Optional filter — payload['source_id'] must match exactly.
+        mode:              Retrieval mode override: 'hybrid', 'dense', or 'sparse'.
+                           Defaults to settings.search.mode (which defaults to 'hybrid').
+                           - 'hybrid'  — server-side RRF fusion of dense + sparse branches (D-11).
+                           - 'dense'   — ANN search on the dense vector only (back-compat, D-09).
+                           - 'sparse'  — BM25 search on the sparse vector only.
+                           A request for hybrid/sparse against a sparse-less collection raises
+                           the store's fail-loud error unchanged — no silent dense fallback (D-10,
+                           T-10-03). This is the RETR-03 per-request override (D-09).
         settings:          Settings override.
 
     NOTE: The source_name, format, tags, and source_id filters are only effective on
@@ -82,11 +92,16 @@ def search(
     embedder = get_embedder(s)
     vstore = get_vectorstore(s)
 
+    # Resolve retrieval mode: per-request override wins; otherwise use settings default.
+    # settings.search.mode defaults to 'hybrid' (RETR-03, D-08, D-09).
+    effective_mode = mode or s.search.mode
+
     log.info(
         "search.start",
         query=query[:80],
         collection=collection,
         top_k=top_k,
+        mode=effective_mode,
         domain=domain,
         document_type=document_type,
         min_quality_score=min_quality_score,
@@ -96,11 +111,20 @@ def search(
         tags=tags,
     )
 
-    # Embed the query
+    # Embed the query (dense vector — used in all modes)
     query_vectors = embedder.embed([query])
     query_vector = query_vectors[0]
 
-    # Build an optional Qdrant Filter from the given filter kwargs (INDEX-03).
+    # Build sparse query vector when mode requires it (D-03).
+    # Only hybrid and sparse modes need the sparse query; dense gets None.
+    # Do NOT catch the store's fail-loud error — let it propagate unchanged (D-10, T-10-03).
+    sparse_query: Optional[Any] = None
+    if effective_mode in ("hybrid", "sparse"):
+        sparse_query = embed_sparse_query(query)
+
+    # Build an optional Qdrant Filter from the given filter kwargs (INDEX-03, D-14).
+    # This block is reused verbatim across all modes — the same query_filter is
+    # forwarded in every mode (D-14, must_have truth §6).
     must: list = []
     if domain:
         must.append(FieldCondition(key="domain", match=MatchValue(value=domain)))
@@ -121,9 +145,16 @@ def search(
             must.append(FieldCondition(key="tags", match=MatchAny(any=tags)))
     query_filter = Filter(must=must) if must else None
 
-    # ANN search
+    # ANN search — thread mode + sparse_query alongside the existing args.
+    # The store raises a fail-loud ValueError for hybrid/sparse against a
+    # sparse-less collection; this pipeline layer does NOT catch that error (D-10).
     hits: list[Hit] = vstore.search(
-        collection, query_vector, top_k=top_k, query_filter=query_filter
+        collection,
+        query_vector,
+        top_k=top_k,
+        query_filter=query_filter,
+        mode=effective_mode,
+        sparse_query=sparse_query,
     )
 
     log.info("search.complete", hits=len(hits))
