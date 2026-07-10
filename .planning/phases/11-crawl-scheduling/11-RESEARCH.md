@@ -508,19 +508,19 @@ Note: `create_source()` in `repo.py` must accept a `crawl_schedule` kwarg — ch
 | A3 | The seed/canonical URL for the change probe is `Source.url` (the registered seed). | Change gate | Low — matches how `crawl_source` seeds; per-page (depth>0) is explicitly deferred (D-09). |
 | A4 | `adapter.fetch_page(url).markdown` is populated for the seed on a normal 200 (crawl4ai produces markdown). | Change gate | Medium — if a source returns near-empty markdown, the signature could be unstable; the max-staleness floor (D-10) backstops false "unchanged". Planner may fall back to a direct GET per the D-07 discretion note. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Sensor cursor semantics beyond the watermark.**
    - What we know: deterministic `run_key` is the real idempotency guarantee (D-14); cursor is a watermark (D-15).
    - What's unclear: whether the cursor should also carry per-source last-fire state to shrink the scan, or stay a single global ISO timestamp.
-   - Recommendation: keep it a single global ISO timestamp for v2.0 (simplest, correct given run_key dedup); revisit only if source counts grow large.
+   - **RESOLVED:** keep it a single global ISO timestamp for v2.0 (simplest, correct given run_key dedup); revisit only if source counts grow large. → reflected in plan 11-05.
 
 2. **Probe fetch: adapter vs direct GET (D-07 discretion).**
    - What we know: both must pass `validate_public_url`; the adapter yields markdown directly.
    - What's unclear: whether a lighter `httpx` GET + a markdown conversion would drift from crawl4ai's markdown (making signatures incomparable to what a full crawl would store).
-   - Recommendation: **reuse the configured crawler adapter** for the probe so the probe markdown and the crawl markdown come from the same producer — avoids signature drift.
+   - **RESOLVED:** **reuse the configured crawler adapter** for the probe so the probe markdown and the crawl markdown come from the same producer — avoids signature drift. → reflected in plan 11-03.
 
-3. **Does `create_source()` accept `crawl_schedule` today?** Verify the signature at plan time (A2).
+3. **Does `create_source()` accept `crawl_schedule` today?** **RESOLVED:** signature verified at plan time; schedule persistence handled in plan 11-02 Task 2 (A2).
 
 ## Environment Availability
 
