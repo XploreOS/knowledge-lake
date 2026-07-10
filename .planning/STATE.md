@@ -6,14 +6,14 @@ current_phase: 11
 current_phase_name: crawl-scheduling
 status: executing
 stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-07-10T16:19:23.072Z"
+last_updated: "2026-07-10T16:44:05.483Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 29
-  completed_plans: 27
+  completed_plans: 28
   percent: 67
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 11 (crawl-scheduling) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 11 execution started
 
@@ -103,6 +103,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 11 P01 | 3m | 3 tasks | 4 files |
 | Phase 11 P02 | 5m | 3 tasks | 5 files |
 | Phase 11 P03 | 4m | 1 tasks | 1 files |
+| Phase 11 P04 | 3m | 3 tasks | 2 files |
 
 ### Quick Tasks Completed
 
@@ -193,6 +194,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Sensor tests use _get_now monkeypatch for deterministic time control; gate tests use FakeCrawler adapter; migration head-chain uses skipif on 0009 module import
 - [Phase ?]: touch_source_crawl uses own get_session() — Dagster op calls without holding a session
 - [Phase ?]: D-06: reuse remove_boilerplate for content signature (same normalizer as silver stage)
+- [Phase ?]: D-05a: crawl_schedule persisted as column kwarg, never inside Source.config
+- [Phase ?]: D-03: Both write paths validate cron with is_valid_cron_string before DB persist
 
 ### Pending Todos
 
@@ -229,7 +232,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Completed 11-01-PLAN.md
 
-Last session: 2026-07-10T16:19:13.394Z
+Last session: 2026-07-10T16:43:53.084Z
 Resume file: None
 
 ## Operator Next Steps
