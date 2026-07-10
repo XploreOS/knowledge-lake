@@ -193,7 +193,7 @@ def search_endpoint(
     tags: Optional[list[str]] = Query(
         default=None,
         description="Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
-        max_length=64,  # bounds the number of tags in the list
+        max_length=64,  # per-element character limit (list length is checked separately in handler)
     ),
     mode: Optional[str] = Query(
         default=None,
@@ -249,6 +249,13 @@ def search_endpoint(
     # Prevents collection enumeration attacks and rejects malformed names early.
     if not _COLLECTION_NAME_RE.fullmatch(collection):
         raise HTTPException(status_code=422, detail="Invalid collection name format.")
+
+    # Guard against an unbounded number of tags (WR-02).
+    # FastAPI's Query(max_length=64) on a list[str] constrains each element's
+    # character length, NOT the number of elements — a caller could send thousands
+    # of &tags= repetitions causing unbounded CPU in the MatchAny clause.
+    if tags and len(tags) > 64:
+        raise HTTPException(status_code=422, detail="At most 64 tags may be specified.")
 
     # Validate per-element tag string length (WR-05, T-07-04-01).
     # FastAPI's Query(max_length=64) on a list bounds the number of elements,
