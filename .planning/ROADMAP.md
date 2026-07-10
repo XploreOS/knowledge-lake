@@ -177,7 +177,7 @@ Plans:
   3. A max-staleness threshold forces an occasional refresh to catch change-detection false negatives.
   4. A Dagster `@sensor` triggers periodic re-crawl of a source based on its `crawl_schedule`, using a deterministic `run_key` and a cursor watermark (plus per-source concurrency) to avoid duplicate runs and tick storms.
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 0**
@@ -186,7 +186,7 @@ Plans:
 
 **Wave 1** *(depends on Wave 0)*
 
-- [ ] 11-02-PLAN.md — Schema layer: Alembic 0009 + 3 nullable Source columns, repo helpers (touch_source_crawl/list_scheduled_sources/set_source_schedule/create_source kwarg), CrawlSettings.max_staleness_days (SCHED-01/02)
+- [x] 11-02-PLAN.md — Schema layer: Alembic 0009 + 3 nullable Source columns, repo helpers (touch_source_crawl/list_scheduled_sources/set_source_schedule/create_source kwarg), CrawlSettings.max_staleness_days (SCHED-01/02)
 
 **Wave 2** *(parallel, depends on Wave 1)*
 
@@ -225,5 +225,5 @@ Plans:
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 8/8 | Complete   | 2026-07-10 |
-| 11. Crawl Scheduling | 1/5 | In Progress|  |
+| 11. Crawl Scheduling | 2/5 | In Progress|  |
 | 12. Agent Surfaces | 0/? | Not started | - |
