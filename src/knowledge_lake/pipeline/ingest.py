@@ -34,7 +34,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend
+from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
 
 log = structlog.get_logger(__name__)
 
@@ -427,7 +427,7 @@ def ingest_url(
             source = registry_repo.get_source_by_normalized_url(session, norm_url)
             if source is None:
                 raise  # unexpected
-        domain = registry_repo.get_domain_for_source(session, source.id) or "_unclassified"
+        domain = (source.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN
         artifact = storage.put_raw(
             source.id, data, ext, session,
             mime_type=effective_mime,
@@ -536,7 +536,7 @@ def ingest_file(
                 robots_checked=False,  # local uploads don't need robots.txt check
             )
         session.flush()
-        domain = registry_repo.get_domain_for_source(session, source.id) or "_unclassified"
+        domain = (source.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN
         artifact = storage.put_raw(
             source.id, data, ext, session,
             mime_type=effective_mime,
