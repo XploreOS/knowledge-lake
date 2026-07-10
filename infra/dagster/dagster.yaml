@@ -29,9 +29,18 @@ run_launcher:
   module: dagster.core.launcher
   class: DefaultRunLauncher
 
+# Per-source concurrency=1 via tag_concurrency_limits (D-16).
+# This file is mounted read-only into the dagster-webserver and dagster-daemon
+# compose services — a daemon restart is required after changes take effect.
 run_coordinator:
   module: dagster.core.run_coordinator
-  class: DefaultRunCoordinator
+  class: QueuedRunCoordinator
+  config:
+    tag_concurrency_limits:
+      - key: "klake/source"
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
 
 telemetry:
   enabled: false
