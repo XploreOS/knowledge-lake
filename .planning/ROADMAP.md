@@ -137,14 +137,14 @@ Plans:
   3. A user can set `KLAKE_SEARCH__MODE=hybrid|dense|sparse` (default `hybrid`); a request for a mode whose vectors are absent fails loudly rather than silently degrading.
   4. Phase 7 payload filters continue to work in hybrid mode; the running Qdrant server is confirmed ≥ 1.10 before the migration runs.
 
-**Plans**: 2/8 plans executed
+**Plans**: 3/8 plans executed
 
 Plans:
 **Wave 1** *(parallel — RED test scaffolds + dependency)*
 
 - [x] 10-01-PLAN.md — Store/migration RED tests: test_qdrant_hybrid.py + test_qdrant_hybrid_migration.py (RETR-01, D-07)
 - [x] 10-02-PLAN.md — Mode-surface RED tests: settings/search-mode/CLI/API + extend test_search_filters.py (RETR-03, D-14)
-- [ ] 10-03-PLAN.md — fastembed>=0.8,<0.9 dependency + Qdrant/bm25 install checkpoint (RETR-01, D-01) *(checkpoint — autonomous:false)*
+- [x] 10-03-PLAN.md — fastembed>=0.8,<0.9 dependency + Qdrant/bm25 install checkpoint (RETR-01, D-01) *(checkpoint — autonomous:false)*
 
 **Wave 2** *(parallel — contracts + sparse encoder)*
 
@@ -205,6 +205,6 @@ Plans:
 | 7. Metadata Foundation | 4/4 | Complete    | 2026-07-08 |
 | 8. Crawl Maturation | 6/6 | Complete    | 2026-07-08 |
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
-| 10. Hybrid Retrieval | 2/8 | In Progress|  |
+| 10. Hybrid Retrieval | 3/8 | In Progress|  |
 | 11. Crawl Scheduling | 0/? | Not started | - |
 | 12. Agent Surfaces | 0/? | Not started | - |
