@@ -10,7 +10,7 @@ Every domain resource ingested must be traceable from raw source through every t
 
 ## Current State (v1.0 — shipped 2026-07-07)
 
-- **Version:** v2.0 (in progress) — Agent-Ready Lake (Phase 9 complete)
+- **Version:** v2.0 — Agent-Ready Lake (all phases 7–12 complete 2026-07-11; milestone ready to ship)
 - **Source lines:** ~17,500 Python
 - **Tests:** 383 unit + integration + e2e
 - **Pipeline:** ingest → parse → clean → chunk → enrich → embed → index → curate → generate-dataset → export
@@ -64,34 +64,34 @@ Every domain resource ingested must be traceable from raw source through every t
 - ✓ 5-source E2E validation (HTML, PDF, CSV) — Phase 6
 - ✓ Resumable, idempotent jobs with retries and rate limits — Phase 6
 
-### Active (v2.0 — see REQUIREMENTS.md for full text)
+### Validated (v2.0 — Agent-Ready Lake, milestone complete 2026-07-11)
 
 **Metadata & Crawl Maturation**
-- [ ] PAYLOAD-01: Expanded Qdrant chunk payload (source_id, source_name, source_url, format, tags, title, organization)
-- [ ] PAYLOAD-02: Search filters for source_name, format, tags, source_id (API + CLI)
-- [ ] CRAWL-01: Per-source crawl_config (depth, rate_limit_rps) from sources.yaml
-- [ ] CRAWL-02: `klake crawl-all` batch crawl with optional --domain filter
-- [ ] CRAWL-03: Adaptive rate limiting (backoff on 429/403, per-host cooldown)
-- [ ] ENRICH-07: Partial JSON recovery on truncated LLM output
-- [ ] INGEST-10: PDF/doc ingest from crawled page links
+- [x] PAYLOAD-01: Expanded Qdrant chunk payload (source_id, source_name, source_url, format, tags, title, organization) — Phase 7
+- [x] PAYLOAD-02: Search filters for source_name, format, tags, source_id (API + CLI) — Phase 7
+- [x] CRAWL-01: Per-source crawl_config (depth, rate_limit_rps) from sources.yaml — Phase 8
+- [x] CRAWL-02: `klake crawl-all` batch crawl with optional --domain filter — Phase 8
+- [x] CRAWL-03: Adaptive rate limiting (backoff on 429/403, per-host cooldown) — Phase 8
+- [x] ENRICH-07: Partial JSON recovery on truncated LLM output — Phase 8
+- [x] INGEST-10: PDF/doc ingest from crawled page links — Phase 8
 
 **MinIO Domain Segmentation**
-- [ ] STORE-01: Domain/source-scoped S3 keys with `_unclassified` fallback
-- [ ] STORE-02: S3 object tags on every write (domain, source_name, format, artifact_type)
-- [ ] STORE-03: Gold-zone domain segmentation (rag_corpus / pretrain / finetune)
+- [x] STORE-01: Domain/source-scoped S3 keys with `_unclassified` fallback — Phase 9
+- [x] STORE-02: S3 object tags on every write (domain, source_name, format, artifact_type) — Phase 9
+- [x] STORE-03: Gold-zone domain segmentation (rag_corpus / pretrain / finetune) — Phase 9
 
 **AI Agent Skills**
-- [ ] MCP-01: MCP server (stdio + SSE) exposing lake operations
-- [ ] MCP-02: `klake mcp` (stdio) and `klake mcp --sse --port 3001`
-- [ ] SKILL-01: Claude Code skills (build-corpus, search-knowledge, add-source, export-dataset)
-- [ ] SKILL-02: Static OpenAPI export (`klake openapi` + docs/openapi.json)
-- [ ] SKILL-03: OpenAI-format tool definitions from Pydantic schemas
+- [x] MCP-01: MCP server (stdio + Streamable HTTP) exposing 11 curated tools over one registry — Phase 12
+- [x] MCP-02: `klake mcp` (stdio) and `klake mcp --sse --port 3001` (Streamable HTTP; localhost bind, Host guard, closed CORS, optional bearer) — Phase 12
+- [x] SKILL-01: Claude Code skills (build-corpus, search-knowledge, add-source, export-dataset) — Phase 12
+- [x] SKILL-02: Static OpenAPI export (`klake openapi` + docs/openapi.json) — Phase 12
+- [x] SKILL-03: OpenAI-format tool definitions from Pydantic schemas (surface parity: stdio==http==openapi==openai) — Phase 12
 
 **Crawl Scheduling + Hybrid Search**
-- [ ] SCHED-01: Dagster sensor for periodic re-crawl (crawl_schedule)
-- [ ] SCHED-02: Content-hash change detection (skip unchanged)
-- [ ] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion)
-- [ ] RETR-03: Configurable search mode (hybrid | dense | sparse)
+- [x] SCHED-01: Dagster sensor for periodic re-crawl (crawl_schedule) — Phase 11
+- [x] SCHED-02: Content-hash change detection (skip unchanged) — Phase 11
+- [x] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion) — Phase 10
+- [x] RETR-03: Configurable search mode (hybrid | dense | sparse) — Phase 10
 
 ### Deferred to v2.1
 
@@ -154,4 +154,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-10 after Phase 9 (Storage Segmentation) complete*
+*Last updated: 2026-07-11 after Phase 12 (Agent Surfaces) complete — v2.0 milestone fully executed*
