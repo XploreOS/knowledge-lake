@@ -15,6 +15,10 @@ D-02 compliance:
     SearchHit and LineageNode mirror the output of pipeline.search() and
     lineage.resolve_ancestry() exactly — the API is a thin JSON wrapper over
     those same functions, not a re-implementation.
+
+Plan 12-03: SearchParams extended with all search() filter kwargs so the
+    tool registry and GET /search share one model (Pitfall 4, SKILL-03 no-drift).
+    Six new input models added for tools without an existing request schema.
 """
 
 from __future__ import annotations
@@ -28,10 +32,19 @@ from pydantic import BaseModel, Field
 
 
 class SearchParams(BaseModel):
-    """Query parameters for GET /search.
+    """Query parameters for GET /search and the MCP ``search`` tool (D-02).
 
     Pydantic validates these before the handler runs, satisfying ASVS V5
     (input validation at the API boundary).
+
+    Extended in Plan 12-03 to cover every ``search()`` filter kwarg so that
+    ``SearchParams().model_dump(exclude_none=True)`` unpacks cleanly into
+    ``search(**kwargs)`` without an unexpected-keyword error (Pitfall 4,
+    SKILL-03 no-drift rule).
+
+    Handler note: ``q`` maps to the ``query`` positional arg of ``search()``;
+    callers must pass it as ``search(query=params.q, **rest)`` (the field
+    is kept as ``q`` for URL-query-parameter brevity in GET /search).
     """
 
     q: str = Field(
@@ -57,6 +70,46 @@ class SearchParams(BaseModel):
             "Must be one of: hybrid, dense, sparse. "
             "An unrecognised value is rejected with 422 (T-10-02, ASVS V5)."
         ),
+    )
+    # ── Filter fields added in Plan 12-03 (Pitfall 4 fix) ────────────────────
+    # Each field maps directly to the same-named kwarg in pipeline.search().
+    # Types and optionality mirror the search() signature (search.py:35-48).
+    domain: Optional[str] = Field(
+        default=None,
+        description="Payload filter: restrict results to this domain (e.g. 'healthcare').",
+    )
+    document_type: Optional[str] = Field(
+        default=None,
+        description="Payload filter: restrict results to this document type (e.g. 'regulation').",
+    )
+    min_quality_score: Optional[float] = Field(
+        default=None,
+        description="Payload filter: only return chunks with quality_score >= this value.",
+        ge=0.0,
+        le=1.0,
+    )
+    source_name: Optional[str] = Field(
+        default=None,
+        description="Payload filter: restrict results to this source name.",
+    )
+    format: Optional[str] = Field(  # noqa: A003
+        default=None,
+        description=(
+            "Payload filter: restrict results to this source format "
+            "(e.g. 'pdf', 'html'). Shadows Python built-in — only safe because "
+            "the built-in is not used within this class scope (mirrors noqa A002 in search.py)."
+        ),
+    )
+    tags: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "Payload filter: restrict results to chunks whose tags contain "
+            "all of the listed values. Single tag uses MatchValue; multiple use MatchAny (D-11)."
+        ),
+    )
+    source_id: Optional[str] = Field(
+        default=None,
+        description="Payload filter: restrict results to chunks from this source registry ID.",
     )
 
 
