@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — Agent-Ready Lake
-current_phase: 11
-current_phase_name: crawl-scheduling
-status: verified
+current_phase: 12
+current_phase_name: Agent Surfaces
+status: verifying
 stopped_at: Phase 12 context gathered
-last_updated: "2026-07-11T10:35:58.244Z"
+last_updated: "2026-07-11T11:32:38.405Z"
 last_activity: 2026-07-11
-last_activity_desc: gap closure 11-06 complete; re-verified 9/9
+last_activity_desc: Phase 11 complete, transitioned to Phase 12
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 30
+  total_plans: 38
   completed_plans: 30
-  percent: 83
+  percent: 79
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 ## Current Position
 
-Phase: 11 (crawl-scheduling) — VERIFIED (9/9)
-Plan: 6 of 6 complete (5 original + gap-closure 11-06)
+Phase: 12 — Agent Surfaces
+Plan: Not started
 Status: Phase 11 verified — both human-verification items closed (nonce-gate suppression, per-source concurrency)
-Last activity: 2026-07-11 — gap closure 11-06 complete; re-verified 9/9
+Last activity: 2026-07-11 — Phase 11 complete, transitioned to Phase 12
 
 Progress: [██████████] 100% (phase 11)
 
@@ -39,7 +39,7 @@ Progress: [██████████] 100% (phase 11)
 
 **Velocity:**
 
-- Total plans completed: 41 (v1.0)
+- Total plans completed: 55 (v1.0)
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -56,6 +56,8 @@ Progress: [██████████] 100% (phase 11)
 | 7 | 4 | - | - |
 | 8 | 6 | - | - |
 | 9 | 6 | - | - |
+| 10 | 8 | - | - |
+| 11 | 6 | - | - |
 
 **Recent Trend:**
 
