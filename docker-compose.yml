@@ -97,7 +97,7 @@ services:
 
   # ── Qdrant vector database ─────────────────────────────────────────────────
   qdrant:
-    image: qdrant/qdrant:v1.13.6
+    image: qdrant/qdrant:v1.18.2
     volumes:
       - qdrant-data:/qdrant/storage
       - ./infra/qdrant/config.yaml:/qdrant/config/production.yaml:ro
