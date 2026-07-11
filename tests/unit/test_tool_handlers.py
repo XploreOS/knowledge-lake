@@ -166,6 +166,87 @@ async def test_list_tools_uses_input_model_schema() -> None:
         )
 
 
+# ── _add_source_handler body tests (CR-01, WR-02) ────────────────────────────
+# These exercise the handler BODY (not just the ToolDef wiring). No test
+# covered this before, which is why the register_source(session, ...) call
+# signature bug shipped silently. We patch register_source at the registry
+# module boundary so no live Postgres/MinIO is required.
+
+
+@pytest.mark.skipif(not _IMPORT_OK, reason="agent.registry not yet importable")
+def test_add_source_handler_calls_register_source_without_session(monkeypatch) -> None:
+    """Handler must call register_source(url, name, ...) — no session arg, url once (CR-01)."""
+    from knowledge_lake.agent import registry as _registry
+
+    captured: dict = {}
+
+    def _stub_register_source(url, name, *, domain=None, license_type="unknown", **kwargs):
+        captured["url"] = url
+        captured["name"] = name
+        captured["domain"] = domain
+        captured["license_type"] = license_type
+        captured["extra_kwargs"] = kwargs
+        # Representative return shape from the real register_source (a dict).
+        return {
+            "source_id": "src-abc123",
+            "name": name,
+            "url": url,
+            "normalized_url": url,
+            "domain": domain,
+            "is_new": True,
+        }
+
+    monkeypatch.setattr(_registry, "register_source", _stub_register_source)
+
+    result = _registry._add_source_handler(
+        url="https://example.com/docs",
+        name="Example Docs",
+        domain="healthcare",
+        license_type="CC-BY-4.0",
+    )
+
+    # url passed exactly once (positionally); no session leaked into kwargs.
+    assert captured["url"] == "https://example.com/docs"
+    assert captured["name"] == "Example Docs"
+    assert captured["domain"] == "healthcare"
+    assert captured["license_type"] == "CC-BY-4.0"
+    assert captured["extra_kwargs"] == {}
+
+    # Response dict maps register_source's returned keys.
+    assert result == {
+        "source_id": "src-abc123",
+        "name": "Example Docs",
+        "url": "https://example.com/docs",
+        "is_new": True,
+    }
+
+
+@pytest.mark.skipif(not _IMPORT_OK, reason="agent.registry not yet importable")
+def test_add_source_handler_defaults_name_to_hostname(monkeypatch) -> None:
+    """When name is omitted, default it to the URL hostname (WR-02, CLI parity)."""
+    from knowledge_lake.agent import registry as _registry
+
+    captured: dict = {}
+
+    def _stub_register_source(url, name, *, domain=None, license_type="unknown", **kwargs):
+        captured["name"] = name
+        return {
+            "source_id": "src-1",
+            "name": name,
+            "url": url,
+            "normalized_url": url,
+            "domain": domain,
+            "is_new": True,
+        }
+
+    monkeypatch.setattr(_registry, "register_source", _stub_register_source)
+
+    result = _registry._add_source_handler(url="https://health.example.org/a/b")
+
+    assert captured["name"] == "health.example.org"
+    assert result["name"] == "health.example.org"
+
+
 @pytest.mark.xfail(not _SERVER_IMPORT_OK, reason="agent.server not yet implemented", strict=False)
 @pytest.mark.anyio
 async def test_call_tool_value_error_returns_is_error() -> None:

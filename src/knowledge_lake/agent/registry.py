@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel
 
@@ -204,22 +205,27 @@ def _add_source_handler(
     license_type: str = "unknown",
 ) -> dict:
     """Thin shim: maps SourceCreate fields to register_source()."""
-    from knowledge_lake.registry.db import get_session
+    # CLI parity (WR-02): register_source(name: str) requires a real name.
+    # When the caller omits it, default to the URL hostname, matching the CLI.
+    if not name:
+        name = urlparse(url).hostname or url
 
-    with get_session() as session:
-        source = register_source(
-            session,
-            url=url,
-            name=name,
-            domain=domain,
-            license_type=license_type,
-        )
-        return {
-            "source_id": source.id if hasattr(source, "id") else source.get("source_id"),
-            "name": source.name if hasattr(source, "name") else source.get("name"),
-            "url": source.url if hasattr(source, "url") else source.get("url"),
-            "is_new": source.is_new if hasattr(source, "is_new") else source.get("is_new"),
-        }
+    # register_source(url, name, *, domain=..., license_type=...) takes NO
+    # session parameter — it opens and commits its own session and returns a
+    # plain dict with keys source_id / name / url / normalized_url / domain /
+    # is_new (CR-01). Do NOT wrap in get_session() or pass a session arg.
+    result = register_source(
+        url,
+        name,
+        domain=domain,
+        license_type=license_type,
+    )
+    return {
+        "source_id": result["source_id"],
+        "name": result["name"],
+        "url": result["url"],
+        "is_new": result["is_new"],
+    }
 
 
 def _lineage_handler(artifact_id: str) -> dict:
