@@ -6,14 +6,14 @@ current_phase: 12
 current_phase_name: agent-surfaces
 status: executing
 stopped_at: Completed 12-01 Wave 0 scaffold
-last_updated: "2026-07-11T16:37:56.189Z"
+last_updated: "2026-07-11T17:47:53.850Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 12 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 38
-  completed_plans: 33
+  completed_plans: 35
   percent: 83
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 ## Current Position
 
 Phase: 12 (agent-surfaces) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 12 execution started
 
@@ -109,6 +109,7 @@ Progress: [██████████] 100% (phase 11)
 | Phase 11 P05 | 4m | 3 tasks | 4 files |
 | Phase 12 P01 | 5m | 3 tasks | 12 files |
 | Phase 12 P03 | 11 | 2 tasks | 2 files |
+| Phase 12 P05 | 12m | 3 tasks | 5 files |
 
 ### Quick Tasks Completed
 
@@ -206,6 +207,8 @@ Recent decisions affecting current work:
 - [Phase 12]: Wave 0 xfail tests use strict=False and import-guard pattern — collection never errors before implementation
 - [Phase ?]: SearchParams extended with domain, document_type, min_quality_score, source_name, format, tags, source_id
 - [Phase ?]: source_name aligns to ingest_url() signature
+- [Phase ?]: ToolDef is a @dataclass — lightweight registry entry, no serialization overhead needed
+- [Phase ?]: inspect.iscoroutinefunction is the async/sync bridge in call_tool (D-12 correction)
 
 ### Pending Todos
 
@@ -242,7 +245,7 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 **Stopped at:** Completed 12-01 Wave 0 scaffold
 
-Last session: 2026-07-11T16:37:43.223Z
+Last session: 2026-07-11T17:47:43.332Z
 Resume file: None
 
 ## Operator Next Steps
