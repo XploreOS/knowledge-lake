@@ -301,6 +301,37 @@ class IndexSettings(BaseModel):
     an operator/CLI step drops it after confirming the swap (D-06)."""
 
 
+class McpSettings(BaseModel):
+    """MCP agent surface configuration (MCP-01, Plan 12-05).
+
+    Nested under Settings as settings.mcp. Environment variable pattern:
+    KLAKE_MCP__TOKEN=..., KLAKE_MCP__READONLY=true, KLAKE_MCP__HOST=...,
+    KLAKE_MCP__PORT=3001
+
+    The existing env_prefix='KLAKE_' + env_nested_delimiter='__' on the
+    parent Settings model resolves these automatically (mirrors SearchSettings
+    pattern at settings.py:304).
+
+    Defaults are localhost-safe: host 127.0.0.1, readonly False, port 3001,
+    token None (no baked-in secret — always override in production).
+    """
+
+    token: Optional[str] = None
+    """Bearer token for MCP HTTP auth. None = no auth (dev default).
+    Override via KLAKE_MCP__TOKEN env var."""
+
+    readonly: bool = False
+    """If True, only read-access tools (search/list_sources/lineage/stats) are
+    registered. Override via KLAKE_MCP__READONLY=true."""
+
+    host: str = "127.0.0.1"
+    """Bind host for the MCP HTTP transport. Defaults to localhost-only (D-11).
+    Override via KLAKE_MCP__HOST env var."""
+
+    port: int = 3001
+    """Bind port for the MCP HTTP transport. Override via KLAKE_MCP__PORT env var."""
+
+
 class SearchSettings(BaseModel):
     """Hybrid-retrieval mode configuration (RETR-03, D-08).
 
@@ -439,6 +470,13 @@ class Settings(BaseSettings):
 
     domain: DomainSettings = Field(default_factory=DomainSettings)
     """Domain pack configuration (DOMAIN-01)."""
+
+    mcp: McpSettings = Field(default_factory=McpSettings)
+    """MCP agent surface configuration (MCP-01, Plan 12-05).
+
+    Resolved via KLAKE_MCP__TOKEN / KLAKE_MCP__READONLY / KLAKE_MCP__HOST /
+    KLAKE_MCP__PORT env vars (env_nested_delimiter='__').
+    """
 
     # ── Validators ────────────────────────────────────────────────────────────
 
