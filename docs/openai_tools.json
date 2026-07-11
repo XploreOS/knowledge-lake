@@ -1,0 +1,543 @@
+[
+  {
+    "function": {
+      "description": "Semantic search over the knowledge lake. Returns ranked chunk hits with scores and citation metadata. Supports dense, sparse, and hybrid retrieval modes.",
+      "name": "search",
+      "parameters": {
+        "description": "Query parameters for GET /search and the MCP ``search`` tool (D-02).\n\nPydantic validates these before the handler runs, satisfying ASVS V5\n(input validation at the API boundary).\n\nExtended in Plan 12-03 to cover every ``search()`` filter kwarg so that\n``SearchParams().model_dump(exclude_none=True)`` unpacks cleanly into\n``search(**kwargs)`` without an unexpected-keyword error (Pitfall 4,\nSKILL-03 no-drift rule).\n\nHandler note: ``q`` maps to the ``query`` positional arg of ``search()``;\ncallers must pass it as ``search(query=params.q, **rest)`` (the field\nis kept as ``q`` for URL-query-parameter brevity in GET /search).",
+        "properties": {
+          "collection": {
+            "default": "klake_chunks",
+            "description": "Qdrant collection to search.",
+            "title": "Collection",
+            "type": "string"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to this document type (e.g. 'regulation').",
+            "title": "Document Type"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to this domain (e.g. 'healthcare').",
+            "title": "Domain"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to this source format (e.g. 'pdf', 'html'). Shadows Python built-in \u2014 only safe because the built-in is not used within this class scope (mirrors noqa A002 in search.py).",
+            "title": "Format"
+          },
+          "min_quality_score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: only return chunks with quality_score >= this value.",
+            "title": "Min Quality Score"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "pattern": "^(hybrid|dense|sparse)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Search mode; default resolves from KLAKE_SEARCH__MODE (hybrid). Must be one of: hybrid, dense, sparse. An unrecognised value is rejected with 422 (T-10-02, ASVS V5).",
+            "title": "Mode"
+          },
+          "q": {
+            "description": "Natural-language search query.",
+            "minLength": 0,
+            "title": "Q",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to chunks from this source registry ID.",
+            "title": "Source Id"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to this source name.",
+            "title": "Source Name"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Payload filter: restrict results to chunks whose tags contain all of the listed values. Single tag uses MatchValue; multiple use MatchAny (D-11).",
+            "title": "Tags"
+          },
+          "top_k": {
+            "default": 5,
+            "description": "Maximum number of results to return.",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "SearchParams",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "List registered sources in the knowledge lake registry. Supports optional domain filtering and pagination.",
+      "name": "list_sources",
+      "parameters": {
+        "description": "MCP ``list_sources`` tool input \u2014 maps to ``pipeline.query.list_sources()``.\n\n``list_sources()`` signature:\n    list_sources(domain=None, *, limit=50, offset=0)",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Filter results to this domain (e.g. 'healthcare').",
+            "title": "Domain"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of sources to return.",
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Zero-based pagination offset.",
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          }
+        },
+        "title": "ListSourcesInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Trace the full ancestry chain of any artifact. Returns an ordered list of nodes from the queried artifact back to the original raw document.",
+      "name": "lineage",
+      "parameters": {
+        "description": "MCP ``lineage`` tool input \u2014 maps to ``lineage.resolve_ancestry(artifact_id)``.\n\nThe FastAPI endpoint uses artifact_id as a path parameter; the MCP tool\npasses it as a body field.  Security: the lineage resolver raises\nLookupError on unknown IDs (no SSRF surface \u2014 DB-only lookup).",
+        "properties": {
+          "artifact_id": {
+            "description": "Artifact ID to trace lineage for (type-prefixed UUIDv7, e.g. 'chk_...').",
+            "minLength": 1,
+            "title": "Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "title": "LineageInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Return aggregate statistics about the knowledge lake: source count, document count, artifact counts by type, and Qdrant vector point count.",
+      "name": "stats",
+      "parameters": {
+        "description": "MCP ``stats`` tool input \u2014 maps to ``pipeline.query.stats()``.\n\n``stats()`` signature: stats(*, collection=\"klake_chunks\", domain=None)\nAll fields are optional; defaults mirror the pipeline function defaults.",
+        "properties": {
+          "collection": {
+            "default": "klake_chunks",
+            "description": "Qdrant collection to count points in.",
+            "title": "Collection",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional domain to scope source and artifact counts (e.g. 'healthcare').",
+            "title": "Domain"
+          }
+        },
+        "title": "StatsInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Ingest a single document from a URL into the knowledge lake. Fetches, stores in the raw zone, and returns the artifact ID. SSRF-guarded via validate_public_url (RFC-1918/IMDS blocked).",
+      "name": "ingest_url",
+      "parameters": {
+        "description": "MCP ``ingest_url`` tool input \u2014 maps to ``pipeline.ingest.ingest_url()``.\n\n``ingest_url()`` signature:\n    ingest_url(url, source_name, *, mime_type=None, license_type=\"unknown\",\n               robots_checked=False, settings=None)\n\nSSRF guard (ASVS V5, T-12-07): scheme/SSRF validation is performed by\n``ingest_url()`` itself \u2014 this model validates the surface-level format only.\nDo NOT re-implement the guard here (DRY, plan prohibition).",
+        "properties": {
+          "license_type": {
+            "default": "unknown",
+            "description": "SPDX license identifier or 'unknown'.",
+            "maxLength": 64,
+            "title": "License Type",
+            "type": "string"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "MIME type override (e.g. 'application/pdf'). Defaults to Content-Type header.",
+            "title": "Mime Type"
+          },
+          "robots_checked": {
+            "default": false,
+            "description": "Set to True only after verifying robots.txt allows fetching.",
+            "title": "Robots Checked",
+            "type": "boolean"
+          },
+          "source_name": {
+            "description": "Human-readable name for the source registry entry.",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Source Name",
+            "type": "string"
+          },
+          "url": {
+            "description": "https:// URL of the document to ingest.",
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "source_name"
+        ],
+        "title": "IngestUrlInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Register a new source in the knowledge lake registry. Deduplicates by normalized URL \u2014 returns existing source if already present.",
+      "name": "add_source",
+      "parameters": {
+        "description": "Request body for POST /sources \u2014 register a new source.\n\nPydantic validates these at the API boundary (ASVS V5, T-02-04).",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Domain classification (e.g. 'healthcare', 'legal').",
+            "title": "Domain"
+          },
+          "license_type": {
+            "default": "unknown",
+            "description": "SPDX license identifier or 'unknown'.",
+            "maxLength": 64,
+            "title": "License Type",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Human-readable source name (defaults to URL hostname).",
+            "title": "Name"
+          },
+          "url": {
+            "description": "https:// URL of the source to register.",
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "SourceCreate",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Start a crawl job for a seed URL. Follows links up to max_pages depth, stores raw HTML artifacts. Async \u2014 use process_crawled to parse and index after crawling.",
+      "name": "crawl",
+      "parameters": {
+        "description": "Request body for POST /crawl-jobs \u2014 start a crawl.\n\nPydantic validates at the API boundary (ASVS V5, T-02-13).",
+        "properties": {
+          "crawler": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Override crawler adapter name (must be a registered crawler).",
+            "title": "Crawler"
+          },
+          "max_pages": {
+            "anyOf": [
+              {
+                "maximum": 10000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Maximum number of pages to crawl.",
+            "title": "Max Pages"
+          },
+          "source_url": {
+            "description": "https:// seed URL to crawl.",
+            "minLength": 8,
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_url"
+        ],
+        "title": "CrawlJobCreate",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Batch-crawl all registered sources (or a domain subset). Runs each source crawl independently \u2014 failures on one source do not abort others.",
+      "name": "crawl_all",
+      "parameters": {
+        "description": "MCP ``crawl_all`` tool input \u2014 maps to ``pipeline.crawl.crawl_all_sources()``.\n\n``crawl_all_sources()`` signature:\n    crawl_all_sources(domain=None, settings=None)\n\n``settings`` is internal infrastructure \u2014 not exposed as a tool input field.",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional domain filter; when set, only sources matching this domain are crawled.",
+            "title": "Domain"
+          }
+        },
+        "title": "CrawlAllInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Process crawled raw_document artifacts through the full pipeline: parse \u2192 chunk \u2192 embed \u2192 index. Finds all unprocessed raw docs and converts them to searchable vectors.",
+      "name": "process_crawled",
+      "parameters": {
+        "description": "MCP ``process_crawled`` tool input \u2014 maps to ``pipeline.process.process_crawled()``.\n\n``process_crawled()`` signature:\n    process_crawled(*, source_id=None, limit=100, collection=\"klake_chunks\")",
+        "properties": {
+          "collection": {
+            "default": "klake_chunks",
+            "description": "Qdrant collection to index chunks into.",
+            "title": "Collection",
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "description": "Maximum number of raw documents to process.",
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Restrict processing to raw docs from this source registry ID.",
+            "title": "Source Id"
+          }
+        },
+        "title": "ProcessCrawledInput",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Export the curated knowledge lake corpus to the gold zone. Supports three kinds: 'rag-corpus' (Parquet), 'pretrain' (JSONL), 'finetune' (JSONL from a named dataset).",
+      "name": "export",
+      "parameters": {
+        "description": "Request body for POST /exports.\n\nBounded to the three valid export kinds via Pydantic pattern validation\n(T-05-09: no free-form string ever reaches the gold-zone S3 key construction).",
+        "properties": {
+          "dataset_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Required for kind='finetune'. The logical Dataset name to export.",
+            "title": "Dataset Name"
+          },
+          "kind": {
+            "description": "Export kind: 'rag-corpus', 'pretrain', or 'finetune'.",
+            "pattern": "^(rag-corpus|pretrain|finetune)$",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ExportRequest",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  },
+  {
+    "function": {
+      "description": "Load a domain pack and register all its sources. Reads the domain YAML, validates, and registers each source via add_source.",
+      "name": "init_domain",
+      "parameters": {
+        "description": "Request body for POST /domains/load \u2014 load a domain pack and register its sources.\n\nSecurity (T-06-08 / ASVS V5):\n    - name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' via Pydantic pattern.\n    - Pattern blocks path traversal attempts (e.g. '../etc', 'foo/../bar').",
+        "properties": {
+          "name": {
+            "description": "Domain pack name to load (e.g. 'healthcare').",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DomainLoadRequest",
+        "type": "object"
+      }
+    },
+    "type": "function"
+  }
+]
