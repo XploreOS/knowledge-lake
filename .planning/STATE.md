@@ -5,10 +5,10 @@ milestone_name: — Agent-Ready Lake
 current_phase: 11
 current_phase_name: crawl-scheduling
 status: verified
-stopped_at: Phase 11 verified 9/9 (gap closure 11-06 complete)
-last_updated: "2026-07-11T06:20:00.000Z"
+stopped_at: Phase 12 context gathered
+last_updated: "2026-07-11T10:35:58.244Z"
 last_activity: 2026-07-11
-last_activity_desc: "Phase 11 gap closure (11-06) complete; re-verified 9/9 — nonce-gate suppression + per-source concurrency"
+last_activity_desc: gap closure 11-06 complete; re-verified 9/9
 progress:
   total_phases: 6
   completed_phases: 5
@@ -232,10 +232,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** Completed 11-01-PLAN.md
+**Stopped at:** Phase 12 context gathered
 
-Last session: 2026-07-10T17:15:17.449Z
-Resume file: None
+Last session: 2026-07-11T10:35:58.234Z
+Resume file: .planning/phases/12-agent-surfaces/12-CONTEXT.md
 
 ## Operator Next Steps
 
