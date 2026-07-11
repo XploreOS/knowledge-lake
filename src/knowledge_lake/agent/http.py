@@ -38,7 +38,26 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette.routing import Mount
+from starlette.routing import Route
+
+
+class _StreamableHTTPASGIApp:
+    """Minimal ASGI wrapper delegating to ``StreamableHTTPSessionManager``.
+
+    Passing a *class instance* (not a bare function) to a Starlette ``Route``
+    makes Starlette treat the endpoint as a raw ASGI app with ``methods=None``
+    (all methods allowed) — the Streamable HTTP transport uses GET, POST, and
+    DELETE on the same path.  Using ``Route`` (not ``Mount``) also avoids the
+    trailing-slash 307 redirect a ``Mount("/mcp")`` would emit for ``POST /mcp``
+    (that redirect makes httpx drop the ``Authorization`` header, breaking the
+    bearer guard).
+    """
+
+    def __init__(self, manager: StreamableHTTPSessionManager) -> None:
+        self._manager = manager
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: ANN001
+        await self._manager.handle_request(scope, receive, send)
 
 
 class StaticBearerMiddleware(BaseHTTPMiddleware):
@@ -134,14 +153,12 @@ def build_http_app(
         async with mgr.run():
             yield
 
-    async def handle(scope, receive, send):  # noqa: ANN001, ANN202
-        await mgr.handle_request(scope, receive, send)
-
     # Attach the bearer middleware ONLY when a token is configured (D-10).
     middleware = [Middleware(StaticBearerMiddleware, token=token)] if token else []
 
+    # Route (not Mount) at exactly /mcp: no trailing-slash redirect, all methods.
     return Starlette(
-        routes=[Mount("/mcp", app=handle)],
+        routes=[Route("/mcp", endpoint=_StreamableHTTPASGIApp(mgr))],
         lifespan=lifespan,
         middleware=middleware,
     )
