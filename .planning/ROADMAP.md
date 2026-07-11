@@ -216,7 +216,7 @@ Plans:
   4. OpenAI-format tool definitions are auto-generated from the Pydantic schemas, sharing a single schema source of truth with the OpenAPI export and the MCP tool registry (assert stdio == http == openapi == openai; no drift between surfaces).
   5. The repo ships Claude Code skills — `build-corpus.md`, `search-knowledge.md`, `add-source.md`, `export-dataset.md` — that drive the lake through the stabilized MCP tools.
 
-**Plans**: 6/8 plans executed
+**Plans**: 7/8 plans executed
 **Wave 1**
 
 - [x] 12-01-PLAN.md — mcp==1.28.1 dependency + Wave 0 RED test scaffold (normalize helper)
@@ -237,7 +237,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 12-07-PLAN.md — klake mcp (stdio/--sse) + klake openapi + OpenAI tool defs; committed docs/openapi.json & docs/openai_tools.json
+- [x] 12-07-PLAN.md — klake mcp (stdio/--sse) + klake openapi + OpenAI tool defs; committed docs/openapi.json & docs/openai_tools.json
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
@@ -256,4 +256,4 @@ Plans:
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 8/8 | Complete    | 2026-07-10 |
 | 11. Crawl Scheduling | 6/6 | Complete    | 2026-07-10 |
-| 12. Agent Surfaces | 6/8 | In Progress|  |
+| 12. Agent Surfaces | 7/8 | In Progress|  |
