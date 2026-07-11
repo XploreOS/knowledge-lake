@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — Agent-Ready Lake
 current_phase: 12
-current_phase_name: Agent Surfaces
-status: verifying
-stopped_at: Phase 12 context gathered
-last_updated: "2026-07-11T11:32:38.405Z"
+current_phase_name: agent-surfaces
+status: executing
+stopped_at: Completed 12-01 Wave 0 scaffold
+last_updated: "2026-07-11T11:48:04.610Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
+last_activity_desc: Phase 12 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 38
-  completed_plans: 30
-  percent: 79
+  completed_plans: 31
+  percent: 82
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 11 — crawl-scheduling
+**Current focus:** Phase 12 — agent-surfaces
 
 ## Current Position
 
-Phase: 12 — Agent Surfaces
-Plan: Not started
-Status: Phase 11 verified — both human-verification items closed (nonce-gate suppression, per-source concurrency)
-Last activity: 2026-07-11 — Phase 11 complete, transitioned to Phase 12
+Phase: 12 (agent-surfaces) — EXECUTING
+Plan: 2 of 8
+Status: Ready to execute
+Last activity: 2026-07-11 — Phase 12 execution started
 
 Progress: [██████████] 100% (phase 11)
 
@@ -107,6 +107,7 @@ Progress: [██████████] 100% (phase 11)
 | Phase 11 P03 | 4m | 1 tasks | 1 files |
 | Phase 11 P04 | 3m | 3 tasks | 2 files |
 | Phase 11 P05 | 4m | 3 tasks | 4 files |
+| Phase 12 P01 | 5m | 3 tasks | 12 files |
 
 ### Quick Tasks Completed
 
@@ -200,6 +201,8 @@ Recent decisions affecting current work:
 - [Phase ?]: D-05a: crawl_schedule persisted as column kwarg, never inside Source.config
 - [Phase ?]: D-03: Both write paths validate cron with is_valid_cron_string before DB persist
 - [Phase ?]: Cron helpers sourced from dagster._utils.schedules (no external croniter dependency; T-11-SC)
+- [Phase 12]: mcp==1.28.1 pinned bare (no extras) — uv resolved all transitive conflicts automatically
+- [Phase 12]: Wave 0 xfail tests use strict=False and import-guard pattern — collection never errors before implementation
 
 ### Pending Todos
 
@@ -234,10 +237,10 @@ Items acknowledged and carried forward (v2.1+, out of v2.0 scope):
 
 ## Session Continuity
 
-**Stopped at:** Phase 12 context gathered
+**Stopped at:** Completed 12-01 Wave 0 scaffold
 
-Last session: 2026-07-11T10:35:58.234Z
-Resume file: .planning/phases/12-agent-surfaces/12-CONTEXT.md
+Last session: 2026-07-11T11:48:04.601Z
+Resume file: None
 
 ## Operator Next Steps
 

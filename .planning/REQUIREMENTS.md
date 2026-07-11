@@ -27,11 +27,11 @@ Scoped for this milestone. Each maps to exactly one roadmap phase (see Traceabil
 
 ### AI Agent Skills
 
-- [ ] **MCP-01**: An MCP server exposes lake operations as curated, intent-level tools — `search`, `ingest_url`, `crawl`, `crawl_all`, `process_crawled`, `add_source`, `list_sources`, `lineage`, `export`, `init_domain`, `stats` — implemented as thin shims over the existing `pipeline/*.py` service functions (never proxying the REST API), sharing one tool registry across all transports.
-- [ ] **MCP-02**: A user can start the MCP server over stdio with `klake mcp` and over HTTP with `klake mcp --sse --port 3001`. The stdio path guarantees a clean JSON-RPC stream (structlog and all library output redirected off stdout). *Note (research): the `--sse` HTTP transport is implemented via MCP **Streamable HTTP**, since the legacy HTTP+SSE transport is deprecated in the current MCP spec; `--sse` is retained as the flag name.*
-- [ ] **SKILL-01**: The repo ships Claude Code skills — `build-corpus.md`, `search-knowledge.md`, `add-source.md`, `export-dataset.md` — that drive the lake through the stabilized MCP tools.
-- [ ] **SKILL-02**: A user can run `klake openapi` to export the API's OpenAPI schema, and a generated `docs/openapi.json` is committed to the repo.
-- [ ] **SKILL-03**: OpenAI-format tool definitions are auto-generated from the Pydantic schemas, sharing a single schema source of truth with the OpenAPI export and the MCP tool registry (no drift between surfaces).
+- [x] **MCP-01**: An MCP server exposes lake operations as curated, intent-level tools — `search`, `ingest_url`, `crawl`, `crawl_all`, `process_crawled`, `add_source`, `list_sources`, `lineage`, `export`, `init_domain`, `stats` — implemented as thin shims over the existing `pipeline/*.py` service functions (never proxying the REST API), sharing one tool registry across all transports.
+- [x] **MCP-02**: A user can start the MCP server over stdio with `klake mcp` and over HTTP with `klake mcp --sse --port 3001`. The stdio path guarantees a clean JSON-RPC stream (structlog and all library output redirected off stdout). *Note (research): the `--sse` HTTP transport is implemented via MCP **Streamable HTTP**, since the legacy HTTP+SSE transport is deprecated in the current MCP spec; `--sse` is retained as the flag name.*
+- [x] **SKILL-01**: The repo ships Claude Code skills — `build-corpus.md`, `search-knowledge.md`, `add-source.md`, `export-dataset.md` — that drive the lake through the stabilized MCP tools.
+- [x] **SKILL-02**: A user can run `klake openapi` to export the API's OpenAPI schema, and a generated `docs/openapi.json` is committed to the repo.
+- [x] **SKILL-03**: OpenAI-format tool definitions are auto-generated from the Pydantic schemas, sharing a single schema source of truth with the OpenAPI export and the MCP tool registry (no drift between surfaces).
 
 ### Crawl Scheduling & Hybrid Search
 
@@ -100,11 +100,11 @@ Which phase covers which requirement. Populated during roadmap creation.
 | RETR-03 | Phase 10 | Complete |
 | SCHED-01 | Phase 11 | Complete |
 | SCHED-02 | Phase 11 | Complete |
-| MCP-01 | Phase 12 | Pending |
-| MCP-02 | Phase 12 | Pending |
-| SKILL-01 | Phase 12 | Pending |
-| SKILL-02 | Phase 12 | Pending |
-| SKILL-03 | Phase 12 | Pending |
+| MCP-01 | Phase 12 | Complete |
+| MCP-02 | Phase 12 | Complete |
+| SKILL-01 | Phase 12 | Complete |
+| SKILL-02 | Phase 12 | Complete |
+| SKILL-03 | Phase 12 | Complete |
 
 **Coverage:**
 
