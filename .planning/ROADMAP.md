@@ -14,7 +14,7 @@
 - [x] **Phase 9: Storage Segmentation** - Domain/source-scoped S3 keys, object tags, gold-zone sub-zones (forward-only) (completed 2026-07-10)
 - [x] **Phase 10: Hybrid Retrieval** - BM25 + dense named vectors with server-side RRF, mode-switchable *(LIVE MIGRATION)* (completed 2026-07-11)
 - [x] **Phase 11: Crawl Scheduling** - Dagster re-crawl sensor + normalized-text change gate *(LIVE MIGRATION)*
-- [ ] **Phase 12: Agent Surfaces** - Curated MCP server (stdio + Streamable HTTP), OpenAPI/OpenAI tool defs, Claude Code skills
+- [x] **Phase 12: Agent Surfaces** - Curated MCP server (stdio + Streamable HTTP), OpenAPI/OpenAI tool defs, Claude Code skills (completed 2026-07-11)
 
 <details>
 <summary>✅ v1.0 MVP (Phases 1-6) — SHIPPED 2026-07-07</summary>
@@ -241,7 +241,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 12-08-PLAN.md — surface parity test (stdio==http==openapi==openai) + four Claude Code skills
+- [x] 12-08-PLAN.md — surface parity test (stdio==http==openapi==openai) + four Claude Code skills
 
 **Research note**: Flag for `--research-phase` at plan time (stdout-isolation / Streamable-HTTP spike) — confirm `streamable_http_app()`/lifespan wiring against installed `mcp` 1.28.x, nail the `--sse`→Streamable HTTP substitution, and settle the localhost/auth/CORS + read/write tool-separation model before coding. First-task gate: stdout-lockdown shim + self-test (stdio mode only) before any tool logic.
 
@@ -256,4 +256,4 @@ Plans:
 | 9. Storage Segmentation | 6/6 | Complete    | 2026-07-09 |
 | 10. Hybrid Retrieval | 8/8 | Complete    | 2026-07-10 |
 | 11. Crawl Scheduling | 6/6 | Complete    | 2026-07-10 |
-| 12. Agent Surfaces | 7/8 | In Progress|  |
+| 12. Agent Surfaces | 8/8 | Complete    | 2026-07-11 |
