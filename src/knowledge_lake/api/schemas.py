@@ -786,3 +786,150 @@ class DomainLoadResponse(BaseModel):
     upload_required_count: int = Field(
         description="Number of upload-type sources that require manual download first.",
     )
+
+
+# ── MCP tool input models (Plan 12-03, D-02 / SKILL-03 no-drift) ─────────────
+#
+# Each model is the single source of truth for one MCP tool's argument shape.
+# Field names match the target pipeline function's kwargs exactly so that
+# ``model.model_dump(exclude_none=True)`` unpacks cleanly into the function call.
+#
+# Tools that already have a matching request schema reuse it:
+#   - crawl        → CrawlJobCreate (source_url, crawler, max_pages)
+#   - add_source   → SourceCreate   (url, name, domain, license_type)
+#   - export       → ExportRequest  (kind, dataset_name)
+#   - init_domain  → DomainLoadRequest (name — carries the path-traversal guard)
+#
+# The six new models below cover the remaining tools (no prior request schema).
+
+
+class StatsInput(BaseModel):
+    """MCP ``stats`` tool input — maps to ``pipeline.query.stats()``.
+
+    ``stats()`` signature: stats(*, collection="klake_chunks", domain=None)
+    All fields are optional; defaults mirror the pipeline function defaults.
+    """
+
+    collection: str = Field(
+        default="klake_chunks",
+        description="Qdrant collection to count points in.",
+    )
+    domain: Optional[str] = Field(
+        default=None,
+        description="Optional domain to scope source and artifact counts (e.g. 'healthcare').",
+    )
+
+
+class ProcessCrawledInput(BaseModel):
+    """MCP ``process_crawled`` tool input — maps to ``pipeline.process.process_crawled()``.
+
+    ``process_crawled()`` signature:
+        process_crawled(*, source_id=None, limit=100, collection="klake_chunks")
+    """
+
+    source_id: Optional[str] = Field(
+        default=None,
+        description="Restrict processing to raw docs from this source registry ID.",
+    )
+    limit: int = Field(
+        default=100,
+        description="Maximum number of raw documents to process.",
+        ge=1,
+        le=10000,
+    )
+    collection: str = Field(
+        default="klake_chunks",
+        description="Qdrant collection to index chunks into.",
+    )
+
+
+class ListSourcesInput(BaseModel):
+    """MCP ``list_sources`` tool input — maps to ``pipeline.query.list_sources()``.
+
+    ``list_sources()`` signature:
+        list_sources(domain=None, *, limit=50, offset=0)
+    """
+
+    domain: Optional[str] = Field(
+        default=None,
+        description="Filter results to this domain (e.g. 'healthcare').",
+    )
+    limit: int = Field(
+        default=50,
+        description="Maximum number of sources to return.",
+        ge=1,
+        le=1000,
+    )
+    offset: int = Field(
+        default=0,
+        description="Zero-based pagination offset.",
+        ge=0,
+    )
+
+
+class LineageInput(BaseModel):
+    """MCP ``lineage`` tool input — maps to ``lineage.resolve_ancestry(artifact_id)``.
+
+    The FastAPI endpoint uses artifact_id as a path parameter; the MCP tool
+    passes it as a body field.  Security: the lineage resolver raises
+    LookupError on unknown IDs (no SSRF surface — DB-only lookup).
+    """
+
+    artifact_id: str = Field(
+        ...,
+        description="Artifact ID to trace lineage for (type-prefixed UUIDv7, e.g. 'chk_...').",
+        min_length=1,
+    )
+
+
+class IngestUrlInput(BaseModel):
+    """MCP ``ingest_url`` tool input — maps to ``pipeline.ingest.ingest_url()``.
+
+    ``ingest_url()`` signature:
+        ingest_url(url, source_name, *, mime_type=None, license_type="unknown",
+                   robots_checked=False, settings=None)
+
+    SSRF guard (ASVS V5, T-12-07): scheme/SSRF validation is performed by
+    ``ingest_url()`` itself — this model validates the surface-level format only.
+    Do NOT re-implement the guard here (DRY, plan prohibition).
+    """
+
+    url: str = Field(
+        ...,
+        description="https:// URL of the document to ingest.",
+        min_length=8,
+    )
+    source_name: str = Field(
+        ...,
+        description="Human-readable name for the source registry entry.",
+        min_length=1,
+        max_length=255,
+    )
+    mime_type: Optional[str] = Field(
+        default=None,
+        description="MIME type override (e.g. 'application/pdf'). Defaults to Content-Type header.",
+    )
+    license_type: str = Field(
+        default="unknown",
+        description="SPDX license identifier or 'unknown'.",
+        max_length=64,
+    )
+    robots_checked: bool = Field(
+        default=False,
+        description="Set to True only after verifying robots.txt allows fetching.",
+    )
+
+
+class CrawlAllInput(BaseModel):
+    """MCP ``crawl_all`` tool input — maps to ``pipeline.crawl.crawl_all_sources()``.
+
+    ``crawl_all_sources()`` signature:
+        crawl_all_sources(domain=None, settings=None)
+
+    ``settings`` is internal infrastructure — not exposed as a tool input field.
+    """
+
+    domain: Optional[str] = Field(
+        default=None,
+        description="Optional domain filter; when set, only sources matching this domain are crawled.",
+    )

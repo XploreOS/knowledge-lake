@@ -130,12 +130,17 @@ def test_lineage_input_has_artifact_id() -> None:
 
 
 @pytest.mark.xfail(not _MODELS_OK, reason="Wave 0 scaffold — input models not yet added (Plan 02)", strict=False)
-def test_ingest_url_input_has_url_and_source_id() -> None:
-    """IngestUrlInput must have url and source_id fields."""
+def test_ingest_url_input_has_url_and_source_name() -> None:
+    """IngestUrlInput must have url and source_name fields (maps to ingest_url(url, source_name)).
+
+    Rule 1 fix: original scaffold used 'source_id' but ingest_url() takes 'source_name'
+    as the human-readable name for the source registry entry.  'source_id' is an
+    output of ingest_url(), not an input.
+    """
     assert IngestUrlInput is not None
     fields = IngestUrlInput.model_fields
     assert "url" in fields, "IngestUrlInput missing 'url' field"
-    assert "source_id" in fields, "IngestUrlInput missing 'source_id' field"
+    assert "source_name" in fields, "IngestUrlInput missing 'source_name' field"
 
 
 # ── CrawlAllInput ─────────────────────────────────────────────────────────────
