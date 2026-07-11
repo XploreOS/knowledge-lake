@@ -33,11 +33,13 @@ files_reviewed_list:
   - tests/unit/test_tool_handlers.py
   - tests/unit/test_tool_registry.py
 findings:
-  critical: 1
-  warning: 4
+  critical: 0
+  warning: 3
   info: 0
-  total: 5
+  total: 3
+  resolved: 2
 status: issues_found
+resolution: "CR-01 + WR-02 fixed in commit 2d73db1 (add_source handler) with regression tests; WR-01/WR-03/WR-04 deferred to user."
 ---
 
 # Phase 12: Code Review Report
@@ -45,7 +47,16 @@ status: issues_found
 **Reviewed:** 2026-07-11
 **Depth:** standard
 **Files Reviewed:** 28
-**Status:** issues_found
+**Status:** issues_found (blocker resolved; 3 warnings deferred)
+
+> **Resolution (2026-07-11):** CR-01 (BLOCKER) and WR-02 were fixed in commit `2d73db1`
+> — `_add_source_handler` now calls `register_source(url, name, domain=..., license_type=...)`
+> correctly (no session) and defaults `name` to the URL hostname, with two new regression tests
+> in `tests/unit/test_tool_handlers.py` that reproduce the original `TypeError`. **WR-01**
+> (factory-path token auth), **WR-03** (`process_crawled` silent exception swallowing), and
+> **WR-04** (default unauthenticated write-tool HTTP posture) are intentionally **deferred** for
+> user decision — they are security-posture/observability design choices, not outright defects.
+> Run `/gsd-code-review 12 --fix` to address them, or handle WR-04 as an explicit posture decision.
 
 ## Summary
 
@@ -66,7 +77,7 @@ default posture of the HTTP surface.
 
 ## Critical Issues
 
-### CR-01: `add_source` MCP tool always raises TypeError — passes a `session` to a session-less function
+### CR-01 [RESOLVED — commit 2d73db1]: `add_source` MCP tool always raises TypeError — passes a `session` to a session-less function
 
 **File:** `src/knowledge_lake/agent/registry.py:200-222`
 **Issue:**
@@ -164,7 +175,7 @@ def build_http_app(server=None, *, host=None, port=None, token: str | None = _UN
         token = settings.mcp.token
 ```
 
-### WR-02: `add_source` MCP path drops the documented "defaults to URL hostname" name behavior
+### WR-02 [RESOLVED — commit 2d73db1]: `add_source` MCP path drops the documented "defaults to URL hostname" name behavior
 
 **File:** `src/knowledge_lake/agent/registry.py:200-216`
 **Issue:**
