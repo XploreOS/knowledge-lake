@@ -216,7 +216,7 @@ Plans:
   4. OpenAI-format tool definitions are auto-generated from the Pydantic schemas, sharing a single schema source of truth with the OpenAPI export and the MCP tool registry (assert stdio == http == openapi == openai; no drift between surfaces).
   5. The repo ships Claude Code skills — `build-corpus.md`, `search-knowledge.md`, `add-source.md`, `export-dataset.md` — that drive the lake through the stabilized MCP tools.
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 **Wave 1**
 
 - [x] 12-01-PLAN.md — mcp==1.28.1 dependency + Wave 0 RED test scaffold (normalize helper)
