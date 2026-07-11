@@ -1,0 +1,3086 @@
+{
+  "components": {
+    "schemas": {
+      "ArtifactOut": {
+        "description": "A single artifact entry for GET /documents and GET /documents/{artifact_id}.\n\nReturns the registry metadata for a document artifact of any type.",
+        "properties": {
+          "artifact_type": {
+            "description": "Node type: raw_document, parsed_document, chunk, etc.",
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "SHA-256 hash of the artifact bytes.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO-8601 creation timestamp.",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "description": "Artifact registry ID (type-prefixed UUIDv7).",
+            "title": "Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MIME type of the artifact.",
+            "title": "Mime Type"
+          },
+          "parent_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent artifact ID (None for root raw_document).",
+            "title": "Parent Artifact Id"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "S3 URI where the artifact bytes are stored.",
+            "title": "Storage Uri"
+          }
+        },
+        "required": [
+          "id",
+          "artifact_type",
+          "content_hash",
+          "created_at"
+        ],
+        "title": "ArtifactOut",
+        "type": "object"
+      },
+      "ChunkRequest": {
+        "description": "Request body for POST /chunk \u2014 run the chunk pipeline stage.\n\nPydantic validates at the API boundary (ASVS V5, T-03-11).",
+        "properties": {
+          "parsed_artifact_id": {
+            "description": "ID of the parsed_document artifact to chunk.",
+            "minLength": 1,
+            "title": "Parsed Artifact Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID that owns the parsed artifact.",
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parsed_artifact_id",
+          "source_id"
+        ],
+        "title": "ChunkRequest",
+        "type": "object"
+      },
+      "ChunkResponse": {
+        "description": "Response body for POST /chunk.",
+        "properties": {
+          "chunk_count": {
+            "description": "Number of chunk artifacts created.",
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "chunk_ids": {
+            "description": "List of chunk artifact IDs (chk_...).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Chunk Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_count",
+          "chunk_ids"
+        ],
+        "title": "ChunkResponse",
+        "type": "object"
+      },
+      "CleanRequest": {
+        "description": "Request body for POST /clean \u2014 run the clean pipeline stage.\n\nPydantic validates at the API boundary (ASVS V5, T-03-11).",
+        "properties": {
+          "parsed_artifact_id": {
+            "description": "ID of the parsed_document artifact to clean.",
+            "minLength": 1,
+            "title": "Parsed Artifact Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID that owns the parsed artifact.",
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parsed_artifact_id",
+          "source_id"
+        ],
+        "title": "CleanRequest",
+        "type": "object"
+      },
+      "CleanResponse": {
+        "description": "Response body for POST /clean.",
+        "properties": {
+          "artifact_id": {
+            "description": "Cleaned document artifact ID (doc_...).",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "SHA-256 hash of the cleaned document bytes.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "dedup_status": {
+            "description": "Near-duplicate status: 'unique', 'exact_dup', or 'near_dup'.",
+            "title": "Dedup Status",
+            "type": "string"
+          },
+          "language": {
+            "description": "Detected language ISO 639-1 code (e.g. 'en').",
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "language",
+          "dedup_status",
+          "content_hash"
+        ],
+        "title": "CleanResponse",
+        "type": "object"
+      },
+      "CrawlAllOut": {
+        "description": "Response body for POST /crawl-all \u2014 batch-crawl summary.\n\nCRAWL-02 D-09: reports aggregate totals and a per-source result list.\nA failure on one source is reflected in 'failed' and 'results' but the\nendpoint still returns 200 with partial results for the remaining sources.",
+        "properties": {
+          "failed": {
+            "description": "Number of sources whose crawl raised an exception.",
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "description": "Per-source crawl result list (one entry per source attempted).",
+            "items": {
+              "$ref": "#/components/schemas/CrawlAllSourceResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "succeeded": {
+            "description": "Number of sources whose crawl completed without error.",
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of sources attempted.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "succeeded",
+          "failed",
+          "results"
+        ],
+        "title": "CrawlAllOut",
+        "type": "object"
+      },
+      "CrawlAllSourceResult": {
+        "description": "Per-source result entry in a CrawlAllOut response.\n\nCRAWL-02 D-09: each source's crawl is independent \u2014 failures on one source\nare logged and counted but do not abort the batch.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Error message if status is 'failed', else None.",
+            "title": "Error"
+          },
+          "pages_complete": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Number of pages successfully crawled (None if failed before crawl started).",
+            "title": "Pages Complete"
+          },
+          "source_id": {
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "'ok' if crawl succeeded, 'failed' otherwise.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "status"
+        ],
+        "title": "CrawlAllSourceResult",
+        "type": "object"
+      },
+      "CrawlJobCreate": {
+        "description": "Request body for POST /crawl-jobs \u2014 start a crawl.\n\nPydantic validates at the API boundary (ASVS V5, T-02-13).",
+        "properties": {
+          "crawler": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Override crawler adapter name (must be a registered crawler).",
+            "title": "Crawler"
+          },
+          "max_pages": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Maximum number of pages to crawl.",
+            "title": "Max Pages"
+          },
+          "source_url": {
+            "description": "https:// seed URL to crawl.",
+            "minLength": 8,
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_url"
+        ],
+        "title": "CrawlJobCreate",
+        "type": "object"
+      },
+      "CrawlJobOut": {
+        "description": "Response body for POST /crawl-jobs and GET /crawl-jobs/{job_id}.",
+        "properties": {
+          "crawler": {
+            "description": "Crawler adapter used for this job.",
+            "title": "Crawler",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "Crawl job ID (job_...).",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "states": {
+            "$ref": "#/components/schemas/CrawlStateOut",
+            "description": "Summary of page-level crawl states."
+          },
+          "status": {
+            "description": "Job status: pending, running, complete, failed.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "source_id",
+          "crawler",
+          "status"
+        ],
+        "title": "CrawlJobOut",
+        "type": "object"
+      },
+      "CrawlStateOut": {
+        "description": "Summary counts of crawl states for a job.",
+        "properties": {
+          "complete": {
+            "default": 0,
+            "description": "Number of pages successfully crawled.",
+            "title": "Complete",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "description": "Pages that failed to fetch.",
+            "title": "Failed",
+            "type": "integer"
+          },
+          "pending": {
+            "default": 0,
+            "description": "Pages not yet processed.",
+            "title": "Pending",
+            "type": "integer"
+          },
+          "robots_blocked": {
+            "default": 0,
+            "description": "Pages blocked by robots.txt.",
+            "title": "Robots Blocked",
+            "type": "integer"
+          }
+        },
+        "title": "CrawlStateOut",
+        "type": "object"
+      },
+      "CurateRequest": {
+        "description": "Request body for POST /curate \u2014 run the curate pipeline stage (CURATE-01..03).\n\nPydantic validates at the API boundary (ASVS V5, T-05-03).",
+        "properties": {
+          "cleaned_artifact_id": {
+            "description": "ID of the cleaned_document artifact to curate.",
+            "minLength": 1,
+            "title": "Cleaned Artifact Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID that owns the cleaned artifact.",
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleaned_artifact_id",
+          "source_id"
+        ],
+        "title": "CurateRequest",
+        "type": "object"
+      },
+      "CurateResponse": {
+        "description": "Response body for POST /curate (CURATE-01..03).",
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Curated document artifact ID (doc_...), None when unavailable.",
+            "title": "Artifact Id"
+          },
+          "cached": {
+            "default": false,
+            "description": "True when this call was a cache hit (same content_hash + filter_config_version).",
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "dedup_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'not_yet_computed' until batch_dedup_corpus() runs; 'near_dup' or 'unique' after.",
+            "title": "Dedup Status"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Composite quality score in [0,1] spanning parse + enrich + curation stages.",
+            "title": "Quality Score"
+          },
+          "status": {
+            "description": "'curated' or 'cached'.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CurateResponse",
+        "type": "object"
+      },
+      "CuratedDocumentOut": {
+        "description": "A single curated document summary for GET /curated-documents (CURATE-03).",
+        "properties": {
+          "artifact_id": {
+            "description": "Curated document artifact ID (doc_...).",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO-8601 creation timestamp.",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dedup_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'near_dup', 'unique', or 'not_yet_computed'.",
+            "title": "Dedup Status"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Composite quality score in [0,1], None if not yet computed.",
+            "title": "Quality Score"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "created_at"
+        ],
+        "title": "CuratedDocumentOut",
+        "type": "object"
+      },
+      "DatasetOut": {
+        "description": "A single dataset entry for GET /datasets and GET /datasets/{dataset_id}.\n\nReturns the registry metadata for a curated dataset.",
+        "properties": {
+          "created_at": {
+            "description": "ISO-8601 creation timestamp.",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_id": {
+            "description": "Dataset registry ID (dst_...).",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable, unique dataset name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "row_count": {
+            "default": 0,
+            "description": "Number of examples in the dataset (0 until exported).",
+            "title": "Row Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "name",
+          "created_at"
+        ],
+        "title": "DatasetOut",
+        "type": "object"
+      },
+      "DedupeResponse": {
+        "description": "Response body for POST /curate/dedupe \u2014 corpus-wide MinHash batch dedup result (CURATE-02).",
+        "properties": {
+          "near_dup": {
+            "description": "Artifacts classified as near-duplicate.",
+            "title": "Near Dup",
+            "type": "integer"
+          },
+          "skipped_no_curation": {
+            "description": "Artifacts skipped because no curated_document child exists yet.",
+            "title": "Skipped No Curation",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total cleaned_document artifacts scanned.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "unique": {
+            "description": "Artifacts classified as unique (no near-duplicate found).",
+            "title": "Unique",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "unique",
+          "near_dup",
+          "skipped_no_curation"
+        ],
+        "title": "DedupeResponse",
+        "type": "object"
+      },
+      "DiscoverOut": {
+        "description": "Response body for POST /discover \u2014 list of discovery results.",
+        "properties": {
+          "query": {
+            "description": "The query that was executed.",
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "description": "Per-result status with source IDs.",
+            "items": {
+              "$ref": "#/components/schemas/DiscoverResultItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "description": "Total number of results returned by the engine.",
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "total",
+          "results"
+        ],
+        "title": "DiscoverOut",
+        "type": "object"
+      },
+      "DiscoverRequest": {
+        "description": "Request body for POST /discover \u2014 run a discovery query.\n\nPydantic validates at the API boundary (ASVS V5, T-02-25).",
+        "properties": {
+          "limit": {
+            "default": 20,
+            "description": "Maximum number of results to request from the discovery engine.",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Natural-language search query for source discovery.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "DiscoverRequest",
+        "type": "object"
+      },
+      "DiscoverResultItem": {
+        "description": "A single discovered source result in POST /discover response.",
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Registry source ID (None if skipped).",
+            "title": "Source Id"
+          },
+          "status": {
+            "description": "Result status: 'registered', 'existing', or 'skipped_ssrf'.",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title from the search result.",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "description": "The discovered URL.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "status"
+        ],
+        "title": "DiscoverResultItem",
+        "type": "object"
+      },
+      "DomainLoadRequest": {
+        "description": "Request body for POST /domains/load \u2014 load a domain pack and register its sources.\n\nSecurity (T-06-08 / ASVS V5):\n    - name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' via Pydantic pattern.\n    - Pattern blocks path traversal attempts (e.g. '../etc', 'foo/../bar').",
+        "properties": {
+          "name": {
+            "description": "Domain pack name to load (e.g. 'healthcare').",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DomainLoadRequest",
+        "type": "object"
+      },
+      "DomainLoadResponse": {
+        "description": "Response body for POST /domains/load.",
+        "properties": {
+          "loaded_count": {
+            "description": "Number of new sources registered.",
+            "title": "Loaded Count",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Domain pack name that was loaded.",
+            "title": "Name",
+            "type": "string"
+          },
+          "skipped_count": {
+            "description": "Number of sources already in the registry (dedup).",
+            "title": "Skipped Count",
+            "type": "integer"
+          },
+          "upload_required_count": {
+            "description": "Number of upload-type sources that require manual download first.",
+            "title": "Upload Required Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "loaded_count",
+          "skipped_count",
+          "upload_required_count"
+        ],
+        "title": "DomainLoadResponse",
+        "type": "object"
+      },
+      "EnrichRequest": {
+        "description": "Request body for POST /enrich \u2014 run the enrich pipeline stage.\n\nPydantic validates at the API boundary (ASVS V5).",
+        "properties": {
+          "cleaned_artifact_id": {
+            "description": "ID of the cleaned_document artifact to enrich.",
+            "minLength": 1,
+            "title": "Cleaned Artifact Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID that owns the cleaned artifact.",
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleaned_artifact_id",
+          "source_id"
+        ],
+        "title": "EnrichRequest",
+        "type": "object"
+      },
+      "EnrichResponse": {
+        "description": "Response body for POST /enrich.",
+        "properties": {
+          "artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enriched document artifact ID (doc_...), None when skipped.",
+            "title": "Artifact Id"
+          },
+          "cached": {
+            "description": "True when this call was an ENRICH-04 cache hit.",
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "LLM-judged quality score in [0,1], None when skipped.",
+            "title": "Quality Score"
+          },
+          "status": {
+            "description": "'enriched', 'cached', 'skipped_budget_exceeded', or 'skipped_enrichment_failed'.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "cached"
+        ],
+        "title": "EnrichResponse",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "description": "Request body for POST /exports.\n\nBounded to the three valid export kinds via Pydantic pattern validation\n(T-05-09: no free-form string ever reaches the gold-zone S3 key construction).",
+        "properties": {
+          "dataset_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required for kind='finetune'. The logical Dataset name to export.",
+            "title": "Dataset Name"
+          },
+          "kind": {
+            "description": "Export kind: 'rag-corpus', 'pretrain', or 'finetune'.",
+            "pattern": "^(rag-corpus|pretrain|finetune)$",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ExportRequest",
+        "type": "object"
+      },
+      "ExportResponse": {
+        "description": "Response body for POST /exports.",
+        "properties": {
+          "dataset_id": {
+            "description": "Registry ID of the created/updated Dataset row.",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "row_count": {
+            "description": "Number of rows/examples written to the export file.",
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "skipped_dangling_lineage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "(finetune only) Number of examples skipped due to unresolvable source_artifact_id.",
+            "title": "Skipped Dangling Lineage"
+          },
+          "storage_uri": {
+            "description": "S3 URI of the exported file in the gold zone.",
+            "title": "Storage Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "storage_uri",
+          "row_count"
+        ],
+        "title": "ExportResponse",
+        "type": "object"
+      },
+      "GenerateDatasetRequest": {
+        "description": "Request body for POST /datasets/examples \u2014 generate a dataset example (DATA-01/02).\n\nPydantic validates at the API boundary (ASVS V5, T-05-07):\n  - kind is bounded to '^(qa|instruction)$' via pattern validation\n  - Artifact lookups use parameterised SQLAlchemy queries (no raw SQL)",
+        "properties": {
+          "dataset_name": {
+            "description": "Name of the dataset to accumulate this example into (get-or-create).",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Dataset Name",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Dataset kind: 'qa' (chunk \u2192 Q&A via eval_model) or 'instruction' (enriched_document \u2192 instruction via strong_model).",
+            "pattern": "^(qa|instruction)$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "source_artifact_id": {
+            "description": "Source artifact ID: chunk ID for 'qa', enriched_document ID for 'instruction'.",
+            "minLength": 1,
+            "title": "Source Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "source_artifact_id",
+          "dataset_name"
+        ],
+        "title": "GenerateDatasetRequest",
+        "type": "object"
+      },
+      "GenerateDatasetResponse": {
+        "description": "Response body for POST /datasets/examples (DATA-01/02/03).",
+        "properties": {
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "LLM call cost in USD for this generation. 0.0 on cache hit, None when skipped.",
+            "title": "Cost Usd"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Dataset ID (dst_...) this example belongs to.",
+            "title": "Dataset Id"
+          },
+          "example_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DatasetExample ID (dex_...), None when skipped.",
+            "title": "Example Id"
+          },
+          "status": {
+            "description": "'generated', 'cached', 'skipped_budget_exceeded', or 'skipped_generation_failed'.",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "GenerateDatasetResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LineageNode": {
+        "description": "A single artifact node in the lineage chain (FOUND-06, FOUND-07).\n\nCarries all six FOUND-06 mandatory fields plus optional citation fields\navailable on chunk/parsed-document nodes.",
+        "properties": {
+          "artifact_type": {
+            "description": "Node type: raw_document | parsed_document | chunk.",
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "SHA-256 hash of the artifact bytes.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "ISO-8601 creation timestamp.",
+            "title": "Created At",
+            "type": "string"
+          },
+          "depth": {
+            "default": 0,
+            "description": "Depth from the queried artifact (0 = the artifact itself).",
+            "title": "Depth",
+            "type": "integer"
+          },
+          "id": {
+            "description": "Artifact ID (type-prefixed UUIDv7).",
+            "title": "Id",
+            "type": "string"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MIME type of the artifact.",
+            "title": "Mime Type"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Page number (chunk nodes only).",
+            "title": "Page"
+          },
+          "parent_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent artifact ID (None for root raw_document).",
+            "title": "Parent Artifact Id"
+          },
+          "pipeline_version": {
+            "description": "Pipeline version that created this artifact (pkg+git).",
+            "title": "Pipeline Version",
+            "type": "string"
+          },
+          "section_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Section path (chunk nodes only).",
+            "title": "Section Path"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "S3 URI where the artifact bytes are stored.",
+            "title": "Storage Uri"
+          }
+        },
+        "required": [
+          "id",
+          "artifact_type",
+          "content_hash",
+          "created_at",
+          "pipeline_version"
+        ],
+        "title": "LineageNode",
+        "type": "object"
+      },
+      "ParseRequest": {
+        "description": "Request body for POST /parse \u2014 run the parse pipeline stage.\n\nPydantic validates at the API boundary (ASVS V5, T-03-11).\nartifact_id is looked up via parameterised ORM query (no raw SQL injection).",
+        "properties": {
+          "mime_type": {
+            "default": "application/pdf",
+            "description": "MIME type of the raw document.",
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "raw_artifact_id": {
+            "description": "ID of the raw_document artifact to parse.",
+            "minLength": 1,
+            "title": "Raw Artifact Id",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID that owns the raw artifact.",
+            "minLength": 1,
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw_artifact_id",
+          "source_id"
+        ],
+        "title": "ParseRequest",
+        "type": "object"
+      },
+      "ParseResponse": {
+        "description": "Response body for POST /parse.",
+        "properties": {
+          "artifact_id": {
+            "description": "Parsed document artifact ID (doc_...).",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "SHA-256 hash of the parsed document bytes.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "parser_used": {
+            "description": "Name of the parser that succeeded (e.g. 'docling').",
+            "title": "Parser Used",
+            "type": "string"
+          },
+          "quality_score": {
+            "description": "Heuristic quality score in [0, 1].",
+            "title": "Quality Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "quality_score",
+          "parser_used",
+          "content_hash"
+        ],
+        "title": "ParseResponse",
+        "type": "object"
+      },
+      "ReindexResponse": {
+        "description": "Response body for POST /reindex \u2014 zero-downtime alias reindex result (INDEX-02).",
+        "properties": {
+          "collection": {
+            "description": "Qdrant alias that was reindexed.",
+            "title": "Collection",
+            "type": "string"
+          },
+          "new_physical": {
+            "description": "New physical collection the alias now points to.",
+            "title": "New Physical",
+            "type": "string"
+          },
+          "old_physical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Prior physical collection (retained, never auto-dropped); None on first-ever reindex.",
+            "title": "Old Physical"
+          }
+        },
+        "required": [
+          "collection",
+          "new_physical"
+        ],
+        "title": "ReindexResponse",
+        "type": "object"
+      },
+      "SearchHit": {
+        "description": "A single search result from GET /search.\n\nCarries the score and all citation fields needed to surface the exact\nsource passage without a follow-up registry lookup.\n\nFields mirror Hit from plugins/protocols.py plus citation fields extracted\nfrom the payload \u2014 D-02: same pipeline.search() output, structured by pydantic.",
+        "properties": {
+          "chunk_id": {
+            "description": "Chunk artifact ID (registry ID, prefixed with 'chk_').",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "document": {
+            "description": "Parsed-document artifact ID (registry ID).",
+            "title": "Document",
+            "type": "string"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Enrichment-derived document type (e.g. 'regulation', 'guidance').",
+            "title": "Document Type"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Domain classification from the source (e.g. 'healthcare').",
+            "title": "Domain"
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source format label (e.g. 'html', 'pdf', 'csv') from Source.source_type.",
+            "title": "Format"
+          },
+          "id": {
+            "description": "Qdrant point ID (bare UUID without type prefix).",
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "description": "Enrichment-derived keywords for this document.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Publishing organization from Source.config (None until sources.yaml carries organization key).",
+            "title": "Organization"
+          },
+          "page": {
+            "description": "Page number where this chunk appears (1-indexed).",
+            "title": "Page",
+            "type": "integer"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "LLM-judged quality score in [0, 1] from enrichment.",
+            "title": "Quality Score"
+          },
+          "score": {
+            "description": "Cosine similarity score in [0, 1].",
+            "title": "Score",
+            "type": "number"
+          },
+          "section_path": {
+            "description": "Section path (e.g. '\u00a72 Administrative Safeguards').",
+            "title": "Section Path",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Registry source ID for this chunk's source (src_...).",
+            "title": "Source Id"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable source name.",
+            "title": "Source Name"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical source URL.",
+            "title": "Source Url"
+          },
+          "tags": {
+            "description": "Curated source tags from Source.config (distinct from LLM-extracted keywords).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "text": {
+            "default": "",
+            "description": "Chunk text snippet for display.",
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document title from enrichment metadata.",
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "score",
+          "document",
+          "section_path",
+          "page",
+          "chunk_id"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
+      "SourceCreate": {
+        "description": "Request body for POST /sources \u2014 register a new source.\n\nPydantic validates these at the API boundary (ASVS V5, T-02-04).",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Domain classification (e.g. 'healthcare', 'legal').",
+            "title": "Domain"
+          },
+          "license_type": {
+            "default": "unknown",
+            "description": "SPDX license identifier or 'unknown'.",
+            "maxLength": 64,
+            "title": "License Type",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable source name (defaults to URL hostname).",
+            "title": "Name"
+          },
+          "url": {
+            "description": "https:// URL of the source to register.",
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "SourceCreate",
+        "type": "object"
+      },
+      "SourceListItem": {
+        "description": "A single source registry entry for GET /sources and GET /sources/{source_id}.\n\nSurfaced by the 8-endpoint gap audit (D-07). Contains the key display fields\nfor operators browsing registered sources; no credentials or internal keys.",
+        "properties": {
+          "created_at": {
+            "description": "ISO-8601 creation timestamp.",
+            "title": "Created At",
+            "type": "string"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Domain classification extracted from Source.config['domain'].",
+            "title": "Domain"
+          },
+          "license_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SPDX license identifier.",
+            "title": "License Type"
+          },
+          "name": {
+            "description": "Human-readable source name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "unknown",
+            "description": "Kind of source: 'web', 'upload', 'crawler', etc.",
+            "title": "Source Type",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical source URL.",
+            "title": "Url"
+          }
+        },
+        "required": [
+          "source_id",
+          "name",
+          "created_at"
+        ],
+        "title": "SourceListItem",
+        "type": "object"
+      },
+      "SourceOut": {
+        "description": "Response body for POST /sources \u2014 registered source details.",
+        "properties": {
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Domain classification.",
+            "title": "Domain"
+          },
+          "is_new": {
+            "description": "True if newly created, False if dedup hit.",
+            "title": "Is New",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "Human-readable source name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "normalized_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "D-06 normalized URL used for dedup.",
+            "title": "Normalized Url"
+          },
+          "source_id": {
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "url": {
+            "description": "Original URL as provided.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "name",
+          "url",
+          "is_new"
+        ],
+        "title": "SourceOut",
+        "type": "object"
+      },
+      "UploadOut": {
+        "description": "Response body for POST /uploads \u2014 uploaded artifact details.",
+        "properties": {
+          "artifact_id": {
+            "description": "Raw artifact ID (doc_...).",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "content_hash": {
+            "description": "SHA-256 hash of the uploaded content.",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "Source registry ID (src_...).",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "S3 URI of the stored content.",
+            "title": "Storage Uri"
+          }
+        },
+        "required": [
+          "source_id",
+          "artifact_id",
+          "content_hash"
+        ],
+        "title": "UploadOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Domain-agnostic framework API \u2014 serves AI-ready assets with full lineage traceability.",
+    "title": "Knowledge Lake API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/chunk": {
+      "post": {
+        "description": "Run the chunk pipeline stage on a parsed_document artifact.\n\nFetches the parsed text from the silver zone, reconstructs a minimal ParsedDoc,\nand runs the token-aware chunker.  Returns the chunk count and all chunk artifact IDs.\n\nNote: In production usage the Dagster pipeline passes ParsedDoc in-memory between\nclean and chunk stages.  This endpoint reconstructs a ParsedDoc from the stored text\n(no section structure) \u2014 suitable for testing and ad-hoc chunking.\n\nSecurity (T-03-11 / ASVS V5):\n    - artifact_id is validated by Pydantic (min_length=1).\n    - Artifact lookup uses parameterised ORM query (no SQL injection).\n    - Invalid IDs return 422 with a clear error body.",
+        "operationId": "chunk_endpoint_chunk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chunk a parsed document artifact into token-aware chunks",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/clean": {
+      "post": {
+        "description": "Run the clean pipeline stage on a parsed_document artifact.\n\nRemoves boilerplate, normalises whitespace, detects language, and flags\nnear-duplicate documents.  Returns the cleaned artifact ID, language, and\ndedup status.\n\nSecurity (T-03-11 / ASVS V5):\n    - artifact_id is validated by Pydantic (min_length=1).\n    - Artifact lookup uses parameterised ORM query (no SQL injection).\n    - Invalid IDs return 422 with a clear error body.",
+        "operationId": "clean_endpoint_clean_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clean a parsed document artifact",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/crawl-all": {
+      "post": {
+        "description": "Batch-crawl all registered sources into the lake (CRAWL-02 D-08/D-09).\n\nLoops over all sources (optionally filtered by domain), running per-source\ncrawl in sequence.  Per-source failures are logged and counted but do not\nabort the batch \u2014 a summary is always returned (D-09).\n\nSecurity (T-08-06-02):\n    domain is passed as a Python-side string filter to list_sources_for_crawl_all;\n    no SQL injection risk (SQLAlchemy ORM, Python-side equality check).",
+        "operationId": "crawl_all_endpoint_crawl_all_post",
+        "parameters": [
+          {
+            "description": "Filter by domain (e.g. 'healthcare'). Crawls all sources if omitted.",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by domain (e.g. 'healthcare'). Crawls all sources if omitted.",
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlAllOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch-crawl all registered sources",
+        "tags": [
+          "crawl"
+        ]
+      }
+    },
+    "/crawl-jobs": {
+      "post": {
+        "description": "Start a crawl job for the given source URL (INGEST-04).\n\nCreates a crawl job and runs it asynchronously, writing raw+bronze artifacts\nfor each successfully fetched page. Resume-safe: re-running for the same\nsource URL picks up where a prior interrupted crawl left off.\n\nDeclared as `async def` so FastAPI awaits it directly in the event loop.\ncrawl_source is async and is awaited without the overhead of creating a\nnew event loop per request (WR-001).\n\nSecurity (T-02-13 / ASVS V5):\n    - source_url is validated by pydantic (min_length=8).\n    - crawler override is validated against registered crawlers.\n    - max_pages is bounded [1, 10000].",
+        "operationId": "create_crawl_job_endpoint_crawl_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrawlJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start a crawl job for a source URL",
+        "tags": [
+          "crawl"
+        ]
+      }
+    },
+    "/crawl-jobs/{job_id}": {
+      "get": {
+        "description": "Get the status and page counts of a crawl job (INGEST-04).\n\nReturns the job header + crawl_states summary (counts by status).\nReturns 404 for an unknown job_id.\n\nSecurity (T-01-14 / ASVS V5):\n    - job_id is parameterized in SQL (no injection).\n    - Unknown IDs return 404 with a clear JSON error body.",
+        "operationId": "get_crawl_job_endpoint_crawl_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrawlJobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Crawl job not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get crawl job status and page counts",
+        "tags": [
+          "crawl"
+        ]
+      }
+    },
+    "/curate": {
+      "post": {
+        "description": "Run the curate pipeline stage on a cleaned_document artifact (CURATE-01..03).\n\nRecords per-heuristic DataTrove filter pass/fail, computes a composite quality\nscore spanning parse + enrich + curation stages, and stores the result as a\ncurated_document artifact. Returns 'curated' or 'cached' status.\n\nSecurity (ASVS V5, T-05-03):\n    - cleaned_artifact_id/source_id are validated by Pydantic (min_length=1).\n    - Artifact lookup uses parameterised ORM query (no SQL injection).\n    - Invalid IDs return 422 with a clear error body.",
+        "operationId": "curate_endpoint_curate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run DataTrove-style quality filtering on a cleaned_document artifact",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/curate/dedupe": {
+      "post": {
+        "description": "Build one MinHash LSH index over ALL cleaned_document artifacts in a single pass.\n\nCorpus-wide deduplication (CURATE-02): classifies each artifact as 'unique' or\n'near_dup' and updates the dedup_status field on its curated_document child.\nEquivalent to `klake dedupe` in the CLI \u2014 calls pipeline.curate.batch_dedup_corpus()\nwith no per-call options (runs over the full corpus).\n\nSecurity (ASVS V5): no user input; read-only artifact scan + targeted metadata update.",
+        "operationId": "dedupe_endpoint_curate_dedupe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DedupeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run corpus-wide MinHash batch deduplication over all cleaned_document artifacts (CURATE-02)",
+        "tags": [
+          "curation"
+        ]
+      }
+    },
+    "/curated-documents": {
+      "get": {
+        "description": "Return curated_document artifacts ordered by quality_score descending.\n\nOptional ``min_quality_score`` filter (Pydantic ge/le bounds reject out-of-range\nvalues before the query runs, satisfying T-05-03). Uses a parameterized ORM\nselect() query \u2014 never raw SQL (T-01-03 injection prevention).\n\nCURATE-03: satisfies the \"queryable via API\" criterion.",
+        "operationId": "list_curated_documents_endpoint_curated_documents_get",
+        "parameters": [
+          {
+            "description": "Minimum composite quality score to include (0.0\u20131.0, T-05-03).",
+            "in": "query",
+            "name": "min_quality_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum composite quality score to include (0.0\u20131.0, T-05-03).",
+              "title": "Min Quality Score"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CuratedDocumentOut"
+                  },
+                  "title": "Response List Curated Documents Endpoint Curated Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List curated documents with optional quality-score filtering",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/datasets": {
+      "get": {
+        "description": "List all registered datasets with pagination (D-07 gap audit).\n\nSecurity (T-06-11 / ASVS V5):\n    - limit/offset validated by Pydantic ge/le bounds before reaching DB.\n    - ORM select() \u2014 no raw SQL.",
+        "operationId": "list_datasets_endpoint_datasets_get",
+        "parameters": [
+          {
+            "description": "Maximum results (1\u2013200).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maximum results (1\u2013200).",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Pagination offset.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetOut"
+                  },
+                  "title": "Response List Datasets Endpoint Datasets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List curated datasets with pagination",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
+    "/datasets/examples": {
+      "post": {
+        "description": "Generate a dataset training/eval example and store it with full lineage (DATA-01/02/03).\n\nRoutes to pipeline.datasets.generate_qa_example (kind='qa') or\npipeline.datasets.generate_instruction_example (kind='instruction') \u2014\nno logic duplicated (D-02).\n\nSecurity (ASVS V5, T-05-07):\n    - kind is bounded to '^(qa|instruction)$' via Pydantic pattern validation.\n    - source_artifact_id/dataset_name are validated by Pydantic (min_length=1).\n    - Artifact lookups use parameterised ORM queries \u2014 no raw SQL.\n    - Invalid artifact IDs or wrong artifact types return 422.",
+        "operationId": "generate_dataset_endpoint_datasets_examples_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateDatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateDatasetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate a dataset example from a chunk (qa) or enriched document (instruction)",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
+    "/datasets/{dataset_id}": {
+      "get": {
+        "description": "Return a single dataset registry entry by its ID or 404 (D-07 gap audit).\n\nSecurity (T-06-11 / ASVS V5):\n    - session.get() uses parameterised primary-key lookup \u2014 no injection.",
+        "operationId": "get_dataset_endpoint_datasets__dataset_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Dataset not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a single dataset by ID",
+        "tags": [
+          "datasets"
+        ]
+      }
+    },
+    "/discover": {
+      "post": {
+        "description": "Run a source discovery query and auto-register valid results (INGEST-07).\n\nUses the configured DiscoveryPlugin (default: SearXNG) to search for\ncandidate sources. Each result URL is SSRF-validated (T-02-22) and\nURL-deduped (D-08) before registration.\n\nSecurity (T-02-25 / ASVS V5):\n    - query is bounded [1, 500] characters by pydantic.\n    - limit is bounded [1, 100] by pydantic.\n    - SSRF validation on every result URL before registration.",
+        "operationId": "discover_endpoint_discover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DiscoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoverOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover candidate sources via meta-search",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/documents": {
+      "get": {
+        "description": "List artifacts (documents) with pagination and optional type/source filters (D-07 gap audit).\n\nSecurity (T-06-11 / ASVS V5):\n    - All filter parameters are bound via ORM \u2014 no string interpolation.",
+        "operationId": "list_documents_endpoint_documents_get",
+        "parameters": [
+          {
+            "description": "Filter by artifact type (e.g. 'raw_document', 'parsed_document').",
+            "in": "query",
+            "name": "artifact_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by artifact type (e.g. 'raw_document', 'parsed_document').",
+              "title": "Artifact Type"
+            }
+          },
+          {
+            "description": "Filter by source registry ID.",
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by source registry ID.",
+              "title": "Source Id"
+            }
+          },
+          {
+            "description": "Maximum results (1\u2013200).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maximum results (1\u2013200).",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Pagination offset.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactOut"
+                  },
+                  "title": "Response List Documents Endpoint Documents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List artifact documents with optional type and source filters",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/documents/{artifact_id}": {
+      "get": {
+        "description": "Return a single artifact registry entry by its ID or 404 (D-07 gap audit).\n\nSecurity (T-06-11 / ASVS V5):\n    - session.get() uses parameterised primary-key lookup \u2014 no injection.",
+        "operationId": "get_document_endpoint_documents__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Artifact not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a single artifact document by ID",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/domains/load": {
+      "post": {
+        "description": "Load a domain pack by name and bulk-register its crawl-type sources (DOMAIN-01).\n\nDelegates to ``pipeline.domains.load_domain()`` \u2014 logic lives in exactly one\nplace (D-05, D-03).\n\nUpload-type sources are counted but not auto-registered. Existing sources\nare silently skipped (URL dedup). Returns counts for all categories.\n\nSecurity (T-06-08 / ASVS V5):\n    - body.name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' by Pydantic pattern\n      in DomainLoadRequest BEFORE this handler runs \u2014 path traversal blocked at schema level.\n    - Domain name is also validated against _DOMAIN_NAME_RE below for defence-in-depth.\n    - load_domain() re-validates against the same guard (T-12-06).\n    - DomainLoader validates the name again internally (T-06-01 in loader.py).",
+        "operationId": "load_domain_endpoint_domains_load_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DomainLoadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainLoadResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Load a domain pack and register its seed sources",
+        "tags": [
+          "domains"
+        ]
+      }
+    },
+    "/domains/{name}/sources": {
+      "get": {
+        "description": "Return the list of SourceEntry dicts from sources.yaml for the named domain pack (DOMAIN-01).\n\nNo DB access \u2014 reads the domain pack's sources.yaml directly via DomainLoader.\nReturns 404 if the domain pack does not exist.\n\nSecurity (T-06-09 / ASVS V5):\n    - name validated against _DOMAIN_NAME_RE before calling DomainLoader.from_name().\n    - DomainLoader.from_name() validates the name again internally (T-06-01).\n    - Double validation provides defence-in-depth against path traversal.",
+        "operationId": "list_domain_sources_endpoint_domains__name__sources_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Domain Sources Endpoint Domains  Name  Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Domain pack not found"
+          },
+          "422": {
+            "description": "Invalid domain name format"
+          }
+        },
+        "summary": "List sources.yaml entries for a domain pack",
+        "tags": [
+          "domains"
+        ]
+      }
+    },
+    "/enrich": {
+      "post": {
+        "description": "Run the enrich pipeline stage on a cleaned_document artifact.\n\nRuns deterministic (non-LLM) extraction first, then a single cached,\nbudget-capped LiteLLM call. Returns 'enriched', 'cached',\n'skipped_budget_exceeded', or 'skipped_enrichment_failed' status.\n\nSecurity (ASVS V5):\n    - cleaned_artifact_id/source_id are validated by Pydantic (min_length=1).\n    - Artifact lookup uses parameterised ORM query (no SQL injection).\n    - Invalid IDs return 422 with a clear error body.",
+        "operationId": "enrich_endpoint_enrich_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enrich a cleaned document artifact with LLM-judged metadata",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/exports": {
+      "post": {
+        "description": "Export curated corpus or dataset examples to the gold zone (EXPORT-01/02/03).\n\nRoutes to the appropriate pipeline.export function based on ``kind``:\n- ``rag-corpus`` \u2192 export_rag_corpus() \u2192 Parquet (EXPORT-01)\n- ``pretrain``   \u2192 export_pretrain_corpus() \u2192 JSONL (EXPORT-02)\n- ``finetune``   \u2192 export_finetune_dataset(dataset_name) \u2192 JSONL (EXPORT-03)\n\nAll export functions fail closed with a 422 if any undocumented train/eval\ncontamination exists (05-AI-SPEC Section 6/7 hard gate, T-05-11).\n\nSecurity (T-05-09 / ASVS V5):\n    - ``kind`` is bounded to ``^(rag-corpus|pretrain|finetune)$`` via Pydantic pattern.\n    - No free-form string reaches the gold-zone S3 key construction.\n    - ``dataset_name`` is bounded to max_length=255.\n    - ``ValueError`` (missing dataset, invalid kind) \u2192 422.\n\nD-02 compliance:\n    Calls the same pipeline.export functions as the CLI export command \u2014 no\n    behavior re-implemented.",
+        "operationId": "export_endpoint_exports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export the corpus or a dataset to the gold zone (EXPORT-01/02/03)",
+        "tags": [
+          "export"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Return the service health status.\n\nReturns:\n    {\"status\": \"ok\"} when the service is ready to accept requests.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service health check",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/lineage/{artifact_id}": {
+      "get": {
+        "description": "Resolve the full ancestry chain of an artifact (FOUND-07 API).\n\nWalks from the given artifact up to the raw source via the recursive CTE\nin ``lineage.resolve_ancestry()`` \u2014 the same function the CLI uses (D-02).\n\nReturns ordered nodes (leaf first, root last). Each node carries all six\nFOUND-06 fields: id, artifact_type, content_hash, created_at,\npipeline_version, storage_uri.\n\nSecurity (T-01-14 / ASVS V5):\n    - Artifact IDs are parameterized in SQL \u2014 no string interpolation\n      (T-01-13, enforced by the underlying resolver).\n    - Unknown artifact IDs return 404 with a clear JSON error body.\n\nArgs:\n    artifact_id: Full artifact ID (e.g. ``chk_019f...``) or unambiguous prefix.\n\nReturns:\n    List of LineageNode objects ordered by depth (0 = queried artifact).\n\nRaises:\n    HTTPException 404: When artifact_id is not found in the registry.",
+        "operationId": "lineage_endpoint_lineage__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LineageNode"
+                  },
+                  "title": "Response Lineage Endpoint Lineage  Artifact Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Artifact not found in the registry"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve the full ancestry of an artifact",
+        "tags": [
+          "lineage"
+        ]
+      }
+    },
+    "/parse": {
+      "post": {
+        "description": "Run the parse pipeline stage on an already-ingested raw_document artifact.\n\nUses the configured parser fallback chain (Docling \u2192 JSON/XML \u2192 Unstructured \u2192 Tika).\nReturns the parsed artifact ID, quality score, parser used, and content hash.\n\nSecurity (T-03-11 / ASVS V5):\n    - artifact_id is validated by Pydantic (min_length=1).\n    - Artifact lookup uses parameterised ORM query (no SQL injection).\n    - Invalid IDs return 422 with a clear error body.",
+        "operationId": "parse_endpoint_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse a raw document artifact into a parsed document",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/reindex": {
+      "post": {
+        "description": "Reindex a Qdrant alias with zero search downtime (INDEX-02).\n\nCreates the next versioned physical collection, copies all existing points\ninto it via ``copy_all_points()``, then atomically repoints the alias.\nCalls ``pipeline.index.reindex_collection()`` \u2014 the same function the CLI\nuses (D-02). The prior physical collection is retained, never auto-dropped.\n\nSecurity (ASVS V5):\n    - collection is validated against the same format guard as /search (WR-04).",
+        "operationId": "reindex_endpoint_reindex_post",
+        "parameters": [
+          {
+            "description": "Qdrant alias to reindex.",
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "default": "klake_chunks",
+              "description": "Qdrant alias to reindex.",
+              "title": "Collection",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reindex a Qdrant alias with zero search downtime",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
+    "/search": {
+      "get": {
+        "description": "Embed a query and return the top-k nearest chunk hits with citation fields.\n\nCalls ``pipeline.search.search()`` \u2014 the same function the CLI uses (D-02).\n\nSecurity (T-01-14 / ASVS V5):\n    - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.\n    - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.\n    - ``tags`` list: element count capped at 64 by the handler guard (WR-02);\n      each element also validated to max 64 characters (T-07-04-01).\n    - ``mode`` is bounded to the Literal set {hybrid, dense, sparse} via the\n      Query pattern \u2014 any other value is automatically rejected with 422 before\n      the handler body runs (T-10-02, ASVS V5).\n    - Empty/whitespace queries return an empty list (not an error).\n\nArgs:\n    q:                 Natural-language search query.\n    top_k:             Maximum number of results (1\u2013100, default 5).\n    collection:        Qdrant collection to search (default: klake_chunks).\n    domain:            Optional filter \u2014 payload['domain'] must match exactly.\n    document_type:     Optional filter \u2014 payload['document_type'] must match exactly.\n    min_quality_score: Optional filter \u2014 payload['quality_score'] must be >= this value.\n    source_name:       Optional filter \u2014 payload['source_name'] must match exactly.\n    format:            Optional filter \u2014 payload['format'] must match exactly.\n    source_id:         Optional filter \u2014 payload['source_id'] must match exactly.\n    tags:              Optional OR filter \u2014 payload['tags'] must contain any of these values.\n    mode:              Optional search mode override (hybrid|dense|sparse). None \u2192 settings default.\n\nD-13 backward-compat note:\n    source_name, format, tags, source_id filters are only effective on points indexed\n    after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points\n    will not match.\n\nReturns:\n    A list of SearchHit objects ordered by score descending.\n    Returns an empty list when the query is empty/whitespace.",
+        "operationId": "search_endpoint_search_get",
+        "parameters": [
+          {
+            "description": "Natural-language search query.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Natural-language search query.",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum number of results to return. Must be 1\u2013100.",
+            "in": "query",
+            "name": "top_k",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "description": "Maximum number of results to return. Must be 1\u2013100.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Top K",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Qdrant collection to search.",
+            "in": "query",
+            "name": "collection",
+            "required": false,
+            "schema": {
+              "default": "klake_chunks",
+              "description": "Qdrant collection to search.",
+              "title": "Collection",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Filter results to this domain.",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to this domain.",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Filter results to this document_type.",
+            "in": "query",
+            "name": "document_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to this document_type.",
+              "title": "Document Type"
+            }
+          },
+          {
+            "description": "Filter results to quality_score >= this value.",
+            "in": "query",
+            "name": "min_quality_score",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to quality_score >= this value.",
+              "title": "Min Quality Score"
+            }
+          },
+          {
+            "description": "Filter results to this source name.",
+            "in": "query",
+            "name": "source_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to this source name.",
+              "title": "Source Name"
+            }
+          },
+          {
+            "description": "Filter results to this source format (e.g. 'html', 'pdf').",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to this source format (e.g. 'html', 'pdf').",
+              "title": "Format"
+            }
+          },
+          {
+            "description": "Filter results to this source ID.",
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results to this source ID.",
+              "title": "Source Id"
+            }
+          },
+          {
+            "description": "Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
+            "in": "query",
+            "name": "tags",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 64,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
+              "title": "Tags"
+            }
+          },
+          {
+            "description": "Search mode: hybrid|dense|sparse. Defaults to KLAKE_SEARCH__MODE setting (hybrid). An unrecognised value is rejected with 422 (T-10-02, ASVS V5, fail-closed). A hybrid or sparse request against a sparse-less collection returns the store's clear error (fail-loud, D-10).",
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(hybrid|dense|sparse)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search mode: hybrid|dense|sparse. Defaults to KLAKE_SEARCH__MODE setting (hybrid). An unrecognised value is rejected with 422 (T-10-02, ASVS V5, fail-closed). A hybrid or sparse request against a sparse-less collection returns the store's clear error (fail-loud, D-10).",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SearchHit"
+                  },
+                  "title": "Response Search Endpoint Search Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Semantic search over indexed chunks",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/sources": {
+      "get": {
+        "description": "List all registered sources with pagination and optional domain filter (D-07 gap audit).\n\nDelegates to ``pipeline.query.list_sources()`` \u2014 logic lives in exactly one\nplace (D-05, D-03).\n\nWhen a domain filter is active, all matching rows are fetched first (Python-side\nfilter for DB-agnosticism, same pattern as list_curated_documents_by_dedup_status)\nand then LIMIT/OFFSET are applied to the filtered set so pagination counts are\ncorrect.  Without a domain filter, LIMIT/OFFSET are pushed to the DB for\nefficiency.\n\nSecurity (T-06-11 / ASVS V5):\n    - All queries use ORM select() \u2014 no raw SQL.\n    - domain/limit/offset are validated by Pydantic before reaching the handler.",
+        "operationId": "list_sources_endpoint_sources_get",
+        "parameters": [
+          {
+            "description": "Filter by domain classification (e.g. 'healthcare').",
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by domain classification (e.g. 'healthcare').",
+              "title": "Domain"
+            }
+          },
+          {
+            "description": "Maximum results (1\u2013200).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maximum results (1\u2013200).",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Pagination offset.",
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Pagination offset.",
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceListItem"
+                  },
+                  "title": "Response List Sources Endpoint Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List registered sources with optional domain filter",
+        "tags": [
+          "registry"
+        ]
+      },
+      "post": {
+        "description": "Register a source URL with URL-first dedup (INGEST-01).\n\nIf the normalized URL already exists, returns the existing source (HTTP 201\nregardless \u2014 D-07 silent success, same shape).\n\nSecurity (T-02-04 / ASVS V5):\n    - URL is validated by pydantic (min_length=8).\n    - Name/domain lengths are bounded.",
+        "operationId": "create_source_endpoint_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register a source URL",
+        "tags": [
+          "ingestion"
+        ]
+      }
+    },
+    "/sources/{source_id}": {
+      "get": {
+        "description": "Return a single source registry entry by its ID or 404 (D-07 gap audit).\n\nSecurity (T-06-11 / ASVS V5):\n    - session.get() uses parameterised primary-key lookup \u2014 no injection.",
+        "operationId": "get_source_endpoint_sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceListItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Source not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get a single source by ID",
+        "tags": [
+          "registry"
+        ]
+      }
+    },
+    "/uploads": {
+      "post": {
+        "description": "Upload a local file and ingest as a raw_document artifact (INGEST-03).\n\nFor hermetic/integration testing: accepts a file path (not multipart).\nHash-second dedup: identical content returns existing artifact IDs (D-07).\n\nSecurity (T-02-04, CR-01):\n    - file_path is constrained to _UPLOAD_ROOT to prevent arbitrary file read.",
+        "operationId": "upload_endpoint_uploads_post",
+        "parameters": [
+          {
+            "description": "Absolute path to the file on the server filesystem.",
+            "in": "query",
+            "name": "file_path",
+            "required": true,
+            "schema": {
+              "description": "Absolute path to the file on the server filesystem.",
+              "title": "File Path",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Human-readable source name.",
+            "in": "query",
+            "name": "source_name",
+            "required": false,
+            "schema": {
+              "default": "uploaded-file",
+              "description": "Human-readable source name.",
+              "title": "Source Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "SPDX license identifier.",
+            "in": "query",
+            "name": "license_type",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "SPDX license identifier.",
+              "title": "License Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload a local file into the raw zone",
+        "tags": [
+          "ingestion"
+        ]
+      }
+    }
+  }
+}

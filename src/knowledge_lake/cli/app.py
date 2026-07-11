@@ -17,6 +17,7 @@ Commands:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Optional
@@ -1080,6 +1081,75 @@ def cmd_set_schedule(
             raise typer.Exit(code=1)
         session.commit()
     typer.echo(f"Set crawl schedule for source '{source_id}': {cron}")
+
+
+@app.command(name="mcp")
+def cmd_mcp(
+    sse: bool = typer.Option(
+        False, "--sse", help="Serve over Streamable HTTP instead of stdio."
+    ),
+    port: int = typer.Option(
+        3001, "--port", help="HTTP port (localhost only, --sse mode)."
+    ),
+) -> None:
+    """Run the MCP agent server: stdio (default, fd-locked) or Streamable HTTP (--sse).
+
+    Both transports serve the SAME Server built from
+    ``registered_tools(settings.mcp.readonly)`` so ``stdio == http`` by construction.
+    The ``--sse`` flag name backs MCP **Streamable HTTP** (build_http_app), NOT the
+    deprecated HTTP+SSE transport. The bind host/port and bearer token come from
+    ``settings.mcp`` (host defaults to 127.0.0.1 — never 0.0.0.0).
+    """
+    from knowledge_lake.agent.registry import registered_tools
+    from knowledge_lake.agent.server import build_server
+    from knowledge_lake.config.settings import get_settings
+
+    settings = get_settings()
+    server = build_server(registered_tools(readonly=settings.mcp.readonly))
+
+    if sse:
+        # Streamable HTTP — no stdout lockdown in this mode (D-08). Bind host and
+        # bearer come from settings.mcp; --port overrides the bind port.
+        import uvicorn
+
+        from knowledge_lake.agent.http import build_http_app
+
+        http_app = build_http_app(
+            server,
+            host=settings.mcp.host,
+            port=port,
+            token=settings.mcp.token,
+        )
+        uvicorn.run(http_app, host=settings.mcp.host, port=port)
+    else:
+        # stdio transport — run_stdio applies the fd-level stdout lockdown (D-08).
+        import anyio
+
+        from knowledge_lake.agent.stdio import run_stdio
+
+        init_opts = server.create_initialization_options()
+        anyio.run(run_stdio, server, init_opts)
+
+
+@app.command(name="openapi")
+def cmd_openapi() -> None:
+    """Write the deterministic OpenAPI schema to docs/openapi.json (SKILL-02).
+
+    Dumps ``app.openapi()`` with ``sort_keys=True`` and a trailing newline so
+    re-runs produce a no-op git diff (Pitfall 3).
+    """
+    try:
+        from knowledge_lake.api.app import app as fastapi_app
+    except ImportError as exc:  # pragma: no cover - import guard
+        typer.echo(f"Error: could not import the FastAPI app: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    docs_dir = Path(__file__).resolve().parents[3] / "docs"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    out_path = docs_dir / "openapi.json"
+    payload = json.dumps(fastapi_app.openapi(), indent=2, sort_keys=True) + "\n"
+    out_path.write_text(payload, encoding="utf-8")
+    typer.echo(f"Wrote {out_path}")
 
 
 if __name__ == "__main__":
