@@ -1244,6 +1244,9 @@ def list_sources_endpoint(
 ) -> list[SourceListItem]:
     """List all registered sources with pagination and optional domain filter (D-07 gap audit).
 
+    Delegates to ``pipeline.query.list_sources()`` — logic lives in exactly one
+    place (D-05, D-03).
+
     When a domain filter is active, all matching rows are fetched first (Python-side
     filter for DB-agnosticism, same pattern as list_curated_documents_by_dedup_status)
     and then LIMIT/OFFSET are applied to the filtered set so pagination counts are
@@ -1254,42 +1257,21 @@ def list_sources_endpoint(
         - All queries use ORM select() — no raw SQL.
         - domain/limit/offset are validated by Pydantic before reaching the handler.
     """
-    from sqlalchemy import select
-    from knowledge_lake.registry.db import get_session
-    from knowledge_lake.registry.models import Source
+    from knowledge_lake.pipeline.query import list_sources
 
-    with get_session() as session:
-        if domain is not None:
-            # Fetch all rows and filter in Python so LIMIT/OFFSET apply to the
-            # filtered result set (avoids post-LIMIT domain filtering which breaks
-            # pagination semantics — WR-01).
-            all_sources = list(
-                session.execute(select(Source).order_by(Source.created_at.desc())).scalars()
-            )
-            filtered = [
-                s for s in all_sources
-                if (s.config or {}).get("domain") == domain
-            ]
-            sources = filtered[offset : offset + limit]
-        else:
-            stmt = select(Source).order_by(Source.created_at.desc()).limit(limit).offset(offset)
-            sources = list(session.execute(stmt).scalars())
-
-    result: list[SourceListItem] = []
-    for src in sources:
-        src_domain = (src.config or {}).get("domain") if src.config else None
-        result.append(
-            SourceListItem(
-                source_id=src.id,
-                name=src.name,
-                url=src.url,
-                source_type=src.source_type,
-                license_type=src.license_type,
-                domain=src_domain,
-                created_at=src.created_at.isoformat() if src.created_at else "",
-            )
+    source_dicts = list_sources(domain=domain, limit=limit, offset=offset)
+    return [
+        SourceListItem(
+            source_id=d["source_id"],
+            name=d["name"],
+            url=d["url"],
+            source_type=d["source_type"],
+            license_type=d["license_type"],
+            domain=d["domain"],
+            created_at=d["created_at"],
         )
-    return result
+        for d in source_dicts
+    ]
 
 
 @app.get(

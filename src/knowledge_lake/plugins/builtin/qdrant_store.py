@@ -407,6 +407,24 @@ class QdrantVectorStore:
             return vectors["dense"].size
         return vectors.size
 
+    def count_points(self, collection: str) -> int:
+        """Return the exact point count for ``collection``; 0 if the collection is absent.
+
+        Public wrapper around ``self._client.count(collection, exact=True).count``
+        so that ``pipeline/query.stats()`` can obtain Qdrant point counts without
+        reaching into the private ``_client`` attribute (Pitfall 5, D-14).
+
+        Args:
+            collection: Physical collection name or alias to count.
+
+        Returns:
+            Exact integer point count, or 0 when the collection does not exist.
+        """
+        try:
+            return self._client.count(collection, exact=True).count
+        except Exception:
+            return 0
+
     def _is_named(self, collection: str) -> bool:
         """Return True when ``collection`` uses the named-vector shape (dense+sparse dict).
 
