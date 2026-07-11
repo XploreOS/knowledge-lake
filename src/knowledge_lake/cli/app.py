@@ -981,16 +981,11 @@ def cmd_init(
     Reads domains/<domain>/sources.yaml and registers every crawl-type source
     into the registry. Upload-type sources (bulk data files) are reported but
     not auto-registered — download them manually first.
+
+    Delegates to ``pipeline.domains.load_domain()`` — logic lives in exactly
+    one place (D-05, D-03).
     """
     import re
-    from pathlib import Path
-
-    from sqlalchemy.exc import IntegrityError
-
-    from knowledge_lake.config.settings import get_settings
-    from knowledge_lake.domains.loader import DomainLoader
-    from knowledge_lake.registry.db import get_session
-    from knowledge_lake.registry import repo as registry_repo
 
     _DOMAIN_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
     if not _DOMAIN_NAME_RE.fullmatch(domain):
@@ -1001,85 +996,20 @@ def cmd_init(
         )
         raise typer.Exit(code=1)
 
-    settings = get_settings()
-    # DomainLoader.from_name() expects root = the project root that *contains* a domains/ subdirectory.
-    # settings.domain.domains_root defaults to "domains" (the path OF the domains/ dir, not its parent).
-    # If domains_root resolves to a path whose name is "domains", use its parent as the loader root;
-    # otherwise assume the value IS already the project root (e.g. set via KLAKE_DOMAINS_ROOT).
-    _domains_path = Path(settings.domain.domains_root).resolve()
-    root = _domains_path.parent if _domains_path.name == "domains" else _domains_path
+    from knowledge_lake.pipeline.domains import load_domain
 
     try:
-        loader = DomainLoader.from_name(domain, root=root)
-    except FileNotFoundError as exc:
-        typer.echo(f"Error: Domain pack not found: {exc}", err=True)
+        result = load_domain(domain)
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1)
 
-    registered = 0
-    already_existed = 0
-    requires_manual_upload: list[str] = []
-
-    for entry in loader.sources:
-        if entry.ingest_type == "upload":
-            requires_manual_upload.append(entry.name)
-            continue
-
-        # Register crawl-type source with URL-first dedup
-        try:
-            with get_session() as session:
-                # Check for existing source by URL first (idempotency)
-                from knowledge_lake.registry.repo import get_source_by_normalized_url
-                from knowledge_lake.pipeline.ingest import normalize_url
-
-                try:
-                    norm_url = normalize_url(entry.url)
-                except Exception:
-                    norm_url = entry.url
-
-                existing = get_source_by_normalized_url(session, norm_url)
-                if existing is not None:
-                    already_existed += 1
-                    continue
-
-                # Validate crawl_schedule before persisting (D-05a, T-11-CRON)
-                validated_schedule = entry.crawl_schedule
-                if validated_schedule is not None:
-                    from dagster._utils.schedules import is_valid_cron_string
-
-                    if not is_valid_cron_string(validated_schedule):
-                        typer.echo(
-                            f"Warning: Invalid cron '{validated_schedule}' for source "
-                            f"'{entry.name}' — schedule will not be persisted.",
-                            err=True,
-                        )
-                        validated_schedule = None
-
-                registry_repo.create_source(
-                    session,
-                    name=entry.name,
-                    source_type=entry.source_type,
-                    url=entry.url,
-                    normalized_url=norm_url,
-                    license_type=entry.license,
-                    crawl_schedule=validated_schedule,
-                    config={
-                        "domain": domain,
-                        "tags": entry.tags,
-                        "crawl_config": entry.crawl_config,
-                        "ingest_type": entry.ingest_type,
-                    },
-                )
-                session.commit()
-                registered += 1
-        except IntegrityError:
-            already_existed += 1
-
-    typer.echo(f"Registered {registered} sources from {domain} pack.")
-    if already_existed > 0:
-        typer.echo(f"{already_existed} sources already registered (dedup).")
-    if requires_manual_upload:
+    typer.echo(f"Registered {result['loaded_count']} sources from {domain} pack.")
+    if result["skipped_count"] > 0:
+        typer.echo(f"{result['skipped_count']} sources already registered (dedup).")
+    if result["upload_required_count"] > 0:
         typer.echo(
-            f"{len(requires_manual_upload)} sources require manual upload "
+            f"{result['upload_required_count']} sources require manual upload "
             f"— see domains/{domain}/sources.yaml."
         )
 

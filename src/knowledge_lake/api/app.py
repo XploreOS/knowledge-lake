@@ -1473,79 +1473,6 @@ def get_dataset_endpoint(dataset_id: str) -> DatasetOut:
         )
 
 
-def _register_domain_sources(name: str) -> dict:
-    """Shared helper: load a domain pack and register its crawl-type sources.
-
-    Returns a dict with loaded_count, skipped_count, upload_required_count keys.
-    Used by both POST /domains/load and klake init --domain to avoid duplicating
-    the registration logic (D-02: no behavior re-implementation).
-
-    Raises FileNotFoundError if the domain pack does not exist.
-    """
-    from pathlib import Path
-
-    from sqlalchemy.exc import IntegrityError
-
-    from knowledge_lake.config.settings import get_settings
-    from knowledge_lake.domains.loader import DomainLoader
-    from knowledge_lake.pipeline.ingest import normalize_url
-    from knowledge_lake.registry.db import get_session
-    from knowledge_lake.registry import repo as registry_repo
-    from knowledge_lake.registry.repo import get_source_by_normalized_url
-
-    settings = get_settings()
-    _domains_path = Path(settings.domain.domains_root).resolve()
-    root = _domains_path.parent if _domains_path.name == "domains" else _domains_path
-
-    loader = DomainLoader.from_name(name, root=root)
-
-    loaded_count = 0
-    skipped_count = 0
-    upload_required_count = 0
-
-    for entry in loader.sources:
-        if entry.ingest_type == "upload":
-            upload_required_count += 1
-            continue
-
-        try:
-            with get_session() as session:
-                try:
-                    norm_url = normalize_url(entry.url)
-                except Exception:
-                    norm_url = entry.url
-
-                existing = get_source_by_normalized_url(session, norm_url)
-                if existing is not None:
-                    skipped_count += 1
-                    continue
-
-                registry_repo.create_source(
-                    session,
-                    name=entry.name,
-                    source_type=entry.source_type,
-                    url=entry.url,
-                    normalized_url=norm_url,
-                    license_type=entry.license,
-                    config={
-                        "domain": name,
-                        "tags": entry.tags,
-                        "crawl_config": entry.crawl_config,
-                        "ingest_type": entry.ingest_type,
-                    },
-                )
-                session.commit()
-                loaded_count += 1
-        except IntegrityError:
-            skipped_count += 1
-
-    return {
-        "loaded_count": loaded_count,
-        "skipped_count": skipped_count,
-        "upload_required_count": upload_required_count,
-    }
-
-
 @app.post(
     "/domains/load",
     response_model=DomainLoadResponse,
@@ -1556,6 +1483,9 @@ def _register_domain_sources(name: str) -> dict:
 def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
     """Load a domain pack by name and bulk-register its crawl-type sources (DOMAIN-01).
 
+    Delegates to ``pipeline.domains.load_domain()`` — logic lives in exactly one
+    place (D-05, D-03).
+
     Upload-type sources are counted but not auto-registered. Existing sources
     are silently skipped (URL dedup). Returns counts for all categories.
 
@@ -1563,8 +1493,11 @@ def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
         - body.name validated against r'^[a-zA-Z][a-zA-Z0-9_-]{0,63}$' by Pydantic pattern
           in DomainLoadRequest BEFORE this handler runs — path traversal blocked at schema level.
         - Domain name is also validated against _DOMAIN_NAME_RE below for defence-in-depth.
+        - load_domain() re-validates against the same guard (T-12-06).
         - DomainLoader validates the name again internally (T-06-01 in loader.py).
     """
+    from knowledge_lake.pipeline.domains import load_domain
+
     # Defence-in-depth: validate again even though Pydantic pattern already checked (T-06-08).
     if not _DOMAIN_NAME_RE.fullmatch(body.name):
         raise HTTPException(status_code=422, detail="Invalid domain name format.")
@@ -1572,7 +1505,7 @@ def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
     logger.info("api.domains.load", name=body.name)
 
     try:
-        result = _register_domain_sources(body.name)
+        result = load_domain(body.name)
     except FileNotFoundError as exc:
         logger.warning("api.domains.load.not_found", name=body.name, error=str(exc))
         raise HTTPException(status_code=404, detail=str(exc)) from exc
