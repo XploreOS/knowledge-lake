@@ -13,7 +13,6 @@ before the target symbol `recrawl_source` exists (Plan 11-03).
 
 from __future__ import annotations
 
-import hashlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,7 +21,7 @@ import pytest
 # ── Guarded import ────────────────────────────────────────────────────────────
 
 try:
-    from knowledge_lake.pipeline.crawl import recrawl_source  # noqa: F401
+    from knowledge_lake.pipeline.crawl import recrawl_source, _signature  # noqa: F401
 
     _HAS_GATE = True
 except Exception:
@@ -35,12 +34,8 @@ pytestmark = pytest.mark.skipif(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-from knowledge_lake.pipeline.clean import remove_boilerplate
-
-
-def _signature(text: str) -> str:
-    """Compute the expected content signature (mirrors the gate logic)."""
-    return hashlib.sha256(remove_boilerplate(text).encode("utf-8")).hexdigest()
+# _signature is imported from the gate (knowledge_lake.pipeline.crawl) so the
+# tests can never drift from the real gate implementation.
 
 
 class _FakePage:
@@ -221,12 +216,17 @@ async def test_nonce_noise_unchanged() -> None:
     ):
         await recrawl_source(source_id)
 
-    # If sig_a == sig_b, gate should skip
-    if sig_a == sig_b:
-        mock_crawl_source.assert_not_called()
-    else:
-        # Nonce was not normalized — crawl happens (still valid behavior)
-        mock_crawl_source.assert_called_once()
+    # The gate's volatile-token suppression MUST neutralize the timestamp
+    # delta, so both crawls yield the SAME signature (SCHED-02 anti-thrash).
+    # Asserted unconditionally — the previous if/else passed in both branches,
+    # giving false confidence for the anti-thrash clause.
+    assert sig_a == sig_b, (
+        "volatile timestamp not suppressed by the change gate; a nonce-only "
+        "delta would thrash the WORM raw zone on every tick"
+    )
+    mock_validate.assert_called_once()
+    mock_crawl_source.assert_not_called()
+    mock_touch.assert_called_once()
 
 
 @pytest.mark.asyncio

@@ -57,14 +57,57 @@ MAX_LINKED_DOCS_PER_PAGE: int = 10
 LINKED_DOC_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx"})
 
 
+# SCHED-02 (T-11-THRASH): gate-local volatile-token suppression. The change
+# gate normalizes MORE aggressively than the silver-stage remove_boilerplate:
+# it neutralizes volatile machine-generated tokens so a dynamically-rendered
+# page whose only delta between crawls is a timestamp/nonce yields a stable
+# signature and does not thrash the WORM raw zone every tick. This is
+# deliberately GATE-ONLY — it must never alter remove_boilerplate, which the
+# clean stage shares and which must preserve human-meaningful dates. The ISO
+# pattern requires a TIME component so bare effective/publication dates are
+# preserved; over-suppression is bounded by max_staleness_days.
+_VOLATILE_PLACEHOLDER = "\x00KLAKE_VOLATILE\x00"
+_VOLATILE_PATTERNS: list[re.Pattern] = [
+    # ISO-8601 datetime (date + time; optional seconds, fraction, timezone)
+    re.compile(
+        r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?"
+    ),
+    # Bare clock time HH:MM:SS
+    re.compile(r"\b\d{2}:\d{2}:\d{2}\b"),
+    # Canonical UUID
+    re.compile(
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+    ),
+    # Long hex nonce / token (>= 16 hex chars)
+    re.compile(r"\b[0-9a-fA-F]{16,}\b"),
+]
+
+
+def _suppress_volatile(text: str) -> str:
+    """Neutralize volatile machine-generated tokens for the change gate only.
+
+    Replaces ISO-8601 timestamps, clock times, UUIDs, and long hex nonces
+    with a fixed placeholder so a page whose only inter-crawl delta is a
+    dynamic timestamp/nonce yields a stable signature (SCHED-02 anti-thrash).
+    Gate-local: does not touch remove_boilerplate or the clean stage.
+    """
+    for pattern in _VOLATILE_PATTERNS:
+        text = pattern.sub(_VOLATILE_PLACEHOLDER, text)
+    return text
+
+
 def _signature(markdown: str) -> str:
-    """Compute content signature: normalize then SHA256.
+    """Compute content signature: normalize, suppress volatile tokens, SHA256.
 
     Reuses the silver-stage ``remove_boilerplate`` so the gate and the clean
-    stage agree on what constitutes meaningful content change (D-06).
+    stage agree on boilerplate (D-06), then applies gate-local volatile-token
+    suppression (ISO timestamps, clock times, UUIDs, hex nonces) so
+    dynamically-rendered pages do not thrash the WORM raw zone on every tick
+    (SCHED-02, T-11-THRASH).
     """
+    normalized = remove_boilerplate(markdown or "")
     return hashlib.sha256(
-        remove_boilerplate(markdown or "").encode("utf-8")
+        _suppress_volatile(normalized).encode("utf-8")
     ).hexdigest()
 
 
