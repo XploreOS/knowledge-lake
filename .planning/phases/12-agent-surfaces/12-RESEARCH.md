@@ -368,16 +368,16 @@ def stats(*, collection="klake_chunks", domain=None) -> dict:
 | A3 | The bearer check is a plain Starlette `BaseHTTPMiddleware` (not the SDK's OAuth `TokenVerifier`) | Pattern 3 | Low — matches D-10 "minimal, optional static token"; OAuth is explicitly deferred |
 | A4 | `init_domain` extraction target is a `load_domain(name) -> dict` service fn factored out of `cmd_init` (cli/app.py:1034) / `load_domain_endpoint` | D-05 mapping | Medium — confirm `load_domain_endpoint` body during planning to ensure both callers can share one signature |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should sync service functions run in a thread pool under HTTP?**
    - What we know: `search`/`export`/registry calls are blocking; the event loop stalls during them.
    - What's unclear: whether v2.0's single-user localhost target cares.
-   - Recommendation: Call sync fns directly for v2.0 (simplest); note `anyio.to_thread.run_sync` as the upgrade if concurrency is later needed. Not a blocker.
+   - **RESOLVED:** Call sync fns directly for v2.0 (simplest); note `anyio.to_thread.run_sync` as the upgrade if concurrency is later needed. Not a blocker — Plan 05 calls sync fns directly per this recommendation.
 
 2. **Exact `init_domain` return shape and whether the load routine is already standalone.**
    - What we know: `cmd_init` (cli/app.py:1034) inlines `DomainLoader.from_name(...)` + per-source `register_source`. `load_domain_endpoint` (api/app.py:1574) is the API twin.
-   - Recommendation: Extract a `load_domain(name) -> {name, loaded_count, skipped_count, upload_required_count}` (matches `DomainLoadResponse`, schemas.py:727) into `pipeline`/`domains`; refactor both CLI and endpoint to call it (D-05).
+   - **RESOLVED:** Extract a `load_domain(name) -> {name, loaded_count, skipped_count, upload_required_count}` (matches `DomainLoadResponse`, schemas.py:727) into `pipeline`/`domains`; refactor both CLI and endpoint to call it (D-05). Realized verbatim in Plan 02 Task 3.
 
 ## Environment Availability
 

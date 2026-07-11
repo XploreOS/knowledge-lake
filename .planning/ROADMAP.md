@@ -217,14 +217,32 @@ Plans:
   5. The repo ships Claude Code skills — `build-corpus.md`, `search-knowledge.md`, `add-source.md`, `export-dataset.md` — that drive the lake through the stabilized MCP tools.
 
 **Plans**: 8 plans
+**Wave 1**
+
 - [ ] 12-01-PLAN.md — mcp==1.28.1 dependency + Wave 0 RED test scaffold (normalize helper)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 12-02-PLAN.md — extract process_crawled/list_sources/stats/load_domain + count_points; refactor CLI/API callers
 - [ ] 12-03-PLAN.md — schema source-of-truth: extend SearchParams + new tool input models
 - [ ] 12-04-PLAN.md — fd-level stdout-lockdown shim + self-test (first-task gate, stdio only)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 12-05-PLAN.md — McpSettings + tool registry (ToolDef/TOOLS) + low-level MCP server core
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 12-06-PLAN.md — Streamable-HTTP transport: localhost bind, Host guard, closed CORS, optional bearer, read-only posture
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 12-07-PLAN.md — klake mcp (stdio/--sse) + klake openapi + OpenAI tool defs; committed docs/openapi.json & docs/openai_tools.json
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 12-08-PLAN.md — surface parity test (stdio==http==openapi==openai) + four Claude Code skills
+
 **Research note**: Flag for `--research-phase` at plan time (stdout-isolation / Streamable-HTTP spike) — confirm `streamable_http_app()`/lifespan wiring against installed `mcp` 1.28.x, nail the `--sse`→Streamable HTTP substitution, and settle the localhost/auth/CORS + read/write tool-separation model before coding. First-task gate: stdout-lockdown shim + self-test (stdio mode only) before any tool logic.
 
 ## Progress
