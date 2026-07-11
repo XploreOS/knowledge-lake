@@ -4,16 +4,16 @@ milestone: v2.0
 milestone_name: — Agent-Ready Lake
 current_phase: 11
 current_phase_name: crawl-scheduling
-status: verifying
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-07-10T17:15:27.667Z"
-last_activity: 2026-07-10
-last_activity_desc: Phase 11 execution started
+status: verified
+stopped_at: Phase 11 verified 9/9 (gap closure 11-06 complete)
+last_updated: "2026-07-11T06:20:00.000Z"
+last_activity: 2026-07-11
+last_activity_desc: "Phase 11 gap closure (11-06) complete; re-verified 9/9 — nonce-gate suppression + per-source concurrency"
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 30
+  completed_plans: 30
   percent: 83
 ---
 
@@ -28,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 ## Current Position
 
-Phase: 11 (crawl-scheduling) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-07-10 — Phase 11 execution started
+Phase: 11 (crawl-scheduling) — VERIFIED (9/9)
+Plan: 6 of 6 complete (5 original + gap-closure 11-06)
+Status: Phase 11 verified — both human-verification items closed (nonce-gate suppression, per-source concurrency)
+Last activity: 2026-07-11 — gap closure 11-06 complete; re-verified 9/9
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100% (phase 11)
 
 ## Performance Metrics
 

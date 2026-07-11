@@ -13,7 +13,7 @@
 - [x] **Phase 8: Crawl Maturation** - Per-source config, adaptive rate limiting, linked-doc ingest, `crawl-all`, partial-JSON recovery (completed 2026-07-09)
 - [x] **Phase 9: Storage Segmentation** - Domain/source-scoped S3 keys, object tags, gold-zone sub-zones (forward-only) (completed 2026-07-10)
 - [ ] **Phase 10: Hybrid Retrieval** - BM25 + dense named vectors with server-side RRF, mode-switchable *(LIVE MIGRATION)*
-- [ ] **Phase 11: Crawl Scheduling** - Dagster re-crawl sensor + normalized-text change gate *(LIVE MIGRATION)*
+- [x] **Phase 11: Crawl Scheduling** - Dagster re-crawl sensor + normalized-text change gate *(LIVE MIGRATION)*
 - [ ] **Phase 12: Agent Surfaces** - Curated MCP server (stdio + Streamable HTTP), OpenAPI/OpenAI tool defs, Claude Code skills
 
 <details>
@@ -177,7 +177,7 @@ Plans:
   3. A max-staleness threshold forces an occasional refresh to catch change-detection false negatives.
   4. A Dagster `@sensor` triggers periodic re-crawl of a source based on its `crawl_schedule`, using a deterministic `run_key` and a cursor watermark (plus per-source concurrency) to avoid duplicate runs and tick storms.
 
-**Plans**: 5/5 plans complete
+**Plans**: 6/6 plans complete (5 original + gap-closure 11-06); verified 9/9
 
 Plans:
 **Wave 0**
@@ -196,6 +196,10 @@ Plans:
 **Wave 3** *(depends on Wave 2)*
 
 - [x] 11-05-PLAN.md — Dagster: sensors.py (recrawl_sensor + recrawl_op + recrawl_source_job + RecrawlConfig), Definitions registration, dagster.yaml QueuedRunCoordinator swap (SCHED-01)
+
+**Wave 4** *(gap closure — verification human-item resolution)*
+
+- [x] 11-06-PLAN.md — Gate-local volatile-token suppression (ISO timestamps/UUIDs/hex nonces) closing SCHED-02 anti-thrash clause + unconditional nonce test; durable per-source concurrency regression/config-drift guard (SCHED-02, human items #1+#2)
 
 **Migration note**: LIVE DATA MIGRATION (additive `crawl_schedule` / `last_crawled_at` / `last_content_hash` columns on the Source registry). Flag for `--research-phase` at plan time. Rollback: forward-only additive columns; the sensor can be disabled independently of the schema change.
 
