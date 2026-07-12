@@ -1,10 +1,11 @@
 ---
 phase: 9
 slug: storage-segmentation
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: verified
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-09
+validated: 2026-07-12
 ---
 
 # Phase 9 — Validation Strategy
@@ -38,17 +39,17 @@ created: 2026-07-09
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 09-01-01 | 01 | 0 | STORE-01 | — | N/A | unit | `pytest tests/unit/test_put_raw_domain.py -x` | ❌ W0 | ⬜ pending |
-| 09-01-02 | 01 | 0 | STORE-01 | — | `_unclassified` prevents empty segment injection | unit | `pytest tests/unit/test_put_raw_domain.py::TestPutRawDomainKey -x` | ❌ W0 | ⬜ pending |
-| 09-01-03 | 01 | 0 | STORE-01 | — | dedup no-op ordered before key construction | unit | `pytest tests/unit/test_put_raw_domain.py::TestDeduplicationOrderPreserved -x` | ❌ W0 | ⬜ pending |
-| 09-01-04 | 01 | 0 | STORE-02 | T-09-01 | tag values truncated to 256 chars (no overflow) | unit | `pytest tests/unit/test_format_tags.py -x` | ❌ W0 | ⬜ pending |
-| 09-01-05 | 01 | 0 | STORE-02 | T-09-02 | tags inline with write; best-effort fallback prevents blocking | unit | `pytest tests/unit/test_put_object_tags.py -x` | ❌ W0 | ⬜ pending |
-| 09-02-01 | 02 | 1 | STORE-01 | — | N/A | unit | `pytest tests/unit/test_put_bronze.py::TestPutBronzeDomainKey -x` | ❌ W0 | ⬜ pending |
-| 09-02-02 | 02 | 1 | STORE-01 | — | domain resolved inside session boundary | unit | `pytest tests/unit/test_parse_silver_key.py -x` | ❌ W0 | ⬜ pending |
-| 09-02-03 | 02 | 1 | STORE-01 | — | domain resolved inside session boundary | unit | `pytest tests/unit/test_clean_silver_key.py -x` | ❌ W0 | ⬜ pending |
-| 09-03-01 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZoneDomainKey -x` | ❌ W0 | ⬜ pending |
-| 09-03-02 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZoneUnclassified -x` | ❌ W0 | ⬜ pending |
-| 09-03-03 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZonePretrain -x` | ❌ W0 | ⬜ pending |
+| 09-01-01 | 01 | 0 | STORE-01 | — | N/A | unit | `pytest tests/unit/test_put_raw_domain.py -x` | ✅ | ✅ green |
+| 09-01-02 | 01 | 0 | STORE-01 | — | `_unclassified` prevents empty segment injection | unit | `pytest tests/unit/test_put_raw_domain.py::TestPutRawDomainKey -x` | ✅ | ✅ green |
+| 09-01-03 | 01 | 0 | STORE-01 | — | dedup no-op ordered before key construction | unit | `pytest tests/unit/test_put_raw_domain.py::TestDeduplicationOrderPreserved -x` | ✅ | ✅ green |
+| 09-01-04 | 01 | 0 | STORE-02 | T-09-01 | tag values truncated to 256 chars (no overflow) | unit | `pytest tests/unit/test_format_tags.py -x` | ✅ | ✅ green |
+| 09-01-05 | 01 | 0 | STORE-02 | T-09-02 | tags inline with write; best-effort fallback prevents blocking | unit | `pytest tests/unit/test_put_object_tags.py -x` | ✅ | ✅ green |
+| 09-02-01 | 02 | 1 | STORE-01 | — | N/A | unit | `pytest tests/unit/test_put_bronze.py::TestPutBronzeDomainKey -x` | ✅ | ✅ green |
+| 09-02-02 | 02 | 1 | STORE-01 | — | domain resolved inside session boundary | unit | `pytest tests/unit/test_parse_silver_key.py -x` | ✅ | ✅ green |
+| 09-02-03 | 02 | 1 | STORE-01 | — | domain resolved inside session boundary | unit | `pytest tests/unit/test_clean_silver_key.py -x` | ✅ | ✅ green |
+| 09-03-01 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZoneDomainKey -x` | ✅ | ✅ green |
+| 09-03-02 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZoneUnclassified -x` | ✅ | ✅ green |
+| 09-03-03 | 03 | 2 | STORE-03 | — | N/A | unit | `pytest tests/unit/test_export.py::TestGoldZonePretrain -x` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -74,13 +75,25 @@ created: 2026-07-09
 
 ---
 
+## Validation Audit 2026-07-12
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 11 mapped tasks COVERED by green unit tests across `test_put_raw_domain.py`, `test_format_tags.py`, `test_put_object_tags.py`, `test_put_bronze.py`, `test_parse_silver_key.py`, `test_clean_silver_key.py`, `test_export.py` — 32 passed. STORE-02 tag-truncation (T-09-01) and best-effort fallback (T-09-02) asserted. One manual-only item (live MinIO `Tagging=` verification) remains manual.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** verified 2026-07-12
