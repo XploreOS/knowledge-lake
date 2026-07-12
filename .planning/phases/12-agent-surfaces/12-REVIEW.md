@@ -1,6 +1,6 @@
 ---
 phase: 12-agent-surfaces
-reviewed: 2026-07-11T00:00:00Z
+reviewed: 2026-07-12T00:00:00Z
 depth: standard
 files_reviewed: 28
 files_reviewed_list:
@@ -33,210 +33,277 @@ files_reviewed_list:
   - tests/unit/test_tool_handlers.py
   - tests/unit/test_tool_registry.py
 findings:
-  critical: 0
-  warning: 3
-  info: 0
-  total: 3
-  resolved: 2
+  critical: 1
+  warning: 4
+  info: 2
+  total: 7
 status: issues_found
-resolution: "CR-01 + WR-02 fixed in commit 2d73db1 (add_source handler) with regression tests; WR-01/WR-03/WR-04 deferred to user."
 ---
 
-# Phase 12: Code Review Report
+# Phase 12: Code Review Report (Re-Review)
 
-**Reviewed:** 2026-07-11
+**Reviewed:** 2026-07-12T00:00:00Z
 **Depth:** standard
 **Files Reviewed:** 28
-**Status:** issues_found (blocker resolved; 3 warnings deferred)
-
-> **Resolution (2026-07-11):** CR-01 (BLOCKER) and WR-02 were fixed in commit `2d73db1`
-> — `_add_source_handler` now calls `register_source(url, name, domain=..., license_type=...)`
-> correctly (no session) and defaults `name` to the URL hostname, with two new regression tests
-> in `tests/unit/test_tool_handlers.py` that reproduce the original `TypeError`. **WR-01**
-> (factory-path token auth), **WR-03** (`process_crawled` silent exception swallowing), and
-> **WR-04** (default unauthenticated write-tool HTTP posture) are intentionally **deferred** for
-> user decision — they are security-posture/observability design choices, not outright defects.
-> Run `/gsd-code-review 12 --fix` to address them, or handle WR-04 as an explicit posture decision.
+**Status:** issues_found
 
 ## Summary
 
-This phase exposes the lake through an MCP server (stdio + Streamable HTTP), OpenAI/OpenAPI
-exports, and Claude Code skills. The transport-security core (`agent/http.py`, `agent/stdio.py`)
-is largely sound: localhost-only bind, DNS-rebinding `allowed_hosts`, closed CORS, constant-time
-bearer via `secrets.compare_digest`, `Route` (not `Mount`) to avoid the Authorization-dropping
-307 redirect, and an fd-level stdout lockdown for stdio. The surface-parity gate
-(`test_surface_parity.py`) is a genuinely strong correctness harness.
+This is the re-review of Phase 12 (agent-surfaces) after the prior fix pass.
 
-However, the review found one **BLOCKER**: the `add_source` MCP tool is completely
-non-functional — its handler calls the wrong function signature and raises `TypeError` on every
-invocation. This is not caught by any test because no test executes the handler body (the parity
-and registry tests only inspect `ToolDef` metadata and schemas, never call `_add_source_handler`).
-Four warnings cover an auth-wiring footgun in `build_http_app`, a diverging `name` default in the
-same handler, silent exception-swallowing in `process_crawled`, and the unauthenticated write-tool
-default posture of the HTTP surface.
+**Prior CR-01 (register_source signature) — VERIFIED FIXED.** `_add_source_handler`
+(`registry.py:201-228`) now calls `register_source(url, name, domain=..., license_type=...)`
+with no session argument and reads the returned dict keys. Regression tests in
+`tests/unit/test_tool_handlers.py` (`test_add_source_handler_calls_register_source_without_session`,
+`test_add_source_handler_defaults_name_to_hostname`) exercise the handler body directly and
+pass. Not re-reported.
+
+**One genuinely NEW blocker was found (CR-01 below):** the MCP server's expected-error
+path calls a stdlib `logging` logger with structlog-style keyword arguments, which raises
+`TypeError` and *replaces* every readable tool error message with a confusing internal
+`Logger._log() got an unexpected keyword argument 'tool'` string. This breaks the D-13
+contract on the most common failure path (any `ValueError`/`LookupError` from a handler,
+e.g. `export` with a missing `dataset_name`). It slipped past the existing test because
+`test_call_tool_value_error_returns_is_error` only asserts `isError is True`, never the
+message content.
+
+**Of the three carried-over warnings, all three are still open:** WR-01 (token not
+auto-resolved from settings for factory/direct callers), WR-03 (`process_crawled` swallows
+every per-doc exception with a bare `except Exception` and no logging), and WR-04 (default
+`readonly=False` + `token=None` exposes all destructive write tools unauthenticated over
+HTTP). A new fourth warning (WR-05) was found: the CLI `mcp --port` option hardcodes
+`3001` and never reads `settings.mcp.port`, so `KLAKE_MCP__PORT` is dead config despite the
+docstring promising it as an override.
+
+The surface-parity architecture (single `TOOLS` registry → stdio/http/OpenAI/OpenAPI) is
+sound and well-tested. The stdio fd-level stdout lockdown is correct. Security controls on
+the HTTP transport (localhost bind, Host guard, closed CORS, constant-time bearer) are
+correctly implemented where wired.
+
+## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01 [RESOLVED — commit 2d73db1]: `add_source` MCP tool always raises TypeError — passes a `session` to a session-less function
+### CR-01: MCP expected-error path crashes on stdlib logger, masking every readable tool error (NEW)
 
-**File:** `src/knowledge_lake/agent/registry.py:200-222`
+**File:** `src/knowledge_lake/agent/server.py:109` and `:132`
 **Issue:**
-`_add_source_handler` calls `register_source` with a `session` as the first positional argument
-**and** `url=` as a keyword:
+`server.py` uses a **stdlib** logger (`import logging`; `log = logging.getLogger(__name__)`,
+line 22/27) but calls it with **structlog-style keyword arguments**:
 
 ```python
-with get_session() as session:
-    source = register_source(
-        session,          # ← bound positionally to the `url` parameter
-        url=url,          # ← then url= again → collision
-        name=name,
-        domain=domain,
-        license_type=license_type,
-    )
+log.warning("mcp.call_tool.expected_error", tool=name, error=str(exc))       # line 109
+log.warning("mcp.call_tool.contamination_error", tool=name, error=str(exc))  # line 132
 ```
 
-But the target function takes no session (`ingest.py:230`):
+`logging.Logger.warning()` does not accept arbitrary keyword arguments — it forwards them to
+`Logger._log()`, which raises `TypeError: Logger._log() got an unexpected keyword argument
+'tool'`. Verified empirically:
+
+```
+$ python3 -c "import logging; logging.getLogger('x').warning('m', tool='a', error='b')"
+TypeError: Logger._log() got an unexpected keyword argument 'tool'
+```
+
+Impact: in the `except _EXPECTED_ERRORS` block (and the contamination branch), the intended
+readable message is never returned. The `TypeError` raised *inside* the except handler
+propagates out and the SDK wraps it as a generic `isError` result. The client sees the
+internal logging error string, not the domain message. Verified end-to-end against the real
+`build_server`:
+
+```
+isError= True
+content= ["Logger._log() got an unexpected keyword argument 'tool'"]   # expected the ValueError text
+```
+
+This breaks the D-13 contract ("the client sees the message without exposing internal stack
+traces") on the most common failure path — every `ValueError`/`LookupError` a handler raises
+(e.g. `export` with `kind='finetune'` and no `dataset_name` →
+`"dataset_name is required for kind='finetune'."`, `lineage` on an unknown artifact id,
+`init_domain` with a bad name). The existing regression test passes only because it asserts
+`isError is True` and never inspects `content`.
+
+**Fix:** Use stdlib-compatible logging (either `%`-style args or an f-string). Minimal change:
 
 ```python
-def register_source(url, name, *, domain=None, license_type="unknown", ...): ...
+# line 109
+log.warning("mcp.call_tool.expected_error tool=%s error=%s", name, str(exc))
+# line 132
+log.warning("mcp.call_tool.contamination_error tool=%s error=%s", name, str(exc))
 ```
 
-`session` binds to the positional `url` parameter, then the explicit `url=url` keyword produces
-`TypeError: register_source() got multiple values for argument 'url'`. `TypeError` is **not** in
-`_EXPECTED_ERRORS = (ValueError, LookupError)` (`server.py:33`), so it propagates as a raw protocol
-error rather than a clean `isError` result. The `add_source` tool therefore fails 100% of the time
-on both stdio and HTTP surfaces.
-
-This appears to be a copy/paste confusion with `registry.repo.create_source` /
-`get_source_by_normalized_url` (which *do* take a session, as used correctly in
-`pipeline/domains.py:100-105`). `register_source` already opens and commits its own
-`get_session()` internally (`ingest.py:266`), so the surrounding `with get_session()` block is also
-redundant. No test exercises this path, so the defect ships silently.
-
-**Fix:**
-```python
-def _add_source_handler(
-    url: str,
-    name: str | None = None,
-    domain: str | None = None,
-    license_type: str = "unknown",
-) -> dict:
-    """Thin shim: maps SourceCreate fields to register_source()."""
-    from urllib.parse import urlparse
-
-    # register_source manages its own session + commit; do not wrap it.
-    result = register_source(
-        url=url,
-        name=name or (urlparse(url).hostname or url),  # see WR-02
-        domain=domain,
-        license_type=license_type,
-    )
-    return {
-        "source_id": result["source_id"],
-        "name": result["name"],
-        "url": result["url"],
-        "is_new": result["is_new"],
-    }
-```
+(Or switch the module to `structlog.get_logger(__name__)` if structured kwargs are desired —
+but the stdlib `logging` import must then be removed to avoid confusion.) After the fix,
+harden the test: assert the returned `content[0].text` equals the original exception message,
+not merely that `isError` is truthy.
 
 ## Warnings
 
-### WR-01: `build_http_app` never resolves `token` from `settings.mcp.token` — auth silently disabled for factory/direct callers
+### WR-01: `build_http_app` never auto-resolves `token` from settings — fail-open for factory/direct callers (STILL OPEN)
 
-**File:** `src/knowledge_lake/agent/http.py:92-137,157`
+**File:** `src/knowledge_lake/agent/http.py:92-98`, `:125-137`, `:156-157`
 **Issue:**
-`build_http_app` auto-resolves `host`, `port`, and `server` from `get_settings()` when they are
-`None`, but `token` is **not** defaulted from `settings.mcp.token`:
+`build_http_app` resolves `host`, `port`, and `server` from `get_settings()` when the caller
+passes `None`, but the `token` parameter is **never** resolved from `settings.mcp.token`.
 
 ```python
-if host is None:  host = settings.mcp.host
-if port is None:  port = settings.mcp.port
-if server is None: server = build_server(...)
-# token is never pulled from settings.mcp.token
-...
-middleware = [Middleware(StaticBearerMiddleware, token=token)] if token else []
-```
-
-The shipped CLI path (`cli/app.py:1121`) passes `token=settings.mcp.token` explicitly, so the
-`klake mcp --sse` command is fine. But the module docstring advertises the factory as
-"safe-by-default," and a natural ASGI deployment
-(`uvicorn knowledge_lake.agent.http:build_http_app --factory`, or any caller invoking
-`build_http_app()` without threading the token) will run **unauthenticated even when
-`KLAKE_MCP__TOKEN` is set** — a silent auth bypass. The asymmetry (host/port/server resolved,
-token not) is a footgun.
-
-**Fix:** resolve the token from settings alongside host/port when not explicitly provided, using a
-sentinel to distinguish "caller passed None on purpose" from "unset":
-```python
-def build_http_app(server=None, *, host=None, port=None, token: str | None = _UNSET):
-    settings = get_settings()
+def build_http_app(server=None, *, host=None, port=None, token=None):
     ...
-    if token is _UNSET:
-        token = settings.mcp.token
+    if server is None or host is None or port is None:
+        settings = get_settings()
+        if host is None: host = settings.mcp.host
+        if port is None: port = settings.mcp.port
+        # token is NOT resolved here
+    ...
+    middleware = [Middleware(StaticBearerMiddleware, token=token)] if token else []
 ```
 
-### WR-02 [RESOLVED — commit 2d73db1]: `add_source` MCP path drops the documented "defaults to URL hostname" name behavior
+A factory/direct caller that constructs the app without passing `token` (e.g.
+`build_http_app()` or `build_http_app(server)`) gets **no auth middleware even when
+`KLAKE_MCP__TOKEN` is set**. This is a fail-open inconsistency: `readonly`, `host`, and
+`port` all honor settings automatically, but the one security-relevant field does not. The
+current CLI path (`cli/app.py:1121`) happens to pass `token=settings.mcp.token` explicitly,
+so the shipped `klake mcp --sse` command is safe — but any other caller silently loses auth.
 
-**File:** `src/knowledge_lake/agent/registry.py:200-216`
+**Fix:** Resolve `token` from settings alongside the others (treat an explicit empty string as
+"no auth"; use a sentinel to distinguish "not provided" from "explicitly disabled"):
+
+```python
+_UNSET = object()
+
+def build_http_app(server=None, *, host=None, port=None, token=_UNSET):
+    from knowledge_lake.config.settings import get_settings
+    settings = get_settings()
+    if host is None:  host = settings.mcp.host
+    if port is None:  port = settings.mcp.port
+    if token is _UNSET:  token = settings.mcp.token   # default to configured token
+    if server is None:
+        server = build_server(registered_tools(readonly=settings.mcp.readonly))
+    ...
+```
+
+### WR-03: `process_crawled` swallows every per-doc exception with a bare `except` and no logging (STILL OPEN)
+
+**File:** `src/knowledge_lake/pipeline/process.py:114-115`
 **Issue:**
-`skills/add-source.md:24` and `SourceCreate.name` both promise `name` "defaults to the URL
-hostname." The CLI implements this (`cli/app.py:78`:
-`effective_name = name or (urlparse(url).hostname or url)`). The MCP handler does not — it forwards
-`name=None` straight to `register_source`, which passes it unchanged to `create_source`. Depending
-on the `Source.name` column nullability this either stores a `NULL`/`None` name (contract
-violation) or raises a NOT NULL `IntegrityError`. Even after CR-01 is fixed, an `add_source` call
-without an explicit `name` behaves differently from the CLI and from the skill's stated contract.
 
-**Fix:** compute the hostname fallback in the handler (folded into the CR-01 fix above:
-`name=name or (urlparse(url).hostname or url)`).
-
-### WR-03: `process_crawled` swallows every per-doc exception with no logging
-
-**File:** `src/knowledge_lake/pipeline/process.py:114-116`
-**Issue:**
 ```python
 except Exception:
     failed += 1
 ```
-The per-document loop catches *all* exceptions, increments a counter, and discards the exception
-entirely — no `log.warning`, no artifact ID, no error type. A run can report `{"processed": 0,
-"failed": 100}` with zero diagnostic signal about *why* every document failed (bad MIME, embed
-service down, Qdrant unreachable, etc.). This blindly-broad catch also masks genuinely unexpected
-failures (e.g. `KeyboardInterrupt` is spared since it's not an `Exception`, but programming errors
-like `AttributeError`/`TypeError` are silently counted as content failures). This surface is
-reachable directly as the `process_crawled` MCP write tool, so operators get no observability.
 
-**Fix:** log the failure with structured context before counting it:
+Every per-document exception — `parse`, `chunk`, `embed`, `index` — is caught, counted, and
+discarded with **no logging**. Operators get a bare `failed` integer with no artifact id, no
+exception type, and no traceback, making failures undiagnosable. This also contradicts the
+function's own docstring (`:42-45`), which claims "Any exception ... propagates as-is for
+unexpected errors; expected per-doc failures are caught, counted." The code makes no such
+distinction — a config error, an out-of-memory in `embed`, or a Qdrant outage in `index` are
+all silently swallowed as "failed", so a systemic outage looks identical to one bad document.
+
+**Fix:** Log each failure with context (artifact id + exception) before counting; keep the
+batch resilient but observable:
+
 ```python
-except Exception:
-    log.warning("process_crawled.doc_failed", raw_id=raw_id, source_id=src_id, exc_info=True)
-    failed += 1
+import logging
+log = logging.getLogger(__name__)
+...
+        except Exception:
+            failed += 1
+            log.warning("process_crawled: doc %s failed", raw_id, exc_info=True)
 ```
-(add a module-level `log = structlog.get_logger(__name__)`).
 
-### WR-04: HTTP surface exposes all 7 destructive write tools unauthenticated by default
+Optionally narrow the catch and let truly unexpected/systemic errors (e.g. connection
+errors) propagate, matching the docstring's stated contract.
 
-**File:** `src/knowledge_lake/config/settings.py:319-332`, `src/knowledge_lake/agent/http.py:137,157`
+### WR-04: Default `readonly=False` + `token=None` exposes all destructive write tools unauthenticated over HTTP (STILL OPEN)
+
+**File:** `src/knowledge_lake/config/settings.py:319-325` (defaults) and
+`src/knowledge_lake/agent/http.py:133-157` (wiring)
 **Issue:**
-Defaults are `McpSettings.readonly = False` and `McpSettings.token = None`. With both defaults, the
-Streamable HTTP surface exposes the full 11-tool set — including `crawl`, `crawl_all`, `ingest_url`
-(network fetch), `export`, `init_domain`, and `process_crawled` — with **no authentication**. The
-only mitigation is the localhost bind + Host guard. Any local process (or a browser via a
-non-preflighted request that survives the Host check, or another user on a shared host) can drive
-destructive, network-egress-capable tools. The phase brief calls for a "read-only tool posture" as
-the security expectation; the shipped default is the opposite. This is a documented design decision
-(D-10/D-11), but the safe default for an unauthenticated transport should be `readonly=True` (or the
-server should refuse to expose write tools over HTTP unless a token is configured).
+With the shipped defaults (`McpSettings.readonly=False`, `McpSettings.token=None`), running
+`klake mcp --sse` serves **all 11 tools — including `ingest_url`, `add_source`, `crawl`,
+`process_crawled`, `export`, and `init_domain` — with no authentication**, guarded only by the
+`127.0.0.1` bind and the Host header rebinding guard. Any local process or co-tenant user on
+the host can drive destructive/write operations (fetch arbitrary URLs, mutate the registry,
+trigger exports, load domain packs). The Host guard defeats DNS-rebinding but does nothing
+against a same-host attacker. Combined with WR-01 (a caller who forgets `token` also gets no
+auth), the fail-open story is worse than it appears.
 
-**Fix:** make write-tool exposure over HTTP conditional on auth, e.g. in `build_http_app` warn or
-fail-closed when `token is None and not settings.mcp.readonly`, or flip the default posture:
+**Fix (defense-in-depth, choose at least one):**
+- Default the HTTP transport to read-only unless a token is configured — i.e. when
+  `token` is falsy and `--sse` is requested, force `readonly=True` and log a warning that
+  write tools are hidden until `KLAKE_MCP__TOKEN` is set; or
+- Refuse to start the HTTP transport with write tools enabled and no token (fail-closed):
+
 ```python
-if token is None and any(t.access == "write" for t in server_tools):
-    log.warning("mcp.http.unauthenticated_write_tools_exposed")  # or raise / force readonly
+if sse and not settings.mcp.token and not settings.mcp.readonly:
+    raise typer.BadParameter(
+        "Refusing to serve write tools over HTTP without KLAKE_MCP__TOKEN. "
+        "Set a token or run with KLAKE_MCP__READONLY=true."
+    )
 ```
+
+At minimum, document the exposure prominently and emit a startup warning.
+
+### WR-05: CLI `mcp --port` hardcodes 3001 and ignores `settings.mcp.port` — `KLAKE_MCP__PORT` is dead config (NEW)
+
+**File:** `src/knowledge_lake/cli/app.py:1091-1093`, `:1120`, `:1123`
+**Issue:**
+The `--port` option defaults to a hardcoded literal:
+
+```python
+port: int = typer.Option(3001, "--port", help="HTTP port (localhost only, --sse mode)."),
+```
+
+`cmd_mcp` then uses this `port` for both `build_http_app(..., port=port)` and
+`uvicorn.run(..., port=port)`, and never reads `settings.mcp.port`. Consequently
+`KLAKE_MCP__PORT` has **no effect** on the CLI, directly contradicting the `McpSettings.port`
+docstring (`settings.py:332`: "Override via KLAKE_MCP__PORT env var") and the `cmd_mcp`
+docstring (`:1100-1101`: "bind host/port ... come from settings.mcp"). The host is correctly
+sourced from `settings.mcp.host`, so the port asymmetry is almost certainly unintended. An
+operator who sets `KLAKE_MCP__PORT=4000` will silently get 3001.
+
+**Fix:** Default the option to `None` and fall back to `settings.mcp.port`:
+
+```python
+port: int | None = typer.Option(None, "--port", help="HTTP port (defaults to settings.mcp.port)."),
+...
+settings = get_settings()
+bind_port = port if port is not None else settings.mcp.port
+http_app = build_http_app(server, host=settings.mcp.host, port=bind_port, token=settings.mcp.token)
+uvicorn.run(http_app, host=settings.mcp.host, port=bind_port)
+```
+
+## Info
+
+### IN-01: `test_call_tool_value_error_returns_is_error` asserts only `isError`, never the message — masked CR-01
+
+**File:** `tests/unit/test_tool_handlers.py:250-285`
+**Issue:**
+The test asserts `call_result.isError is True` but never inspects `call_result.content`. Because
+the SDK converts any raised exception (including the `TypeError` from CR-01) into an `isError`
+result, the test stays green even though the intended readable message is destroyed. This is
+why the CR-01 logging bug shipped undetected.
+**Fix:** Assert the surfaced text equals the raised message:
+
+```python
+assert call_result.content[0].text == "test error from handler"
+```
+
+Add a symmetric assertion for the contamination-error branch (`server.py:132`).
+
+### IN-02: `process_crawled` docstring describes a propagate/catch split the code does not implement
+
+**File:** `src/knowledge_lake/pipeline/process.py:42-45`
+**Issue:**
+The docstring states unexpected errors "propagate as-is" while expected per-doc failures are
+"caught, counted." The implementation (`:114-115`) catches *all* `Exception` per doc, so the
+documented contract is false. Tracks with WR-03; if WR-03 is fixed by narrowing the catch, the
+docstring becomes accurate. Otherwise, correct the docstring to state that all per-doc
+exceptions are swallowed into `failed`.
 
 ---
 
-_Reviewed: 2026-07-11_
+_Reviewed: 2026-07-12T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
