@@ -124,7 +124,6 @@ def test_get_dim_named(mock_store):
 # ── Test: Hybrid prefetch limits + RRF (D-11, D-12, D-14) ───────────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: hybrid search mode not yet implemented", strict=False)
 def test_hybrid_prefetch_limits(mock_store):
     """Call search(mode='hybrid') and assert query_points received:
     - prefetch as a two-element list
@@ -172,21 +171,31 @@ def test_hybrid_prefetch_limits(mock_store):
     assert prefetch is not None, "prefetch not passed to query_points"
     assert len(prefetch) == 2, f"Expected 2 prefetch branches, got {len(prefetch)}"
 
+    # The fixture injects a bare MagicMock as self._Prefetch, so its return value
+    # carries child-mock attributes rather than the passed kwargs. Assert on the
+    # construction call kwargs instead (same pattern as the create-path tests).
+    prefetch_calls = store._Prefetch.call_args_list
+    assert len(prefetch_calls) == 2, f"Expected 2 Prefetch constructions, got {len(prefetch_calls)}"
+
     # First branch: dense
-    dense_branch = prefetch[0]
-    assert dense_branch.using == "dense", f"First branch using={dense_branch.using}, expected 'dense'"
-    assert dense_branch.limit == expected_limit, (
-        f"Dense branch limit={dense_branch.limit}, expected {expected_limit}"
+    dense_kwargs = prefetch_calls[0].kwargs
+    assert dense_kwargs.get("using") == "dense", (
+        f"First branch using={dense_kwargs.get('using')}, expected 'dense'"
     )
-    assert dense_branch.filter == query_filter, "Dense branch filter != passed query_filter (D-14)"
+    assert dense_kwargs.get("limit") == expected_limit, (
+        f"Dense branch limit={dense_kwargs.get('limit')}, expected {expected_limit}"
+    )
+    assert dense_kwargs.get("filter") == query_filter, "Dense branch filter != passed query_filter (D-14)"
 
     # Second branch: sparse
-    sparse_branch = prefetch[1]
-    assert sparse_branch.using == "sparse", f"Second branch using={sparse_branch.using}, expected 'sparse'"
-    assert sparse_branch.limit == expected_limit, (
-        f"Sparse branch limit={sparse_branch.limit}, expected {expected_limit}"
+    sparse_kwargs = prefetch_calls[1].kwargs
+    assert sparse_kwargs.get("using") == "sparse", (
+        f"Second branch using={sparse_kwargs.get('using')}, expected 'sparse'"
     )
-    assert sparse_branch.filter == query_filter, "Sparse branch filter != passed query_filter (D-14)"
+    assert sparse_kwargs.get("limit") == expected_limit, (
+        f"Sparse branch limit={sparse_kwargs.get('limit')}, expected {expected_limit}"
+    )
+    assert sparse_kwargs.get("filter") == query_filter, "Sparse branch filter != passed query_filter (D-14)"
 
     # Query must be FusionQuery with Fusion.RRF
     query_arg = kwargs.get("query")
