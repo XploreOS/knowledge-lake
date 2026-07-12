@@ -1,10 +1,11 @@
 ---
 phase: 8
 slug: crawl-maturation
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: verified
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-08
+validated: 2026-07-12
 ---
 
 # Phase 8 — Validation Strategy
@@ -38,18 +39,18 @@ created: 2026-07-08
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 08-01-01 | 01 | 1 | CRAWL-01 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py -x` | Extend existing | ⬜ pending |
-| 08-01-02 | 01 | 1 | CRAWL-01 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py -x` | Extend existing | ⬜ pending |
-| 08-02-01 | 02 | 1 | CRAWL-02 | — | N/A | unit | `pytest tests/unit/test_crawl_all.py -x` | ❌ W0 | ⬜ pending |
-| 08-02-02 | 02 | 1 | CRAWL-02 | — | N/A | unit | `pytest tests/unit/test_crawl_all.py -x` | ❌ W0 | ⬜ pending |
-| 08-03-01 | 03 | 1 | CRAWL-03 | T-08-SSRF | Rate-limit amplification cap | unit | `pytest tests/unit/test_robots_ratelimit.py::TestAdaptiveRateLimiter -x` | ❌ W0 | ⬜ pending |
-| 08-03-02 | 03 | 1 | CRAWL-03 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py::TestAdaptiveRateLimiter -x` | ❌ W0 | ⬜ pending |
-| 08-04-01 | 04 | 1 | ENRICH-07 | — | Partial JSON recovery never re-raises ValidationError through tenacity | unit | `pytest tests/unit/test_enrich.py::test_partial_enrichment -x` | ❌ W0 | ⬜ pending |
-| 08-04-02 | 04 | 1 | ENRICH-07 | — | Partial result stored under partial: key | unit | `pytest tests/unit/test_enrich.py::test_partial_cache_key -x` | ❌ W0 | ⬜ pending |
-| 08-04-03 | 04 | 1 | ENRICH-07 | — | Complete result lookup ignores partial cache entry | unit | `pytest tests/unit/test_enrich.py::test_partial_not_returned_as_complete -x` | ❌ W0 | ⬜ pending |
-| 08-05-01 | 05 | 1 | INGEST-10 | T-08-SSRF | validate_public_url called before every ingest_url for linked doc | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ❌ W0 | ⬜ pending |
-| 08-05-02 | 05 | 1 | INGEST-10 | T-08-SSRF | SSRF-blocked linked link counted as failed, does not abort parent crawl | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ❌ W0 | ⬜ pending |
-| 08-05-03 | 05 | 1 | INGEST-10 | — | MAX_LINKED_DOCS_PER_PAGE cap enforced | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ❌ W0 | ⬜ pending |
+| 08-01-01 | 01 | 1 | CRAWL-01 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py -x` | ✅ extended | ✅ green |
+| 08-01-02 | 01 | 1 | CRAWL-01 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py -x` | ✅ extended | ✅ green |
+| 08-02-01 | 02 | 1 | CRAWL-02 | — | N/A | unit | `pytest tests/unit/test_crawl_all.py -x` | ✅ | ✅ green |
+| 08-02-02 | 02 | 1 | CRAWL-02 | — | N/A | unit | `pytest tests/unit/test_crawl_all.py -x` | ✅ | ✅ green |
+| 08-03-01 | 03 | 1 | CRAWL-03 | T-08-SSRF | Rate-limit amplification cap | unit | `pytest tests/unit/test_robots_ratelimit.py::TestAdaptiveRateLimiter -x` | ✅ | ✅ green |
+| 08-03-02 | 03 | 1 | CRAWL-03 | — | N/A | unit | `pytest tests/unit/test_robots_ratelimit.py::TestAdaptiveRateLimiter -x` | ✅ | ✅ green |
+| 08-04-01 | 04 | 1 | ENRICH-07 | — | Partial JSON recovery never re-raises ValidationError through tenacity | unit | `pytest tests/unit/test_enrich.py::test_partial_enrichment -x` | ✅ | ✅ green |
+| 08-04-02 | 04 | 1 | ENRICH-07 | — | Partial result stored under partial: key | unit | `pytest tests/unit/test_enrich.py::test_partial_cache_key -x` | ✅ | ✅ green |
+| 08-04-03 | 04 | 1 | ENRICH-07 | — | Complete result lookup ignores partial cache entry | unit | `pytest tests/unit/test_enrich.py::test_partial_not_returned_as_complete -x` | ✅ | ✅ green |
+| 08-05-01 | 05 | 1 | INGEST-10 | T-08-SSRF | validate_public_url called before every ingest_url for linked doc | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ✅ | ✅ green |
+| 08-05-02 | 05 | 1 | INGEST-10 | T-08-SSRF | SSRF-blocked linked link counted as failed, does not abort parent crawl | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ✅ | ✅ green |
+| 08-05-03 | 05 | 1 | INGEST-10 | — | MAX_LINKED_DOCS_PER_PAGE cap enforced | unit | `pytest tests/unit/test_linked_doc_ingest.py -x` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -75,13 +76,25 @@ created: 2026-07-08
 
 ---
 
+## Validation Audit 2026-07-12
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 12 mapped tasks COVERED by green unit tests across `test_robots_ratelimit.py`, `test_crawl_all.py`, `test_enrich.py`, `test_linked_doc_ingest.py` — 50 passed, 1 xfailed. The HIGH-severity INGEST-10 linked-doc SSRF guard (T-08-SSRF) is asserted by `test_linked_doc_ingest.py`. Two manual-only items (live crawl-all, real-429 backoff) remain manual — require live services.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** verified 2026-07-12
