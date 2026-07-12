@@ -66,9 +66,6 @@ All complaints will be reviewed and investigated promptly and fairly.
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
 
-> **Maintainers:** update the contact address above to a monitored inbox before
-> publishing the repository.
-
 ## Enforcement Guidelines
 
 Community leaders will follow these Community Impact Guidelines in determining
