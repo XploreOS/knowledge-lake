@@ -40,6 +40,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+# Sentinel distinguishing "token not provided" (resolve from settings) from
+# "token explicitly disabled" (caller passed None/empty → no auth). Without this,
+# a factory/direct caller that omits ``token`` would silently lose auth even when
+# KLAKE_MCP__TOKEN is configured (WR-01 fail-open).
+_UNSET = object()
+
 
 class _StreamableHTTPASGIApp:
     """Minimal ASGI wrapper delegating to ``StreamableHTTPSessionManager``.
@@ -94,7 +100,7 @@ def build_http_app(
     *,
     host: str | None = None,
     port: int | None = None,
-    token: str | None = None,
+    token=_UNSET,  # noqa: ANN001 — sentinel default; resolved from settings below
 ) -> Starlette:
     """Build the MCP **Streamable HTTP** Starlette app around a shared ``Server``.
 
@@ -113,16 +119,21 @@ def build_http_app(
                  ``settings.mcp.host`` (``127.0.0.1`` — never ``0.0.0.0``, D-09).
         port:    Bind port used to populate ``allowed_hosts``.  Defaults to
                  ``settings.mcp.port``.
-        token:   Optional bearer token.  When truthy, ``StaticBearerMiddleware``
-                 is attached and enforces the token (constant-time).  When falsy
-                 (``None``/empty), no auth middleware is added (D-10).
+        token:   Optional bearer token.  When omitted, it is resolved from
+                 ``settings.mcp.token`` so a configured ``KLAKE_MCP__TOKEN`` is
+                 honoured automatically (WR-01 — no fail-open for direct callers).
+                 Pass ``None``/empty explicitly to disable auth. When truthy,
+                 ``StaticBearerMiddleware`` is attached and enforces the token
+                 (constant-time); when falsy, no auth middleware is added (D-10).
 
     Returns:
         A Starlette ASGI app mounting the Streamable-HTTP handler at ``/mcp``.
     """
     # Resolve defaults from settings so the app is localhost-safe by default and
     # the same read-only flag that drives stdio also drives the HTTP tool set.
-    if server is None or host is None or port is None:
+    # ``token`` is resolved alongside host/port/server so an omitted token still
+    # honours KLAKE_MCP__TOKEN (WR-01); an explicit None/empty stays "no auth".
+    if server is None or host is None or port is None or token is _UNSET:
         from knowledge_lake.config.settings import get_settings
 
         settings = get_settings()
@@ -130,6 +141,8 @@ def build_http_app(
             host = settings.mcp.host
         if port is None:
             port = settings.mcp.port
+        if token is _UNSET:
+            token = settings.mcp.token
         if server is None:
             from knowledge_lake.agent.registry import registered_tools
             from knowledge_lake.agent.server import build_server
