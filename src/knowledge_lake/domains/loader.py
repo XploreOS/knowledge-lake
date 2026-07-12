@@ -21,7 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -138,7 +138,7 @@ class DomainLoader:
         return tmpl.render(**kwargs)
 
     @classmethod
-    def from_name(cls, name: str, root: Optional[Path] = None) -> "DomainLoader":
+    def from_name(cls, name: str, root: Path | None = None) -> DomainLoader:
         """Load a domain pack by name from the project root domains/ directory.
 
         Args:

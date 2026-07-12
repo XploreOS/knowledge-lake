@@ -3,8 +3,36 @@ name = "knowledge-lake"
 version = "0.1.0"
 description = "A domain-agnostic framework for turning domain resources into AI-ready assets with full lineage traceability"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "Jeevan J", email = "jeevan.jamakayala@gmail.com" }
+]
+maintainers = [
+    { name = "XploreOS" }
+]
+keywords = [
+    "knowledge-lake",
+    "data-lake",
+    "rag",
+    "llm",
+    "lineage",
+    "etl",
+    "vector-search",
+    "dagster",
+    "ai-datasets",
+    "document-parsing",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Database",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -47,6 +75,13 @@ dependencies = [
     "jinja2>=3.1,<4",
     "mcp==1.28.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/XploreOS/knowledge-lake"
+Repository = "https://github.com/XploreOS/knowledge-lake"
+Documentation = "https://github.com/XploreOS/knowledge-lake/tree/main/docs"
+Issues = "https://github.com/XploreOS/knowledge-lake/issues"
+Changelog = "https://github.com/XploreOS/knowledge-lake/blob/main/CHANGELOG.md"
 
 [project.scripts]
 klake = "knowledge_lake.cli.app:app"
@@ -93,10 +128,24 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI and Typer require these calls in argument defaults (Query/Option/etc.);
+# they are effectively immutable sentinels, not mutable-default anti-patterns.
+extend-immutable-calls = [
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Depends",
+    "typer.Option",
+    "typer.Argument",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = false
-warn_unused_imports = true
 warn_return_any = true
 ignore_missing_imports = true
 

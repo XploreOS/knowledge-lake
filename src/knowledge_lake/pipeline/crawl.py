@@ -28,8 +28,8 @@ import hashlib
 import os.path as _osp
 import re
 from collections import deque
-from typing import Any, Optional, Union
-from urllib.parse import urljoin, urlparse, urldefrag
+from typing import Any
+from urllib.parse import urldefrag, urljoin, urlparse
 
 import structlog
 import tldextract
@@ -38,13 +38,20 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.crawl.ratelimit import PerHostLimiter, resolve_delay
 from knowledge_lake.crawl.robots import fetch_robots
 from knowledge_lake.pipeline.clean import remove_boilerplate
-from knowledge_lake.pipeline.ingest import normalize_url, register_source, validate_public_url, ingest_url
+from knowledge_lake.pipeline.ingest import (
+    ingest_url,
+    normalize_url,
+    register_source,
+    validate_public_url,
+)
 from knowledge_lake.plugins.resolver import get_crawler
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.registry.repo import list_sources_for_crawl_all as _repo_list_sources_for_crawl_all
+from knowledge_lake.registry.db import get_session
+from knowledge_lake.registry.repo import (
+    list_sources_for_crawl_all as _repo_list_sources_for_crawl_all,
+)
 from knowledge_lake.registry.repo import touch_source_crawl
-from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
 
@@ -135,7 +142,7 @@ def _get_source_for_recrawl(source_id: str) -> dict:
 async def recrawl_source(
     source_id: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Change-detection gate: probe the seed URL, compare signature, skip or crawl.
 
@@ -156,7 +163,7 @@ async def recrawl_source(
     dict with source_id and status ('skipped_unchanged' or 'recrawled').
     """
     s = settings or get_settings()
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
 
     # Load source metadata (opens own session)
     src_data = _get_source_for_recrawl(source_id)
@@ -208,7 +215,7 @@ async def recrawl_source(
     return output
 
 
-def list_sources_for_crawl_all(domain: Optional[str] = None) -> list[Any]:
+def list_sources_for_crawl_all(domain: str | None = None) -> list[Any]:
     """Session-aware wrapper: return all sources (optionally filtered by domain).
 
     This module-level wrapper exists so tests can patch
@@ -244,9 +251,9 @@ def list_sources_for_crawl_all(domain: Optional[str] = None) -> list[Any]:
 async def crawl_source(
     source_url: str,
     *,
-    crawler: Optional[str] = None,
-    settings: Optional[Settings] = None,
-    max_pages: Optional[int] = None,
+    crawler: str | None = None,
+    settings: Settings | None = None,
+    max_pages: int | None = None,
 ) -> dict[str, Any]:
     """Crawl a source URL end-to-end: fetch pages, write raw+bronze, track state.
 
@@ -369,7 +376,7 @@ async def crawl_source(
         if job_obj:
             job_obj.status = "complete"
             job_obj.stats = stats
-            job_obj.updated_at = datetime.datetime.now(datetime.timezone.utc)
+            job_obj.updated_at = datetime.datetime.now(datetime.UTC)
 
     return {
         "job_id": job_id,
@@ -399,6 +406,7 @@ def _find_or_create_job(
     """
     from sqlalchemy import select as sa_select
     from sqlalchemy.exc import IntegrityError
+
     from knowledge_lake.registry.models import Job
 
     with get_session() as session:
@@ -482,11 +490,11 @@ async def _crawl_loop(
     source_id: str,
     adapter: Any,
     robots_policy: Any,
-    robots_crawl_delay: Optional[float],
+    robots_crawl_delay: float | None,
     seed_domain: str,
     max_pages: int,
     settings: Settings,
-    source_config: Optional[dict] = None,
+    source_config: dict | None = None,
 ) -> dict[str, int]:
     """BFS crawl loop: fetch pages, extract links, expand queue up to max_pages.
 
@@ -688,7 +696,7 @@ async def _crawl_loop(
     }
 
 
-def _extract_links(html: Union[bytes, str], base_url: str, seed_domain: str) -> list[str]:
+def _extract_links(html: bytes | str, base_url: str, seed_domain: str) -> list[str]:
     """Extract same-domain HTTP(S) links from raw HTML.
 
     Accepts bytes or str so the caller can decode once and share the
@@ -742,7 +750,7 @@ def _extract_links(html: Union[bytes, str], base_url: str, seed_domain: str) -> 
 
 
 def _extract_linked_docs(
-    html: Union[bytes, str],
+    html: bytes | str,
     base_url: str,
 ) -> list[str]:
     """Extract .pdf and .docx hrefs from raw HTML, returning absolute URLs.
@@ -816,10 +824,10 @@ def _extract_linked_docs(
 def _write_artifacts(
     source_id: str,
     url: str,
-    html: Optional[bytes],
-    markdown: Optional[str],
+    html: bytes | None,
+    markdown: str | None,
     storage: StorageBackend,
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """Write raw HTML and bronze markdown artifacts with lineage.
 
     Returns (raw_artifact_id, bronze_artifact_id). Both may be None if
@@ -870,14 +878,14 @@ def _record_state(
     url: str,
     status: str,
     *,
-    raw_artifact_id: Optional[str] = None,
-    bronze_artifact_id: Optional[str] = None,
-    error: Optional[str] = None,
+    raw_artifact_id: str | None = None,
+    bronze_artifact_id: str | None = None,
+    error: str | None = None,
 ) -> None:
     """Upsert a crawl_state row for the given URL."""
     norm_url = normalize_url(url)
     fetched_at = (
-        datetime.datetime.now(datetime.timezone.utc)
+        datetime.datetime.now(datetime.UTC)
         if status == "complete"
         else None
     )
@@ -909,8 +917,8 @@ def _name_from_url(url: str) -> str:
 
 
 async def crawl_all_sources(
-    domain: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    domain: str | None = None,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     """Crawl all registered sources sequentially, optionally filtered by domain.
 

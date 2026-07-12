@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import io
 import re
-from typing import Optional
 
 import orjson
 import structlog
@@ -40,7 +39,7 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.ids import new_id
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
-from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
 
@@ -105,7 +104,7 @@ def _make_storage(s: Settings) -> StorageBackend:
 
 def check_train_eval_contamination(
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Full-corpus train/eval contamination check (05-AI-SPEC Section 6/7).
 
@@ -168,24 +167,25 @@ def check_train_eval_contamination(
                             )
                             if cleaned is not None:
                                 eval_cleaned_doc_ids.add(cleaned.id)
-            elif "instruction" in payload:
+            elif "instruction" in payload and ex.source_artifact_id:
                 # Instruction-shaped → fine-tuning (train) set
-                if ex.source_artifact_id:
-                    artifact = registry_repo.get_artifact(session, ex.source_artifact_id)
-                    if artifact is not None and artifact.artifact_type == "enriched_document":
-                        # enriched_document.parent_artifact_id = cleaned_document
-                        if artifact.parent_artifact_id:
-                            finetune_cleaned_doc_ids.add(artifact.parent_artifact_id)
-                    # silently skip on unresolved source (EXPORT-03's dangling check handles it)
+                artifact = registry_repo.get_artifact(session, ex.source_artifact_id)
+                # enriched_document.parent_artifact_id = cleaned_document
+                if (
+                    artifact is not None
+                    and artifact.artifact_type == "enriched_document"
+                    and artifact.parent_artifact_id
+                ):
+                    finetune_cleaned_doc_ids.add(artifact.parent_artifact_id)
+                # silently skip on unresolved source (EXPORT-03's dangling check handles it)
 
         # Step 2: Build pretrain_cleaned_doc_ids from curated_document quality gate
         all_curated = registry_repo.list_artifacts_by_type(session, "curated_document")
         pretrain_cleaned_doc_ids: set[str] = set()
         min_q = s.export.min_quality_score_for_pretrain
         for curated in all_curated:
-            if (curated.quality_score or 0.0) >= min_q:
-                if curated.parent_artifact_id:
-                    pretrain_cleaned_doc_ids.add(curated.parent_artifact_id)
+            if (curated.quality_score or 0.0) >= min_q and curated.parent_artifact_id:
+                pretrain_cleaned_doc_ids.add(curated.parent_artifact_id)
 
         # Step 3: Union training sides
         train_cleaned_doc_ids = finetune_cleaned_doc_ids | pretrain_cleaned_doc_ids
@@ -242,8 +242,8 @@ def _enforce_no_contamination(s: Settings) -> None:
 
 def export_rag_corpus(
     *,
-    domain: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    domain: str | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Export all chunk artifacts as a Parquet file to the gold zone (EXPORT-01).
 
@@ -356,8 +356,8 @@ def export_rag_corpus(
 
 def export_pretrain_corpus(
     *,
-    domain: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    domain: str | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Export quality-filtered curated_document text as JSONL to the gold zone (EXPORT-02).
 
@@ -449,8 +449,8 @@ def export_pretrain_corpus(
 def export_finetune_dataset(
     dataset_name: str,
     *,
-    domain: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    domain: str | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Export a named dataset's examples as OpenAI chat-messages JSONL (EXPORT-03).
 
@@ -579,7 +579,7 @@ def export_finetune_dataset(
 def verify_export(
     export_uri: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> int:
     """Verify an exported file by reading it through DuckDB (D-10, read-only).
 

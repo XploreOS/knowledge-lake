@@ -28,7 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import tldextract
@@ -45,8 +45,8 @@ COOLDOWN_SECONDS: float = 30.0
 
 
 def resolve_delay(
-    source_config: Optional[dict[str, Any]],
-    robots_crawl_delay: Optional[float],
+    source_config: dict[str, Any] | None,
+    robots_crawl_delay: float | None,
     global_default: float,
     backoff_extra: float = 0.0,
 ) -> float:

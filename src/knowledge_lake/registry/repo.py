@@ -30,25 +30,23 @@ from __future__ import annotations
 
 import datetime
 from collections import namedtuple
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from knowledge_lake.ids import new_id
-from knowledge_lake.version import pipeline_version
 from knowledge_lake.registry.models import (
     Artifact,
     CrawlState,
     Dataset,
     DatasetExample,
     Job,
-    LineageEvent,
     LlmSpend,
     Source,
     VectorCollection,
 )
-
+from knowledge_lake.version import pipeline_version
 
 # ── Source ────────────────────────────────────────────────────────────────────
 
@@ -58,13 +56,13 @@ def create_source(
     *,
     name: str,
     source_type: str,
-    url: Optional[str] = None,
-    normalized_url: Optional[str] = None,
-    license_type: Optional[str] = None,
-    license_url: Optional[str] = None,
+    url: str | None = None,
+    normalized_url: str | None = None,
+    license_type: str | None = None,
+    license_url: str | None = None,
     robots_checked: bool = False,
-    config: Optional[Any] = None,
-    crawl_schedule: Optional[str] = None,
+    config: Any | None = None,
+    crawl_schedule: str | None = None,
 ) -> Source:
     """Register a new source and add it to the session.
 
@@ -109,7 +107,7 @@ def create_source(
         robots_checked=robots_checked,
         config=config,
         crawl_schedule=crawl_schedule,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(source)
     return source
@@ -123,12 +121,12 @@ def _make_artifact(
     source_id: str,
     artifact_type: str,
     content_hash: str,
-    storage_uri: Optional[str],
-    parent_artifact_id: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    page_ref: Optional[int] = None,
-    section_path: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    storage_uri: str | None,
+    parent_artifact_id: str | None = None,
+    mime_type: str | None = None,
+    page_ref: int | None = None,
+    section_path: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Internal: construct an Artifact with all FOUND-06 fields stamped."""
     return Artifact(
@@ -143,7 +141,7 @@ def _make_artifact(
         page_ref=page_ref,
         section_path=section_path,
         metadata_=metadata or {},
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
 
 
@@ -155,9 +153,9 @@ def create_raw_artifact(
     *,
     source_id: str,
     content_hash: str,
-    storage_uri: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    storage_uri: str | None = None,
+    mime_type: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Persist a raw document artifact node (FOUND-06).
 
@@ -189,9 +187,9 @@ def create_parsed_artifact(
     source_id: str,
     parent_artifact_id: str,
     content_hash: str,
-    storage_uri: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    storage_uri: str | None = None,
+    mime_type: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Persist a parsed document artifact node.
 
@@ -221,9 +219,9 @@ def create_cleaned_artifact(
     source_id: str,
     parent_artifact_id: str,
     content_hash: str,
-    storage_uri: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    storage_uri: str | None = None,
+    mime_type: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Persist a cleaned document artifact (CLEAN-01..03).
 
@@ -275,11 +273,11 @@ def create_chunk_artifact(
     source_id: str,
     parent_artifact_id: str,
     content_hash: str,
-    storage_uri: Optional[str] = None,
-    mime_type: Optional[str] = None,
-    page_ref: Optional[int] = None,
-    section_path: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    storage_uri: str | None = None,
+    mime_type: str | None = None,
+    page_ref: int | None = None,
+    section_path: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Persist a chunk artifact node.
 
@@ -309,7 +307,7 @@ def get_artifact_by_hash(
     session: Session,
     content_hash: str,
     artifact_type: str,
-) -> Optional[Artifact]:
+) -> Artifact | None:
     """Return the artifact matching ``(content_hash, artifact_type)`` or None.
 
     This is the FOUND-04 dedup lookup: called by ``storage.put_raw`` before
@@ -327,7 +325,7 @@ def get_artifact_by_hash(
     return session.execute(stmt).scalar_one_or_none()
 
 
-def get_artifact(session: Session, artifact_id: str) -> Optional[Artifact]:
+def get_artifact(session: Session, artifact_id: str) -> Artifact | None:
     """Fetch an artifact by its primary key.
 
     Returns None if not found (does not raise).
@@ -356,7 +354,7 @@ def list_children(session: Session, artifact_id: str) -> list[Artifact]:
 def get_source_by_normalized_url(
     session: Session,
     normalized_url: str,
-) -> Optional[Source]:
+) -> Source | None:
     """Return the source matching a normalized URL, or None.
 
     This is the URL-first dedup lookup (D-05): called by register_source()
@@ -379,10 +377,10 @@ def create_bronze_artifact(
     *,
     source_id: str,
     content_hash: str,
-    storage_uri: Optional[str] = None,
+    storage_uri: str | None = None,
     parent_artifact_id: str,
-    mime_type: Optional[str] = None,
-    metadata: Optional[Any] = None,
+    mime_type: str | None = None,
+    metadata: Any | None = None,
 ) -> Artifact:
     """Persist a bronze document artifact node (D-01, INGEST-04).
 
@@ -411,9 +409,9 @@ def create_bronze_artifact(
 def create_crawl_job(
     session: Session,
     *,
-    source_id: Optional[str] = None,
-    crawler: Optional[str] = None,
-    config: Optional[Any] = None,
+    source_id: str | None = None,
+    crawler: str | None = None,
+    config: Any | None = None,
     status: str = "pending",
 ) -> Job:
     """Create a crawl job record.
@@ -443,7 +441,7 @@ def create_crawl_job(
         crawler=crawler,
         config=config,
         status=status,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(job)
     return job
@@ -456,10 +454,10 @@ def upsert_crawl_state(
     url: str,
     normalized_url: str,
     status: str = "pending",
-    raw_artifact_id: Optional[str] = None,
-    bronze_artifact_id: Optional[str] = None,
-    fetched_at: Optional[datetime.datetime] = None,
-    error_msg: Optional[str] = None,
+    raw_artifact_id: str | None = None,
+    bronze_artifact_id: str | None = None,
+    fetched_at: datetime.datetime | None = None,
+    error_msg: str | None = None,
 ) -> CrawlState:
     """Insert or update a crawl state row (keyed on job_id + normalized_url).
 
@@ -522,7 +520,7 @@ def upsert_crawl_state(
         bronze_artifact_id=bronze_artifact_id,
         fetched_at=fetched_at,
         error_msg=error_msg,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(state)
     return state
@@ -587,7 +585,7 @@ def list_sources_by_type(
 def get_raw_artifact_for_source(
     session: Session,
     source_id: str,
-) -> Optional[Artifact]:
+) -> Artifact | None:
     """Return the raw_document artifact owned by the given source, or None.
 
     Used by ingest_url when URL-first dedup hits: the existing source_id is known,
@@ -629,8 +627,8 @@ def create_enriched_artifact(
     source_id: str,
     parent_artifact_id: str,
     content_hash: str,
-    metadata: Optional[Any] = None,
-    quality_score: Optional[float] = None,
+    metadata: Any | None = None,
+    quality_score: float | None = None,
 ) -> Artifact:
     """Persist an enriched document artifact node (ENRICH-01..05).
 
@@ -681,8 +679,8 @@ def create_curated_artifact(
     source_id: str,
     parent_artifact_id: str,
     content_hash: str,
-    metadata: Optional[Any] = None,
-    quality_score: Optional[float] = None,
+    metadata: Any | None = None,
+    quality_score: float | None = None,
 ) -> Artifact:
     """Persist a curated document artifact node (CURATE-01..03).
 
@@ -732,7 +730,7 @@ def get_child_artifact_by_type(
     session: Session,
     parent_artifact_id: str,
     artifact_type: str,
-) -> Optional[Artifact]:
+) -> Artifact | None:
     """Return the first direct child of ``parent_artifact_id`` matching ``artifact_type``,
     or None if no such child exists.
 
@@ -785,7 +783,7 @@ def record_llm_spend(session: Session, scope: str, cost_usd: float) -> LlmSpend:
         id=new_id("artifact"),
         scope=scope,
         total_cost_usd=cost_usd,
-        updated_at=datetime.datetime.now(datetime.timezone.utc),
+        updated_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(spend)
     return spend
@@ -794,7 +792,7 @@ def record_llm_spend(session: Session, scope: str, cost_usd: float) -> LlmSpend:
 def get_enriched_artifact_for_parsed(
     session: Session,
     parsed_artifact_id: str,
-) -> Optional[Artifact]:
+) -> Artifact | None:
     """Resolve the enriched_document artifact two hops below a parsed_document.
 
     Walks parsed_document -> cleaned_document -> enriched_document, bridging
@@ -824,7 +822,7 @@ def get_enriched_artifact_for_parsed(
     return enriched
 
 
-def get_domain_for_source(session: Session, source_id: str) -> Optional[str]:
+def get_domain_for_source(session: Session, source_id: str) -> str | None:
     """Return the domain classification stored in Source.config, or None.
 
     RESEARCH.md Pitfall 4: domain is never a dedicated column, always stored
@@ -837,7 +835,7 @@ def get_domain_for_source(session: Session, source_id: str) -> Optional[str]:
     return source.config.get("domain")
 
 
-def get_source(session: Session, source_id: str) -> Optional[Source]:
+def get_source(session: Session, source_id: str) -> Source | None:
     """Fetch a Source by its primary key.
 
     Returns None if not found (does not raise).
@@ -876,7 +874,7 @@ def get_source_crawl_config(session: Session, source_id: str) -> dict:
 
 def list_sources_for_crawl_all(
     session: Session,
-    domain: Optional[str] = None,
+    domain: str | None = None,
 ) -> list[Source]:
     """Return all sources ordered by created_at asc, optionally filtered by domain.
 
@@ -948,7 +946,7 @@ def list_scheduled_sources(session: Session) -> list:
 def set_source_schedule(
     session: Session,
     source_id: str,
-    crawl_schedule: Optional[str],
+    crawl_schedule: str | None,
 ) -> bool:
     """Update or clear the crawl_schedule column for a source.
 
@@ -977,7 +975,7 @@ def touch_source_crawl(
     source_id: str,
     *,
     last_crawled_at: datetime.datetime,
-    last_content_hash: Optional[str] = None,
+    last_content_hash: str | None = None,
 ) -> None:
     """Update crawl watermarks after a re-crawl attempt (D-11/D-17).
 
@@ -1035,7 +1033,7 @@ def register_vector_collection(
         physical_collection=physical_collection,
         dim=dim,
         is_current=True,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(collection)
     return collection
@@ -1044,7 +1042,7 @@ def register_vector_collection(
 def get_current_vector_collection(
     session: Session,
     alias_name: str,
-) -> Optional[VectorCollection]:
+) -> VectorCollection | None:
     """Return the current physical collection row for the given alias, or None."""
     stmt = (
         select(VectorCollection)
@@ -1063,9 +1061,9 @@ def create_dataset(
     *,
     name: str,
     dataset_type: str,
-    format: Optional[str] = None,
-    storage_uri: Optional[str] = None,
-    example_count: Optional[int] = None,
+    format: str | None = None,
+    storage_uri: str | None = None,
+    example_count: int | None = None,
 ) -> Dataset:
     """Create a new Dataset row and add it to the session.
 
@@ -1096,13 +1094,13 @@ def create_dataset(
         format=format,
         storage_uri=storage_uri,
         example_count=example_count,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(dataset)
     return dataset
 
 
-def get_dataset_by_name(session: Session, name: str) -> Optional[Dataset]:
+def get_dataset_by_name(session: Session, name: str) -> Dataset | None:
     """Return the Dataset matching ``name``, or None.
 
     Uses the uq_datasets_name unique index for O(1) lookup.
@@ -1117,7 +1115,7 @@ def get_or_create_dataset(
     *,
     name: str,
     dataset_type: str,
-    format: Optional[str] = None,
+    format: str | None = None,
 ) -> Dataset:
     """Get an existing Dataset by name, or create it if it doesn't exist.
 
@@ -1152,9 +1150,9 @@ def create_dataset_example(
     session: Session,
     *,
     dataset_id: str,
-    source_artifact_id: Optional[str],
+    source_artifact_id: str | None,
     example_index: int,
-    payload: Optional[Any] = None,
+    payload: Any | None = None,
 ) -> DatasetExample:
     """Create a new DatasetExample row and add it to the session (DATA-03).
 
@@ -1183,7 +1181,7 @@ def create_dataset_example(
         source_artifact_id=source_artifact_id,
         example_index=example_index,
         payload=payload or {},
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+        created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(example)
     return example

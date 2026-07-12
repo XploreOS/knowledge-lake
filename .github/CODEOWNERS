@@ -1,0 +1,23 @@
+# Code owners for Knowledge Lake
+# These owners are requested for review automatically on matching changes.
+# Order matters: the last matching pattern wins.
+#
+# Maintainers: replace @XploreOS/maintainers with an existing GitHub team or
+# individual usernames (e.g. @your-handle) so auto-assignment works.
+
+# Default owners for everything in the repo
+*                       @XploreOS/maintainers
+
+# Framework core & lineage
+/src/knowledge_lake/    @XploreOS/maintainers
+
+# Plugins (parsers, embedders, vector stores, crawlers, discovery)
+/src/knowledge_lake/plugins/    @XploreOS/maintainers
+
+# Domain packs
+/domains/               @XploreOS/maintainers
+
+# Infrastructure, CI, and project meta
+/.github/               @XploreOS/maintainers
+/infra/                 @XploreOS/maintainers
+/docker-compose.yml     @XploreOS/maintainers

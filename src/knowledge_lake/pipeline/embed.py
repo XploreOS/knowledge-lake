@@ -11,8 +11,6 @@ Returns: list[list[float]] (one vector per chunk, length == embedder.dim)
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -24,7 +22,7 @@ log = structlog.get_logger(__name__)
 def embed(
     chunks: list[dict],
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> tuple[list[list[float]], int]:
     """Embed chunk texts using the configured embedder plugin.
 

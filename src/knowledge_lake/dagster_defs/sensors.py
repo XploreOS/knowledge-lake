@@ -20,19 +20,17 @@ Cron helpers come from dagster._utils.schedules (Dagster's vendored croniter eng
 No external croniter dependency is imported (Pitfall 1, T-11-SC).
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 import dagster as dg
 from dagster._utils.schedules import get_latest_completed_cron_tick, get_next_cron_tick
-
 
 # ── Helpers (patchable for tests) ────────────────────────────────────────────
 
 
 def _get_now() -> datetime:
     """Return current UTC time. Exists as a seam for deterministic test control."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def list_scheduled_sources() -> list:
@@ -40,8 +38,8 @@ def list_scheduled_sources() -> list:
 
     Extracted as a module-level function so tests can patch it without touching DB.
     """
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo
+    from knowledge_lake.registry.db import get_session
 
     with get_session() as session:
         return repo.list_scheduled_sources(session)

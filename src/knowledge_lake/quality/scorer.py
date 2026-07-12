@@ -13,7 +13,7 @@ do not exercise the LLM path do not require a running LiteLLM proxy.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -28,7 +28,7 @@ log = structlog.get_logger(__name__)
 def compute_quality_score(
     parsed_doc: ParsedDoc,
     mime_type: str = "",
-    settings: Optional["Settings"] = None,
+    settings: Settings | None = None,
 ) -> float:
     """Compute a heuristic quality score for a ParsedDoc (D-04, PARSE-04).
 
@@ -69,10 +69,7 @@ def compute_quality_score(
     section_score = min(len(sections) / 3, 1.0)
 
     # Heuristic 3: encoding health (unicode replacement char indicates garbled text)
-    if text_len > 0:
-        replacement_ratio = text.count("�") / text_len
-    else:
-        replacement_ratio = 0.0
+    replacement_ratio = text.count("�") / text_len if text_len > 0 else 0.0
     encoding_score = 1.0 - min(replacement_ratio * 100, 1.0)
 
     # Heuristic 4: empty section ratio
@@ -158,7 +155,7 @@ def compute_composite_quality_score(
 def maybe_llm_spot_check(
     parsed_doc: ParsedDoc,
     score: float,
-    settings: "Settings",
+    settings: Settings,
 ) -> float:
     """Optionally refine the quality score using an LLM coherence check (D-04).
 
@@ -190,6 +187,7 @@ def maybe_llm_spot_check(
 
     try:
         import json as _json
+
         import litellm  # lazy import — avoids proxy dependency in unit tests
 
         # Sample up to 1000 chars of document text for the coherence check

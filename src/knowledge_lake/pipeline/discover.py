@@ -20,8 +20,6 @@ Dedup (D-08):
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -35,7 +33,7 @@ def discover_sources(
     query: str,
     *,
     limit: int = 20,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> list[dict]:
     """Run a discovery query and auto-register valid results as candidate sources.
 

@@ -76,8 +76,8 @@ def parse_with_fallback(
     raw: bytes,
     mime_type: str,
     *,
-    settings: "Settings",
-) -> "tuple[ParsedDoc, str, float]":
+    settings: Settings,
+) -> tuple[ParsedDoc, str, float]:
     """Try parsers in settings.parse.chain order. Stop on first success (D-02).
 
     Fallback triggers on exception OR quality gate failure (D-01):
@@ -175,7 +175,7 @@ def parse_with_fallback(
     )
 
 
-def get_parser(settings: "Settings") -> Any:
+def get_parser(settings: Settings) -> Any:
     """Return the ParserPlugin named by settings.parser.
 
     Reads the 'parser' swap key from the provided Settings instance and
@@ -220,7 +220,7 @@ def _resolve_with_kwargs(group: str, name: str, **kwargs: Any) -> Any:
     )
 
 
-def get_embedder(settings: "Settings") -> Any:
+def get_embedder(settings: Settings) -> Any:
     """Return the EmbedderPlugin named by settings.embedder.
 
     Reads the 'embedder' swap key from the provided Settings instance and
@@ -247,7 +247,7 @@ def get_embedder(settings: "Settings") -> Any:
     return _resolve_with_kwargs(GROUP_EMBEDDERS, name, **kwargs)
 
 
-def get_vectorstore(settings: "Settings") -> Any:
+def get_vectorstore(settings: Settings) -> Any:
     """Return the VectorStorePlugin named by settings.vectorstore.
 
     Reads the 'vectorstore' swap key from the provided Settings instance and
@@ -267,7 +267,7 @@ def get_vectorstore(settings: "Settings") -> Any:
     return _resolve_with_kwargs(GROUP_VECTORSTORES, name, **kwargs)
 
 
-def get_discovery(settings: "Settings") -> Any:
+def get_discovery(settings: Settings) -> Any:
     """Return the DiscoveryPlugin named by settings.discovery.
 
     Reads the 'discovery' swap key from the provided Settings instance and
@@ -289,7 +289,7 @@ def get_discovery(settings: "Settings") -> Any:
     return _resolve_with_kwargs(GROUP_DISCOVERY, name, **kwargs)
 
 
-def get_crawler(settings: "Settings") -> Any:
+def get_crawler(settings: Settings) -> Any:
     """Return the CrawlerPlugin named by settings.crawler.
 
     Reads the 'crawler' swap key from the provided Settings instance and

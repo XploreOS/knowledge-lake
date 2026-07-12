@@ -19,12 +19,12 @@ Returns the raw_document Artifact ORM object.
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import mimetypes
 import socket
 from pathlib import Path
-from typing import Optional
-from urllib.parse import urlparse, urlsplit, urlunsplit, urljoin
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -32,9 +32,9 @@ from sqlalchemy.exc import IntegrityError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from knowledge_lake.config.settings import Settings, get_settings
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
+from knowledge_lake.registry.db import get_session
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
 
@@ -80,10 +80,7 @@ def normalize_url(url: str) -> str:
     # netloc = host (lowered) + optional port (preserved)
     host = (parts.hostname or "").lower()
     port = parts.port
-    if port:
-        netloc = f"{host}:{port}"
-    else:
-        netloc = host
+    netloc = f"{host}:{port}" if port else host
     path = parts.path
     # Strip trailing slash but keep root "/"
     if path != "/" and path.endswith("/"):
@@ -175,7 +172,7 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
     """
     current_url = url
     with httpx.Client(timeout=FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
-        for hop in range(_MAX_REDIRECTS + 1):
+        for _hop in range(_MAX_REDIRECTS + 1):
             resp = client.send(client.build_request("GET", current_url), stream=True)
 
             if resp.status_code in (301, 302, 303, 307, 308):
@@ -214,10 +211,9 @@ def _fetch_with_retry(url: str) -> tuple[bytes, str]:
                         )
                     chunks.append(chunk)
             finally:
-                try:
+                # never mask the original exception (WR-03)
+                with contextlib.suppress(Exception):
                     resp.close()
-                except Exception:
-                    pass  # never mask the original exception (WR-03)
             return b"".join(chunks), content_type
 
         # Exceeded redirect cap
@@ -231,12 +227,12 @@ def register_source(
     url: str,
     name: str,
     *,
-    domain: Optional[str] = None,
+    domain: str | None = None,
     license_type: str = "unknown",
-    source_type_override: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    organization: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    source_type_override: str | None = None,
+    tags: list[str] | None = None,
+    organization: str | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Register a source URL with URL-first dedup (INGEST-01).
 
@@ -338,10 +334,10 @@ def ingest_url(
     url: str,
     source_name: str,
     *,
-    mime_type: Optional[str] = None,
+    mime_type: str | None = None,
     license_type: str = "unknown",
     robots_checked: bool = False,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Download a URL and ingest as a raw_document artifact.
 
@@ -448,13 +444,13 @@ def ingest_url(
 
 
 def ingest_file(
-    path: "Path | str",
+    path: Path | str,
     source_name: str,
     *,
     mime_type: str = "application/pdf",
-    source_url: Optional[str] = None,
+    source_url: str | None = None,
     license_type: str = "unknown",
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Load a local file and ingest as a raw_document artifact.
 

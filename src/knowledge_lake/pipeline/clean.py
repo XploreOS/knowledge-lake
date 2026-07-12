@@ -23,16 +23,15 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Optional
 
 import structlog
 from datasketch import MinHash, MinHashLSH
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
+from knowledge_lake.registry.db import get_session
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
 
@@ -172,7 +171,7 @@ def clean(
     parsed_artifact_id: str,
     source_id: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Clean a parsed_document artifact and create a cleaned_document artifact.
 

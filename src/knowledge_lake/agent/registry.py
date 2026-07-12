@@ -27,8 +27,9 @@ Prohibitions (PLAN 12-05):
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Literal
+from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel
@@ -63,47 +64,44 @@ class ToolDef:
 # ---------------------------------------------------------------------------
 
 # Read handlers
-from knowledge_lake.pipeline.search import search  # noqa: E402
-from knowledge_lake.pipeline.query import list_sources, stats  # noqa: E402
-from knowledge_lake.lineage import resolve_ancestry  # noqa: E402
-
-# Write handlers
-from knowledge_lake.pipeline.ingest import ingest_url, register_source  # noqa: E402
-from knowledge_lake.pipeline.crawl import crawl_source, crawl_all_sources  # noqa: E402
-from knowledge_lake.pipeline.process import process_crawled  # noqa: E402
-from knowledge_lake.pipeline.domains import load_domain  # noqa: E402
-from knowledge_lake.pipeline.export import (  # noqa: E402
-    export_rag_corpus,
-    export_pretrain_corpus,
-    export_finetune_dataset,
-)
-
 # ---------------------------------------------------------------------------
 # Input models — from api/schemas.py (D-02: one schema, two surfaces).
 # ---------------------------------------------------------------------------
-
 from knowledge_lake.api.schemas import (  # noqa: E402
-    # Search & lineage
-    SearchParams,
-    LineageInput,
-    # Ingest
-    IngestUrlInput,
-    # Source management
-    SourceCreate,
+    CrawlAllInput,
     # Crawl
     CrawlJobCreate,
-    CrawlAllInput,
-    # Process
-    ProcessCrawledInput,
-    # Export
-    ExportRequest,
     # Domain
     DomainLoadRequest,
+    # Export
+    ExportRequest,
+    # Ingest
+    IngestUrlInput,
+    LineageInput,
+    ListSourcesInput,
+    # Process
+    ProcessCrawledInput,
+    # Search & lineage
+    SearchParams,
+    # Source management
+    SourceCreate,
     # Query (MCP-only models, no prior request schema)
     StatsInput,
-    ListSourcesInput,
+)
+from knowledge_lake.lineage import resolve_ancestry  # noqa: E402
+from knowledge_lake.pipeline.crawl import crawl_all_sources, crawl_source  # noqa: E402
+from knowledge_lake.pipeline.domains import load_domain  # noqa: E402
+from knowledge_lake.pipeline.export import (  # noqa: E402
+    export_finetune_dataset,
+    export_pretrain_corpus,
+    export_rag_corpus,
 )
 
+# Write handlers
+from knowledge_lake.pipeline.ingest import ingest_url, register_source  # noqa: E402
+from knowledge_lake.pipeline.process import process_crawled  # noqa: E402
+from knowledge_lake.pipeline.query import list_sources, stats  # noqa: E402
+from knowledge_lake.pipeline.search import search  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Export dispatch handler (mirrors api/app.py:1191-1204 verbatim).
@@ -120,12 +118,6 @@ def _export_dispatch(
     ``TrainEvalContaminationError`` and ``ValueError`` are propagated to
     ``build_server``'s call_tool handler which converts them to isError results.
     """
-    from knowledge_lake.pipeline.export import (
-        TrainEvalContaminationError,
-        export_finetune_dataset,
-        export_pretrain_corpus,
-        export_rag_corpus,
-    )
 
     if kind == "rag-corpus":
         return export_rag_corpus()

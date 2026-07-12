@@ -23,7 +23,7 @@ FOUND-06 fields on every artifact:
 from __future__ import annotations
 
 import datetime
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -73,37 +73,37 @@ class Source(Base):
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     """Kind of source: 'web', 'upload', 'api', 'crawler', etc."""
 
-    url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Canonical URL of the source (if applicable)."""
 
-    normalized_url: Mapped[Optional[str]] = mapped_column(
+    normalized_url: Mapped[str | None] = mapped_column(
         Text, nullable=True, index=True
     )
     """D-06 normalized URL for URL-first dedup (lowercase scheme+host, strip fragment/trailing slash)."""
 
-    license_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    license_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     """SPDX license identifier or 'public_domain', 'proprietary', etc."""
 
-    license_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    license_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     """URL to the license text."""
 
     robots_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     """Whether robots.txt was checked before crawling."""
 
-    config: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    config: Mapped[Any | None] = mapped_column(_JSON, nullable=True)
     """Arbitrary source configuration (crawl parameters, credentials refs, etc.)."""
 
-    crawl_schedule: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    crawl_schedule: Mapped[str | None] = mapped_column(String(255), nullable=True)
     """5-field UTC cron string (SCHED-01, D-02/D-03). NULL means source is not
     auto-recrawled."""
 
-    last_crawled_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    last_crawled_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     """UTC timestamp of the last re-crawl ATTEMPT (updated on skip and crawl
     alike, D-11)."""
 
-    last_content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    last_content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     """SHA256 over normalized silver-stage seed-page text (D-06/D-07). NULL means
     always crawl."""
 
@@ -151,7 +151,7 @@ class Artifact(Base):
     )
     """FK to the originating Source (FOUND-06)."""
 
-    parent_artifact_id: Mapped[Optional[str]] = mapped_column(
+    parent_artifact_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("artifacts.id", ondelete="SET NULL"),
         nullable=True,
@@ -172,19 +172,19 @@ class Artifact(Base):
     pipeline_version: Mapped[str] = mapped_column(String(64), nullable=False)
     """Package version + git SHA that produced this artifact (D-04, FOUND-06)."""
 
-    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    storage_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     """S3-compatible URI: s3://bucket/zone/key (FOUND-06)."""
 
-    mime_type: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     """MIME type of the content (application/pdf, application/json, etc.)."""
 
-    page_ref: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page_ref: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """Source page number (for parsed/chunk nodes — citation, D-07)."""
 
-    section_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    section_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Heading path within the document (citation, D-07/D-14)."""
 
-    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     """LLM-judged quality score for enriched_document rows (Phase 4, ENRICH-05).
 
     Distinct per artifact_type — this is NOT the same value as Phase 3's
@@ -195,7 +195,7 @@ class Artifact(Base):
     directly.
     """
 
-    metadata_: Mapped[Optional[Any]] = mapped_column(
+    metadata_: Mapped[Any | None] = mapped_column(
         "metadata",
         _JSON,
         nullable=True,
@@ -217,7 +217,7 @@ class Artifact(Base):
         foreign_keys=[source_id],
     )
 
-    parent: Mapped[Optional[Artifact]] = relationship(
+    parent: Mapped[Artifact | None] = relationship(
         "Artifact",
         back_populates="children",
         foreign_keys=[parent_artifact_id],
@@ -258,7 +258,7 @@ class LineageEvent(Base):
     )
     """FK to the output artifact (the one this event produced)."""
 
-    parent_artifact_id: Mapped[Optional[str]] = mapped_column(
+    parent_artifact_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("artifacts.id", ondelete="SET NULL"),
         nullable=True,
@@ -298,9 +298,9 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
-    source_id: Mapped[Optional[str]] = mapped_column(
+    source_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("sources.id", ondelete="SET NULL"),
         nullable=True,
@@ -312,13 +312,13 @@ class Job(Base):
     )
     """Job type discriminator (default 'crawl')."""
 
-    crawler: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    crawler: Mapped[str | None] = mapped_column(String(64), nullable=True)
     """Name of the crawler adapter that owns this job."""
 
-    config: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    config: Mapped[Any | None] = mapped_column(_JSON, nullable=True)
     """Job-specific configuration (max_pages, max_depth, etc.)."""
 
-    stats: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    stats: Mapped[Any | None] = mapped_column(_JSON, nullable=True)
     """Job statistics (pages_fetched, errors, duration, etc.)."""
 
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -327,7 +327,7 @@ class Job(Base):
         server_default=func.now(),
     )
 
-    updated_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    updated_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -370,28 +370,28 @@ class CrawlState(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     """Page-level status: 'pending', 'complete', 'failed', 'robots_blocked'."""
 
-    raw_artifact_id: Mapped[Optional[str]] = mapped_column(
+    raw_artifact_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("artifacts.id", ondelete="SET NULL"),
         nullable=True,
     )
     """FK to the raw artifact created from this page (NULL until fetched)."""
 
-    bronze_artifact_id: Mapped[Optional[str]] = mapped_column(
+    bronze_artifact_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("artifacts.id", ondelete="SET NULL"),
         nullable=True,
     )
     """FK to the bronze artifact (markdown/processed) from this page."""
 
-    error_msg: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_msg: Mapped[str | None] = mapped_column(Text, nullable=True)
     """Human-readable error message for failed/robots_blocked states (WR-03).
 
     Populated by the crawl orchestrator when SSRF guard, adapter error, or
     other failure occurs.  NULL for successful ('complete') states.
     """
 
-    fetched_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+    fetched_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -490,14 +490,14 @@ class Dataset(Base):
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    dataset_type: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dataset_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     """Kind of dataset: 'rag_eval', 'instruction_tuning', 'pretraining', etc."""
-    format: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    format: Mapped[str | None] = mapped_column(String(32), nullable=True)
     """Export format: 'jsonl', 'parquet', 'csv', etc. None until exported."""
-    example_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    example_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     """Running count of examples in this dataset; updated on export."""
-    storage_uri: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    storage_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     """S3 URI of the exported dataset file (gold zone). None until exported."""
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -536,7 +536,7 @@ class DatasetExample(Base):
     )
     """FK to the parent Dataset; CASCADE deletes all examples when dataset is deleted."""
 
-    source_artifact_id: Mapped[Optional[str]] = mapped_column(
+    source_artifact_id: Mapped[str | None] = mapped_column(
         String(64),
         ForeignKey("artifacts.id", ondelete="SET NULL"),
         nullable=True,
@@ -548,7 +548,7 @@ class DatasetExample(Base):
     example_index: Mapped[int] = mapped_column(Integer, nullable=False)
     """Zero-based position of this example within its dataset."""
 
-    payload: Mapped[Optional[Any]] = mapped_column(_JSON, nullable=True)
+    payload: Mapped[Any | None] = mapped_column(_JSON, nullable=True)
     """Validated LLM-generated example payload (QAPairResult or InstructionPairResult
     fields + _cache_key). For QA: question, answer, citation_chunk_id, _cache_key.
     For instruction: instruction, input, output, _cache_key."""

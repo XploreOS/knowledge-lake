@@ -10,7 +10,6 @@ Returns the parsed_document Artifact ORM object and the ParsedDoc struct.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 import structlog
 
@@ -18,10 +17,10 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.pipeline.deterministic import extract_title
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.plugins.protocols import ParsedDoc
-from knowledge_lake.plugins.resolver import get_parser, parse_with_fallback
-from knowledge_lake.registry.db import get_session
+from knowledge_lake.plugins.resolver import parse_with_fallback
 from knowledge_lake.registry import repo as registry_repo
-from knowledge_lake.storage.s3 import StorageBackend, _UNCLASSIFIED_DOMAIN
+from knowledge_lake.registry.db import get_session
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
 
@@ -33,8 +32,8 @@ def parse(
     raw_artifact_id: str,
     source_id: str,
     *,
-    mime_type: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    mime_type: str | None = None,
+    settings: Settings | None = None,
 ) -> tuple[dict, ParsedDoc]:
     """Parse raw document bytes into a ParsedDoc and create a parsed_document artifact.
 

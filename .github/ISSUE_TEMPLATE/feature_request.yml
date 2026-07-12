@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest an idea or enhancement for Knowledge Lake
+title: "feat: <short description>"
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please check
+        [existing issues](https://github.com/XploreOS/knowledge-lake/issues) to see if it has already been proposed.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? Who benefits?
+      placeholder: As a user ingesting X, I can't currently ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you'd like to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you evaluated.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Framework core / lineage
+        - Plugin (parser / embedder / vector store / crawler / discovery)
+        - Domain pack
+        - CLI / API / MCP
+        - Orchestration (Dagster)
+        - Export contracts
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design constraints
+      description: Please confirm the proposal respects framework invariants.
+      options:
+        - label: Keeps the framework tool-agnostic (external tools remain replaceable plugins).
+        - label: Preserves end-to-end lineage traceability.
+        - label: Routes any LLM calls through LiteLLM (no direct provider SDKs).
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'm willing to help implement this.

@@ -21,18 +21,18 @@ from __future__ import annotations
 import hashlib
 import logging
 import urllib.parse
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import boto3
 from botocore.client import Config as BotoConfig
 from botocore.exceptions import ClientError
-
 from sqlalchemy.exc import IntegrityError
 
 from knowledge_lake.config.settings import StorageSettings
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
     from knowledge_lake.registry.models import Artifact
 
 log = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class StorageBackend:
         self,
         key: str,
         data: bytes,
-        tags: Optional[dict[str, str]] = None,
+        tags: dict[str, str] | None = None,
     ) -> None:
         """Write bytes to an arbitrary key in the configured bucket.
 
@@ -195,11 +195,11 @@ class StorageBackend:
         source_id: str,
         data: bytes,
         ext: str,
-        session: "Session",
-        mime_type: Optional[str] = None,
-        domain: Optional[str] = None,
-        tags: Optional[dict[str, str]] = None,
-    ) -> "Artifact":
+        session: Session,
+        mime_type: str | None = None,
+        domain: str | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> Artifact:
         """Write bytes to the content-addressed immutable raw zone.
 
         Enforcement layers (Pattern 1 — all four applied):
@@ -309,12 +309,12 @@ class StorageBackend:
         source_id: str,
         data: bytes,
         ext: str,
-        session: "Session",
+        session: Session,
         *,
         parent_artifact_id: str,
-        domain: Optional[str] = None,
-        tags: Optional[dict[str, str]] = None,
-    ) -> "Artifact":
+        domain: str | None = None,
+        tags: dict[str, str] | None = None,
+    ) -> Artifact:
         """Write bytes to the content-addressed bronze zone with lineage.
 
         Mirrors the put_raw pattern exactly (six enforcement layers) but:

@@ -19,7 +19,6 @@ Unreachable-robots policy:
 
 from __future__ import annotations
 
-from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
@@ -41,7 +40,7 @@ class RobotsPolicy:
         self._parser = parser
 
     @classmethod
-    def from_robots_txt(cls, body: str) -> "RobotsPolicy":
+    def from_robots_txt(cls, body: str) -> RobotsPolicy:
         """Parse a robots.txt body string and return a RobotsPolicy.
 
         Parameters
@@ -84,7 +83,7 @@ class RobotsPolicy:
         url = f"http://example.com{path}"
         return self._parser.can_fetch(url, user_agent)
 
-    def crawl_delay(self, user_agent: str = "*") -> Optional[float]:
+    def crawl_delay(self, user_agent: str = "*") -> float | None:
         """Extract the Crawl-delay for the given user agent.
 
         Parameters

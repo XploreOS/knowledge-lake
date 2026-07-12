@@ -29,15 +29,14 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Optional
 
 import structlog
 import tiktoken as _tiktoken
 
 from knowledge_lake.config.settings import Settings, get_settings
-from knowledge_lake.plugins.protocols import ParsedDoc, Section
-from knowledge_lake.registry.db import get_session
+from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.db import get_session
 
 log = structlog.get_logger(__name__)
 
@@ -259,7 +258,7 @@ def chunk(
     source_id: str,
     parsed_doc: ParsedDoc,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> list[dict]:
     """Split a ParsedDoc into section-aware chunks and register artifact nodes.
 

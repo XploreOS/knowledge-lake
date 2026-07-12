@@ -9,18 +9,16 @@ end-to-end.  Dagster's software-defined assets in Plan 06 will wrap these same c
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
-from typing import Optional
 
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
-from knowledge_lake.pipeline.ingest import ingest_file, ingest_url
-from knowledge_lake.pipeline.parse import parse
 from knowledge_lake.pipeline.chunk import chunk
 from knowledge_lake.pipeline.embed import embed
 from knowledge_lake.pipeline.index import index
+from knowledge_lake.pipeline.ingest import ingest_file, ingest_url
+from knowledge_lake.pipeline.parse import parse
 
 log = structlog.get_logger(__name__)
 
@@ -30,12 +28,12 @@ DEFAULT_COLLECTION = "klake_chunks"
 
 def run_document(
     *,
-    url: Optional[str] = None,
-    fixture_path: Optional[Path] = None,
-    source_name: Optional[str] = None,
+    url: str | None = None,
+    fixture_path: Path | None = None,
+    source_name: str | None = None,
     collection: str = DEFAULT_COLLECTION,
-    mime_type: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    mime_type: str | None = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Orchestrate the full pipeline for a single document.
 

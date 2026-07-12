@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 
-def bootstrap_llm_pricing(settings: "Settings") -> None:
+def bootstrap_llm_pricing(settings: Settings) -> None:
     """Register the project's configured Bedrock model IDs with LiteLLM's pricing map.
 
     Calls litellm.register_model() once with entries for
@@ -54,7 +54,7 @@ def bootstrap_llm_pricing(settings: "Settings") -> None:
         log.warning("llm.pricing_bootstrap_failed", error=str(exc))
 
 
-def compute_call_cost(response: object, settings: "Settings") -> float:
+def compute_call_cost(response: object, settings: Settings) -> float:
     """Compute the USD cost of a single litellm.completion() call.
 
     Tries litellm.completion_cost() first (accurate, requires bootstrap_llm_pricing

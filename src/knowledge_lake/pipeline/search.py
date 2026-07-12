@@ -19,7 +19,7 @@ Returns: list[Hit], each Hit has .id, .score, .payload with citation fields.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue, Range
@@ -37,15 +37,15 @@ def search(
     *,
     collection: str = "klake_chunks",
     top_k: int = 5,
-    domain: Optional[str] = None,
-    document_type: Optional[str] = None,
-    min_quality_score: Optional[float] = None,
-    source_name: Optional[str] = None,
-    format: Optional[str] = None,  # noqa: A002
-    tags: Optional[list[str]] = None,
-    source_id: Optional[str] = None,
-    mode: Optional[str] = None,
-    settings: Optional[Settings] = None,
+    domain: str | None = None,
+    document_type: str | None = None,
+    min_quality_score: float | None = None,
+    source_name: str | None = None,
+    format: str | None = None,  # noqa: A002
+    tags: list[str] | None = None,
+    source_id: str | None = None,
+    mode: str | None = None,
+    settings: Settings | None = None,
 ) -> list[Hit]:
     """Embed a query and return the top-k nearest chunk hits.
 
@@ -118,7 +118,7 @@ def search(
     # Build sparse query vector when mode requires it (D-03).
     # Only hybrid and sparse modes need the sparse query; dense gets None.
     # Do NOT catch the store's fail-loud error — let it propagate unchanged (D-10, T-10-03).
-    sparse_query: Optional[Any] = None
+    sparse_query: Any | None = None
     if effective_mode in ("hybrid", "sparse"):
         sparse_query = embed_sparse_query(query)
 
