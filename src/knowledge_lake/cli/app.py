@@ -1116,6 +1116,16 @@ def cmd_mcp(
         # effect (WR-05) — an explicit --port still overrides.
         bind_port = port if port is not None else settings.mcp.port
 
+        # Fail-closed (WR-04): refuse to serve write tools over HTTP with no auth.
+        # The 127.0.0.1 bind + Host guard do not stop a same-host attacker, so an
+        # unauthenticated, writable HTTP surface is a real exposure. stdio and an
+        # explicitly-tokened or explicitly-readonly HTTP server are unaffected.
+        if not settings.mcp.token and not settings.mcp.readonly:
+            raise typer.BadParameter(
+                "Refusing to serve write tools over HTTP without KLAKE_MCP__TOKEN. "
+                "Set a token or run with KLAKE_MCP__READONLY=true."
+            )
+
         import uvicorn
 
         from knowledge_lake.agent.http import build_http_app
