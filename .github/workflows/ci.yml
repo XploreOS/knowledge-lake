@@ -37,10 +37,6 @@ jobs:
   typecheck:
     name: Type check (mypy)
     runs-on: ubuntu-latest
-    # Advisory: the codebase has known pre-existing type-check debt. This job
-    # surfaces mypy findings on PRs without blocking merges. Remove
-    # `continue-on-error` once the backlog is cleared to make it a hard gate.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Set up uv
@@ -50,7 +46,11 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync
-      - name: mypy
+      # Advisory: the codebase has known pre-existing type-check debt. This step
+      # surfaces mypy findings on PRs without failing the check. Drop
+      # `continue-on-error` once the backlog is cleared to make it a hard gate.
+      - name: mypy (advisory)
+        continue-on-error: true
         run: uv run mypy src/
 
   test:

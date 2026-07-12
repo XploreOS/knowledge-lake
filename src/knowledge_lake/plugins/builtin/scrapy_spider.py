@@ -234,6 +234,7 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         "STATS_DUMP": False,
     }
 
+    _out_file = None
     try:
         # SIM115: the file must stay open across the blocking process.start()
         # call and is deterministically flushed/closed in the finally block.
@@ -242,7 +243,7 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         process.crawl(KlakeSpider)
         process.start()  # blocks until done — safe because this IS the reactor's lifetime
     finally:
-        if _out_file and not _out_file.closed:
+        if _out_file is not None and not _out_file.closed:
             _out_file.flush()
             _out_file.close()
 
