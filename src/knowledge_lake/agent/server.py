@@ -106,7 +106,7 @@ def build_server(tools: "list") -> Server:
         except _EXPECTED_ERRORS as exc:
             # D-13: expected errors produce a readable isError result; the client
             # sees the message without exposing internal stack traces.
-            log.warning("mcp.call_tool.expected_error", tool=name, error=str(exc))
+            log.warning("mcp.call_tool.expected_error tool=%s error=%s", name, str(exc))
             return types.CallToolResult(
                 content=[types.TextContent(type="text", text=str(exc))],
                 isError=True,
@@ -129,7 +129,7 @@ def build_server(tools: "list") -> Server:
                 exc, TrainEvalContaminationError
             ):
                 # D-13: contamination errors are expected — surface readable message
-                log.warning("mcp.call_tool.contamination_error", tool=name, error=str(exc))
+                log.warning("mcp.call_tool.contamination_error tool=%s error=%s", name, str(exc))
                 return types.CallToolResult(
                     content=[types.TextContent(type="text", text=str(exc))],
                     isError=True,

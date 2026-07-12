@@ -282,3 +282,56 @@ async def test_call_tool_value_error_returns_is_error() -> None:
     assert call_result.isError is True, (
         f"Expected isError=True for ValueError, got isError={call_result.isError}"
     )
+    # D-13: the client must see the readable domain message, not an internal
+    # logging/exception string. This assertion is what makes the fix
+    # regression-proof against CR-01 (structlog kwargs on a stdlib logger).
+    assert call_result.content[0].text == "test error from handler", (
+        f"Expected the raised message to surface verbatim, got "
+        f"{call_result.content[0].text!r}"
+    )
+
+
+@pytest.mark.xfail(not _SERVER_IMPORT_OK, reason="agent.server not yet implemented", strict=False)
+@pytest.mark.anyio
+async def test_call_tool_contamination_error_returns_readable_message() -> None:
+    """TrainEvalContaminationError must surface its readable message (D-13).
+
+    Symmetric to test_call_tool_value_error_returns_is_error but exercises the
+    contamination branch (server.py:132) — guards against the same stdlib-logger
+    kwargs regression on that path.
+    """
+    from mcp.types import CallToolRequest, CallToolRequestParams
+
+    assert build_server is not None
+
+    from knowledge_lake.agent.registry import ToolDef
+    from knowledge_lake.api.schemas import StatsInput
+    from knowledge_lake.pipeline.export import TrainEvalContaminationError
+
+    def _contaminating_handler(**kwargs):  # type: ignore[return]
+        raise TrainEvalContaminationError("train/eval overlap detected")
+
+    test_tools = [
+        ToolDef(
+            name="stats",
+            description="test stats tool",
+            input_model=StatsInput,
+            handler=_contaminating_handler,
+            access="read",
+        )
+    ]
+    server = build_server(test_tools)
+    handler = server.request_handlers[CallToolRequest]
+    req = CallToolRequest(
+        method="tools/call",
+        params=CallToolRequestParams(name="stats", arguments={}),
+    )
+    server_result = await handler(req)
+    call_result = server_result.root  # unwrap ServerResult → CallToolResult
+    assert call_result.isError is True, (
+        f"Expected isError=True for contamination error, got isError={call_result.isError}"
+    )
+    assert call_result.content[0].text == "train/eval overlap detected", (
+        f"Expected the contamination message verbatim, got "
+        f"{call_result.content[0].text!r}"
+    )
