@@ -1,10 +1,11 @@
 ---
 phase: 11
 slug: crawl-scheduling
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: verified
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-10
+validated: 2026-07-12
 ---
 
 # Phase 11 — Validation Strategy
@@ -41,18 +42,18 @@ created: 2026-07-10
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 11-01-xx | 01 | 0 | SCHED-02 | T-11-SSRF | Seed probe calls `validate_public_url()` before HTTP; `put_raw` NOT called on unchanged skip | unit | `pytest tests/unit/test_recrawl_gate.py::test_unchanged_skips_no_raw -x` | ❌ W0 | ⬜ pending |
-| 11-01-xx | 01 | 0 | SCHED-02 | — | Changed signature ⇒ full `crawl_source` path + `last_content_hash` updated | unit | `pytest tests/unit/test_recrawl_gate.py::test_changed_recrawls -x` | ❌ W0 | ⬜ pending |
-| 11-01-xx | 01 | 0 | SCHED-02 | T-11-THRASH | Reuses `remove_boilerplate` — dynamic nonce/timestamp does NOT flip the hash | unit | `pytest tests/unit/test_recrawl_gate.py::test_nonce_noise_unchanged -x` | ❌ W0 | ⬜ pending |
-| 11-01-xx | 01 | 0 | SCHED-02 | — | `last_content_hash IS NULL` ⇒ always crawls | unit | `pytest tests/unit/test_recrawl_gate.py::test_null_hash_forces_crawl -x` | ❌ W0 | ⬜ pending |
-| 11-01-xx | 01 | 0 | SCHED-02 | — | Staleness exceeded ⇒ re-ingest even when hash matches | unit | `pytest tests/unit/test_recrawl_gate.py::test_staleness_forces_refresh -x` | ❌ W0 | ⬜ pending |
-| 11-02-xx | 02 | 0 | SCHED-01 | T-11-TICKSTORM | Sensor emits exactly one `RunRequest` per due source with deterministic `run_key` | unit | `pytest tests/unit/test_recrawl_sensor.py::test_emits_deterministic_run_key -x` | ❌ W0 | ⬜ pending |
-| 11-02-xx | 02 | 0 | SCHED-01 | — | Not-due source emits `SkipReason`, no RunRequest | unit | `pytest tests/unit/test_recrawl_sensor.py::test_skips_not_due -x` | ❌ W0 | ⬜ pending |
-| 11-02-xx | 02 | 0 | SCHED-01 | T-11-TICKSTORM | Same fire window ⇒ identical run_key (idempotent across re-eval) | unit | `pytest tests/unit/test_recrawl_sensor.py::test_run_key_stable_within_window -x` | ❌ W0 | ⬜ pending |
-| 11-02-xx | 02 | 0 | SCHED-01 | T-11-CRON | `is_valid_cron_string` rejects malformed schedule at set time | unit | `pytest tests/unit/test_set_schedule_cli.py::test_rejects_bad_cron -x` | ❌ W0 | ⬜ pending |
-| 11-03-xx | 03 | — | Criterion 1 | — | `0009` upgrade adds 3 nullable columns; downgrade drops them; head chains 0008→0009 | integration | `pytest tests/integration/test_migrations.py -x` (extend existing) | ⚠️ extend | ⬜ pending |
+| 11-01-xx | 01 | 0 | SCHED-02 | T-11-SSRF | Seed probe calls `validate_public_url()` before HTTP; `put_raw` NOT called on unchanged skip | unit | `pytest tests/unit/test_recrawl_gate.py::test_unchanged_skips_no_raw -x` | ✅ | ✅ green |
+| 11-01-xx | 01 | 0 | SCHED-02 | — | Changed signature ⇒ full `crawl_source` path + `last_content_hash` updated | unit | `pytest tests/unit/test_recrawl_gate.py::test_changed_recrawls -x` | ✅ | ✅ green |
+| 11-01-xx | 01 | 0 | SCHED-02 | T-11-THRASH | Reuses `remove_boilerplate` — dynamic nonce/timestamp does NOT flip the hash | unit | `pytest tests/unit/test_recrawl_gate.py::test_nonce_noise_unchanged -x` | ✅ | ✅ green |
+| 11-01-xx | 01 | 0 | SCHED-02 | — | `last_content_hash IS NULL` ⇒ always crawls | unit | `pytest tests/unit/test_recrawl_gate.py::test_null_hash_forces_crawl -x` | ✅ | ✅ green |
+| 11-01-xx | 01 | 0 | SCHED-02 | — | Staleness exceeded ⇒ re-ingest even when hash matches | unit | `pytest tests/unit/test_recrawl_gate.py::test_staleness_forces_refresh -x` | ✅ | ✅ green |
+| 11-02-xx | 02 | 0 | SCHED-01 | T-11-TICKSTORM | Sensor emits exactly one `RunRequest` per due source with deterministic `run_key` | unit | `pytest tests/unit/test_recrawl_sensor.py::test_emits_deterministic_run_key -x` | ✅ | ✅ green |
+| 11-02-xx | 02 | 0 | SCHED-01 | — | Not-due source emits `SkipReason`, no RunRequest | unit | `pytest tests/unit/test_recrawl_sensor.py::test_skips_not_due -x` | ✅ | ✅ green |
+| 11-02-xx | 02 | 0 | SCHED-01 | T-11-TICKSTORM | Same fire window ⇒ identical run_key (idempotent across re-eval) | unit | `pytest tests/unit/test_recrawl_sensor.py::test_run_key_stable_within_window -x` | ✅ | ✅ green |
+| 11-02-xx | 02 | 0 | SCHED-01 | T-11-CRON | `is_valid_cron_string` rejects malformed schedule at set time | unit | `pytest tests/unit/test_set_schedule_cli.py::test_rejects_bad_cron -x` | ✅ | ✅ green |
+| 11-03-xx | 03 | — | Criterion 1 | — | `0009` upgrade adds 3 nullable columns; downgrade drops them; head chains 0008→0009 | integration | `pytest tests/integration/test_migrations.py -x` (extend existing) | ✅ extended | ⏸ integration |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky · ⏸ integration (exists + targets behavior; requires live Postgres to run green)*
 
 ---
 
@@ -75,13 +76,25 @@ created: 2026-07-10
 
 ---
 
+## Validation Audit 2026-07-12
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 9 unit rows COVERED by green tests: `test_recrawl_gate.py` (5), `test_recrawl_sensor.py` (3), `test_set_schedule_cli.py` (3) — 11 passed. HIGH-severity guards asserted: SSRF-before-fetch (T-11-SSRF), change-gate skip (T-11-THRASH), deterministic run_key dedup (T-11-TICKSTORM), plus cron validation (T-11-CRON). The `0009` migration row in `test_migrations.py` is integration-gated (⏸) — it exists and targets behavior but requires live Postgres to run green. Two manual-only items (daemon tick delivery, QueuedRunCoordinator per-source concurrency) remain manual — require a live queued daemon.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** verified 2026-07-12 (unit COVERED; migration row gated on live Postgres)
