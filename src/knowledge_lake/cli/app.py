@@ -1088,8 +1088,10 @@ def cmd_mcp(
     sse: bool = typer.Option(
         False, "--sse", help="Serve over Streamable HTTP instead of stdio."
     ),
-    port: int = typer.Option(
-        3001, "--port", help="HTTP port (localhost only, --sse mode)."
+    port: Optional[int] = typer.Option(
+        None,
+        "--port",
+        help="HTTP port (localhost only, --sse mode). Defaults to settings.mcp.port.",
     ),
 ) -> None:
     """Run the MCP agent server: stdio (default, fd-locked) or Streamable HTTP (--sse).
@@ -1109,7 +1111,11 @@ def cmd_mcp(
 
     if sse:
         # Streamable HTTP — no stdout lockdown in this mode (D-08). Bind host and
-        # bearer come from settings.mcp; --port overrides the bind port.
+        # bearer come from settings.mcp; --port overrides the configured port.
+        # Bind port falls back to settings.mcp.port so KLAKE_MCP__PORT takes
+        # effect (WR-05) — an explicit --port still overrides.
+        bind_port = port if port is not None else settings.mcp.port
+
         import uvicorn
 
         from knowledge_lake.agent.http import build_http_app
@@ -1117,10 +1123,10 @@ def cmd_mcp(
         http_app = build_http_app(
             server,
             host=settings.mcp.host,
-            port=port,
+            port=bind_port,
             token=settings.mcp.token,
         )
-        uvicorn.run(http_app, host=settings.mcp.host, port=port)
+        uvicorn.run(http_app, host=settings.mcp.host, port=bind_port)
     else:
         # stdio transport — run_stdio applies the fd-level stdout lockdown (D-08).
         import anyio
