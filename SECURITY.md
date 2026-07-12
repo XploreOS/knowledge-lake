@@ -27,7 +27,7 @@ Instead, use GitHub's private vulnerability reporting:
 3. Provide as much detail as possible (see below).
 
 If you are unable to use GitHub Security Advisories, email the maintainers at
-**security@xploreos.dev** with the same information.
+**xploreos@proton.me** with the same information.
 
 > **Maintainers:** update the contact address above to a monitored inbox and
 > enable "Private vulnerability reporting" in the repository's Security settings
