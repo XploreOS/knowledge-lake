@@ -1167,5 +1167,60 @@ def cmd_openapi() -> None:
     typer.echo(f"Wrote {out_path}")
 
 
+# ── Domain pack authoring ──────────────────────────────────────────────────────
+
+domain_app = typer.Typer(
+    name="domain",
+    help="Author and manage domain packs.",
+    add_completion=False,
+)
+app.add_typer(domain_app, name="domain")
+
+
+@domain_app.command(name="new")
+def cmd_domain_new(
+    name: str = typer.Argument(
+        ..., help="Domain pack name — must match ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$."
+    ),
+    root: str = typer.Option(
+        "domains",
+        "--root",
+        "-r",
+        help="Parent directory for the new pack. The default 'domains' is loadable "
+        "via `klake init --domain <name>`.",
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Overwrite an existing pack directory."
+    ),
+) -> None:
+    """Scaffold a new domain pack skeleton.
+
+    Generates domain.yaml, sources.yaml, taxonomy.yaml, prompts/, and
+    validators/ so authoring a domain is a real workflow instead of copy-paste.
+    """
+    from knowledge_lake.domains.scaffold import scaffold_domain
+
+    try:
+        result = scaffold_domain(name, root=root, force=force)
+    except (ValueError, FileExistsError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Created domain pack '{name}' at {result['path']}/")
+    for f in result["files"]:
+        typer.echo(f"  {f}")
+
+    typer.echo("\nNext steps:")
+    typer.echo("  1. Edit sources.yaml to add your sources.")
+    typer.echo("  2. Customize prompts/ and validators/validate.py.")
+    if Path(root).resolve() == (Path.cwd() / "domains").resolve():
+        typer.echo(f"  3. Register its sources:  klake init --domain {name}")
+    else:
+        typer.echo(
+            f"  3. Move the pack under 'domains/' to load it, then:  "
+            f"klake init --domain {name}"
+        )
+
+
 if __name__ == "__main__":
     app()

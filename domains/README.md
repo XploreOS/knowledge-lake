@@ -51,27 +51,33 @@ You have two ways to work with your own packs:
 
 ## Authoring a new pack
 
-There is no auto-generated data here — you write a pack by hand. The quickest
-start is to copy the reference pack and adapt it:
+Scaffold a valid, immediately loadable pack skeleton with `klake domain new`:
 
 ```bash
-cp -r domains/healthcare domains/local/my-domain
-# then edit domain.yaml, sources.yaml, taxonomy.yaml, prompts/, validators/
+# creates domains/my-domain/ (domain.yaml, sources.yaml, taxonomy.yaml,
+# prompts/, validators/) with a domain-appropriate validator class
+uv run klake domain new my-domain
+
+# ...then edit the generated files and register the pack's sources:
+uv run klake init --domain my-domain
 ```
 
-Once the files are in place, register the pack's seed sources:
+Useful options:
 
-```bash
-# reference pack (default root = domains/)
-uv run klake init --domain healthcare
-
-# a local pack under domains/local/
-KLAKE_DOMAINS_ROOT=domains/local uv run klake init --domain my-domain
-```
+- `--root DIR` — create the pack somewhere other than `domains/` (e.g.
+  `--root domains/local` for a git-ignored scratch pack; move it under
+  `domains/` when you want `klake init` to find it).
+- `--force` — overwrite an existing pack directory.
 
 `klake init` **reads** an existing pack and bulk-registers its crawl-type
 sources into the registry. Upload-type sources are reported but must be
 downloaded and uploaded manually.
+
+Prefer to start from a fuller example? Copy the reference pack instead:
+
+```bash
+cp -r domains/healthcare domains/local/my-domain
+```
 
 ## Guidelines for reference packs
 

@@ -5,9 +5,9 @@ milestone_name: — Agent-Ready Lake
 current_phase: 0
 status: Awaiting next milestone
 stopped_at: Completed 12-01 Wave 0 scaffold
-last_updated: "2026-07-12T13:54:05.178Z"
+last_updated: "2026-07-12T17:30:00.000Z"
 last_activity: 2026-07-12
-last_activity_desc: Milestone v2.0 completed and archived
+last_activity_desc: "Quick task 260712-nyq: klake domain new scaffold command"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -119,6 +119,7 @@ Last activity: 2026-07-12 — Milestone v2.0 completed and archived
 |---|-------------|------|--------|-----------|
 | 260707-ieb | create project documentation with full details on project overview, architecture, etc., in docs/ folder | 2026-07-07 | cad4e0b | [260707-ieb-create-project-documentation-with-full-d](.planning/quick/260707-ieb-create-project-documentation-with-full-d/) |
 | 260707-hoh | add documentation for knowledge-lake (klake) local setup, and usage for multiple domains with full steps and commands | 2026-07-07 | 14ad3da | [260707-hoh-add-documentation-for-knowledge-lake-kla](.planning/quick/260707-hoh-add-documentation-for-knowledge-lake-kla/) |
+| 260712-nyq | add `klake domain new <name>` scaffold command for domain-pack skeletons; generalize DomainLoader validator lookup; trim stale maintainer notes | 2026-07-12 | 0e5917c | [260712-nyq-add-klake-domain-new-name-scaffold-comma](.planning/quick/260712-nyq-add-klake-domain-new-name-scaffold-comma/) |
 
 ## Accumulated Context
 
