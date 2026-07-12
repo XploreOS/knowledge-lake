@@ -1,121 +1,123 @@
 ---
 phase: 09-storage-segmentation
-review_date: 2026-07-09
-status: issues
-effort: high
-findings_total: 10
-findings_confirmed: 5
-findings_plausible: 5
-findings_refuted: 0
+reviewed: 2026-07-10T00:00:00Z
+depth: standard
+files_reviewed: 8
+files_reviewed_list:
+  - src/knowledge_lake/pipeline/clean.py
+  - src/knowledge_lake/pipeline/crawl.py
+  - src/knowledge_lake/pipeline/export.py
+  - src/knowledge_lake/pipeline/ingest.py
+  - src/knowledge_lake/pipeline/parse.py
+  - src/knowledge_lake/storage/s3.py
+  - tests/unit/test_export.py
+  - tests/unit/test_put_raw_domain.py
+findings:
+  critical: 0
+  warning: 0
+  info: 4
+  total: 4
+status: issues_found
 ---
 
-# Phase 9: Storage Segmentation — Code Review
+# Phase 09: Code Review Report (re-review after iteration 2 fixes)
 
-**Effort:** high | **Date:** 2026-07-09 | **Status:** issues found
+**Reviewed:** 2026-07-10
+**Depth:** standard
+**Files Reviewed:** 8
+**Status:** issues_found (info only — no Critical, no Warning)
 
 ## Summary
 
-10 findings (5 CONFIRMED, 5 PLAUSIBLE). Two correctness/lineage issues, one latent brittleness bug, plus a set of efficiency and simplification candidates. The most severe finding (Dagster domain bypass) is a silent functional regression for all pipeline-path exports.
+Both Warning findings from the iter2 review are fully resolved. No Critical findings remain.
+No new bugs or security issues were introduced by the iteration 2 fixes.
+
+**WR-01 resolved.** All three previously unpatched modules — `clean.py`, `parse.py`, and
+`crawl._write_artifacts` — now import `_UNCLASSIFIED_DOMAIN` from `storage.s3` (confirmed at
+`clean.py:35`, `parse.py:24`, `crawl.py:44`) and derive domain from `source_obj.config` using the
+same `(source_obj.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN` guard pattern introduced by
+the `ingest.py` fix. No hardcoded `"_unclassified"` string literal remains in any pipeline module.
+The `get_domain_for_source` redundant DB call is eliminated from all three sites. The
+cross-module storage namespace split risk is gone.
+
+**WR-02 resolved.** `verify_export()` now validates `export_uri` against the module-level
+`_S3_URI_RE = re.compile(r"^s3://[a-zA-Z0-9_./()\-]+$")` regex (`export.py:58`, `export.py:614`)
+before any query construction. It also rejects any config value containing a single-quote character
+for `endpoint_url`, `access_key_id`, and `secret_access_key` (`export.py:616-625`) before any
+`SET` statement is executed. Both guards run before any f-string interpolation into DuckDB SQL.
+
+The four Info findings reported in iter2 are unchanged (they were not in scope for iter2 fixes and
+remain valid cleanup candidates).
 
 ---
 
-## Findings
+## Narrative Findings (AI reviewer)
 
-### [CONFIRMED] BLOCKER — Dagster export assets bypass STORE-03
+## Info
 
-**File:** `src/knowledge_lake/dagster_defs/assets.py` lines 726, 768, 822
-**Severity:** High
+### IN-01: `_UNCLASSIFIED_DOMAIN` uses `_` privacy prefix but is imported across five module boundaries
 
-All three Dagster export asset callsites (`export_rag_fn`, `export_pretrain_fn`, `export_finetune_fn`) call the pipeline functions without `domain=`. Every Dagster-triggered gold-zone export writes to `gold/_unclassified/{type}/` regardless of which domain was ingested. The CLI/API path works correctly; the Dagster orchestration path silently ignores all STORE-03 domain segmentation. No `ExportConfig` class provides domain at materialize time.
+**File:** `src/knowledge_lake/storage/s3.py:43`; imported at `clean.py:35`, `parse.py:24`,
+`crawl.py:44`, `ingest.py:37`, `export.py:43`
 
-**Fix:** Add `domain: str = ""` to `ExportConfig` classes (or add separate domain config) and pass it to the export function calls in `assets.py`.
+**Issue:** Python convention reserves a leading `_` for module-private names. Five pipeline modules
+now import `_UNCLASSIFIED_DOMAIN` from `storage.s3`. Static analysis tools (ruff rule PLC2401,
+pylint W0212) will flag every import. Library consumers receive incorrect signals about intended
+visibility.
 
----
-
-### [CONFIRMED] WARNING — Linked-doc ingest has no lineage to parent source
-
-**File:** `src/knowledge_lake/pipeline/crawl.py:499`
-
-`ingest_url(link_url, source_name=_name_from_url(link_url), settings=settings)` for linked PDFs/DOCXs creates an independent source row with no `source_id` or `job_id` connecting it to the parent HTML page's crawl job. Violates CLAUDE.md: "Every artifact must trace back to source document with stable IDs, content hashes, and timestamps." The code itself labels this "Path B — tech debt: NOT directly linked to the parent HTML page's source_id."
-
-**Fix (tracked as D-22 tech debt):** Extend `ingest_url()` to accept optional `source_id` and `job_id` kwargs and pass the parent crawl job's values at the callsite.
+**Fix:** Rename to `UNCLASSIFIED_DOMAIN` in `s3.py` and update all five import sites.
 
 ---
 
-### [CONFIRMED] WARNING — `"_unclassified"` literal appears 5× with no shared constant
+### IN-02: Stale module docstrings in two test files describe the domain fix as "future" when it is now live
 
-**File:** `src/knowledge_lake/storage/s3.py:257,365` + `src/knowledge_lake/pipeline/export.py:325,417,537`
+**Files:** `tests/unit/test_clean_silver_key.py`, `tests/unit/test_parse_silver_key.py`
+(outside this review scope but confirmed stale from iter2)
 
-The fallback segment string `"_unclassified"` is an inline literal in all five key-construction sites. A rename silently splits the storage zone — objects from the storage layer and export layer land under different prefixes.
+**Issue:** Both module docstrings describe the domain-scoped silver key format as a pending change
+("After Plan 09-04 it will be…") when the implementation is complete. The tests already assert the
+implemented format.
 
-**Fix:** Define `_UNCLASSIFIED_DOMAIN = "_unclassified"` in `s3.py` or a shared constants module and import it everywhere.
-
----
-
-### [CONFIRMED] WARNING — Redundant `get_domain_for_source` call when Source ORM already in scope
-
-**File:** `src/knowledge_lake/pipeline/ingest.py:430,539`
-
-`source` is already the full `Source` ORM object at both `put_raw` call sites. `get_domain_for_source(session, source.id)` re-fetches it from the SQLAlchemy identity map unnecessarily. Direct access via `(source.config or {}).get("domain")` is equivalent, but the `or {}` None-guard is required — `source.config` is `None` for newly created sources without a domain, so a bare `source.config.get("domain")` raises `AttributeError`.
-
-**Fix:** Replace `get_domain_for_source(session, source.id)` with `(source.config or {}).get("domain")` at both call sites in `ingest.py`.
+**Fix:** Rewrite both module docstrings to describe the implemented behavior and drop the
+"RED-state / xfail" framing.
 
 ---
 
-### [CONFIRMED] CLEANUP — Triple copy-paste `domain_seg` block in export.py
+### IN-03: Four `TestGoldZone*` test classes carry stale "TypeError expected" comments
 
-**File:** `src/knowledge_lake/pipeline/export.py:325,417,537`
+**File:** `tests/unit/test_export.py` — block comment at lines 953-956; inline comments before
+`domain=` calls in `TestGoldZoneDomainKey`, `TestGoldZoneUnclassified`, `TestGoldZonePretrain`,
+`TestGoldZoneFinetune`
 
-`domain_seg = domain or "_unclassified"` + the gold key f-string are copy-pasted verbatim in all three export functions. Updating the gold key template requires three coordinated edits.
+**Issue:** Each class contains a comment of the form:
+```python
+# TypeError expected until Plan 09-06 adds domain kwarg
+export_module.export_rag_corpus(domain="healthcare", settings=settings)
+```
+All three export functions already accept `domain: Optional[str] = None` as a keyword argument
+(`export.py:245`, `export.py:358`, `export.py:451`). No `TypeError` will be raised; the
+scaffolding comment from the RED-state phase was never removed.
 
-**Fix:** Extract a `_gold_key(prefix, domain, subtype, export_id, ext)` helper or at minimum a `_domain_seg(domain)` one-liner used by all three functions.
-
----
-
-### [PLAUSIBLE] CLEANUP — Two repo calls where one `get_source()` suffices
-
-**File:** `src/knowledge_lake/pipeline/parse.py:113`, `clean.py:301`, `crawl.py:678`
-
-`get_domain_for_source(session, source_id)` + `get_source(session, source_id)` are called back-to-back in three places. A single `get_source()` call returns the `Source` object from which both `(source.config or {}).get("domain")` and `source.name` can be derived. SQLAlchemy identity map prevents a second DB hit within the session today, but the pattern is fragile under async sessions with `expire_on_commit=True`.
-
----
-
-### [PLAUSIBLE] CLEANUP — Tagless retry hardcodes positional call, silently drops future kwargs
-
-**File:** `src/knowledge_lake/storage/s3.py:126`
-
-The best-effort retry (`self._client.put_object(Bucket=..., Key=..., Body=data)`) duplicates the primary call manually rather than removing the `Tagging` key from `kwargs`. Any future parameter added to `kwargs` (e.g. `ContentType`, `ServerSideEncryption`) is silently dropped on the retry path.
-
-**Fix:** `kwargs.pop("Tagging", None); self._client.put_object(**kwargs)` in the except block.
+**Fix:** Remove the stale "TypeError expected" comments and the Wave 0 xfail scaffold block at
+lines 953-956. Confirm no `@pytest.mark.xfail` decorators remain on these methods.
 
 ---
 
-### [PLAUSIBLE] CLEANUP — `isinstance(src, dict)` dead production branch from test concern
+### IN-04: Integration test module docstring claims live PostgreSQL; fixture uses SQLite
 
-**File:** `src/knowledge_lake/pipeline/crawl.py:793`
+**File:** `tests/integration/test_raw_immutable.py` (outside this review scope, confirmed from iter2)
 
-`list_sources_for_crawl_all` materialises `_SourceRow` namedtuples (line 87) specifically to prevent `DetachedInstanceError`. The `isinstance(src, dict)` guard in `crawl_all_sources` is therefore unreachable in production but exists only to support tests that patch the function to return dicts. This couples production control-flow to test infrastructure.
+**Issue:** The module docstring states the tests run against "Live PostgreSQL (klake_test database,
+Alembic-migrated by test fixture)." The `engine` fixture uses `sqlite:///:memory:`. The concurrent
+write / IntegrityError recovery path in `put_raw` (lines 283-297 of `s3.py`) is never exercised
+because SQLite serialises all writers.
 
----
-
-### [PLAUSIBLE] EFFICIENCY — Full table scan in `list_sources_for_crawl_all` when domain filter active
-
-**File:** `src/knowledge_lake/registry/repo.py:897`
-
-All `Source` rows are loaded into memory before Python-side domain filtering. The SQL `WHERE` clause is never pushed to the database. Degrades linearly with source count.
-
-**Fix:** Apply `WHERE config->>'domain' = :domain` at the SQL layer via SQLAlchemy's JSON operator.
+**Fix:** Update the module docstring to state "in-memory SQLite for unit isolation." Add a separate
+`@pytest.mark.integration` test class gated on `TEST_DB_URL` to exercise the PostgreSQL-specific
+constraint paths.
 
 ---
 
-### [PLAUSIBLE] CLEANUP — Non-obvious `max(tier_result, tier_result + backoff_extra)` idiom ×4
-
-**File:** `src/knowledge_lake/crawl/ratelimit.py:91`
-
-Equivalent to `tier_result + max(0.0, backoff_extra)` but expressed as a double-max per tier (appears four times). A future tier written as `tier_result + backoff_extra` without the guard would violate the floor-raiser contract if any caller ever passes a negative value.
-
----
-
-## Refuted
-
-- **Double HTML regex scan per page** — `_extract_linked_docs` and `_extract_links` are distinct consumers of the same decoded string. The two-function pattern is intentional (L-04 fix explicitly shared the decode). Not a wasted scan.
+_Reviewed: 2026-07-10_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard_
