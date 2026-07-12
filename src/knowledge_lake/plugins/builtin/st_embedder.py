@@ -24,8 +24,6 @@ from __future__ import annotations
 
 import structlog
 
-from knowledge_lake.plugins.protocols import EmbedderPlugin
-
 log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------

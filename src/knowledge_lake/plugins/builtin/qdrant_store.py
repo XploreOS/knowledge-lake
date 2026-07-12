@@ -29,11 +29,12 @@ Registered as entry point:
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import structlog
 
-from knowledge_lake.plugins.protocols import Hit, VectorPoint, VectorStorePlugin
+from knowledge_lake.plugins.protocols import Hit, VectorPoint
 
 
 def assert_server_supports_hybrid(client: Any) -> None:
@@ -257,7 +258,7 @@ class QdrantVectorStore:
         next_version = (max(versions) + 1) if versions else 1
         return f"{prefix}{next_version}"
 
-    def _resolve_alias_target(self, alias: str) -> Optional[str]:
+    def _resolve_alias_target(self, alias: str) -> str | None:
         """Return the physical collection name ``alias`` currently resolves to, or None."""
         aliases = self._client.get_aliases().aliases
         for a in aliases:
@@ -322,7 +323,8 @@ class QdrantVectorStore:
             old_physical=old_physical,
             next_physical=next_physical,
         )
-        from qdrant_client.models import Modifier as _Modifier, SparseVectorParams as _SVP
+        from qdrant_client.models import Modifier as _Modifier
+        from qdrant_client.models import SparseVectorParams as _SVP
 
         self._client.create_collection(
             collection_name=next_physical,
@@ -586,10 +588,10 @@ class QdrantVectorStore:
         collection: str,
         query: list[float],
         top_k: int,
-        query_filter: Optional[Any] = None,
+        query_filter: Any | None = None,
         *,
         mode: str = "dense",
-        sparse_query: Optional[Any] = None,
+        sparse_query: Any | None = None,
         offset: int = 0,
     ) -> list[Hit]:
         """Perform ANN search in dense, sparse, or hybrid mode.

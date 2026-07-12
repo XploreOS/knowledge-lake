@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Annotated, Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -275,7 +275,7 @@ class DomainSettings(BaseModel):
     KLAKE_DOMAIN__DOMAIN_NAME, KLAKE_DOMAIN__DOMAINS_ROOT.
     """
 
-    domain_name: Optional[str] = None
+    domain_name: str | None = None
     """Active domain pack name (e.g. 'healthcare'). None = no domain pack loaded.
     Set via KLAKE_DOMAIN__DOMAIN_NAME env var. (D-01, D-02)"""
 
@@ -316,7 +316,7 @@ class McpSettings(BaseModel):
     token None (no baked-in secret — always override in production).
     """
 
-    token: Optional[str] = None
+    token: str | None = None
     """Bearer token for MCP HTTP auth. None = no auth (dev default).
     Override via KLAKE_MCP__TOKEN env var."""
 

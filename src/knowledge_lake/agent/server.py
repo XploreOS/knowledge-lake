@@ -36,7 +36,7 @@ _EXPECTED_ERRORS = (ValueError, LookupError)
 # level — it lives in pipeline.export which is import-heavy.
 
 
-def build_server(tools: "list") -> Server:
+def build_server(tools: list) -> Server:
     """Build a low-level MCP Server from the provided tool list.
 
     The server exposes ``list_tools`` and ``call_tool`` handlers.  Pass the

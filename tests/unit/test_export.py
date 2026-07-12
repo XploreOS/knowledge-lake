@@ -498,7 +498,9 @@ class TestNoDiskWrites:
         import ast
         import pathlib
 
-        export_src = pathlib.Path("/root/healthlake/src/knowledge_lake/pipeline/export.py").read_text()
+        from knowledge_lake.pipeline import export as export_module
+
+        export_src = pathlib.Path(export_module.__file__).read_text()
         tree = ast.parse(export_src)
 
         # Check no import of tempfile module

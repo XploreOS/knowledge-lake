@@ -23,15 +23,15 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import structlog
 
 from knowledge_lake.crawl.ratelimit import PerHostLimiter, resolve_delay
 from knowledge_lake.crawl.robots import fetch_robots
-from knowledge_lake.pipeline.ingest import validate_public_url, MAX_DOWNLOAD_BYTES
-from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult, CrawlerPlugin
+from knowledge_lake.pipeline.ingest import MAX_DOWNLOAD_BYTES, validate_public_url
+from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult
 
 log = structlog.get_logger(__name__)
 
@@ -133,7 +133,7 @@ class PlaywrightAdapter:
     async def fetch_page(
         self,
         url: str,
-        source_config: Optional[dict[str, Any]] = None,
+        source_config: dict[str, Any] | None = None,
     ) -> CrawlPageResult:
         """Fetch a single page via Playwright headless Chromium.
 
@@ -241,7 +241,7 @@ class PlaywrightAdapter:
 
         # 6. HTML → markdown
         markdown_text = _html_to_markdown(html, url)
-        fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        fetched_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         log.info(
             "playwright.page_complete",
@@ -302,7 +302,7 @@ class PlaywrightAdapter:
     def fetch_page_sync(
         self,
         url: str,
-        source_config: Optional[dict[str, Any]] = None,
+        source_config: dict[str, Any] | None = None,
     ) -> CrawlPageResult:
         """Synchronous wrapper around fetch_page for non-async contexts."""
         try:

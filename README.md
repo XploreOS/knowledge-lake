@@ -1,5 +1,11 @@
 # Knowledge Lake (klake)
 
+[![CI](https://github.com/XploreOS/knowledge-lake/actions/workflows/ci.yml/badge.svg)](https://github.com/XploreOS/knowledge-lake/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 A reusable, domain-agnostic framework that turns public, private, and manually uploaded domain resources into AI-ready assets — with full lineage from raw source to indexed chunk.
 
 **Features:**
@@ -514,3 +520,37 @@ uv run dagster job execute -j healthcare_e2e_job \
 | `POSTGRES_PASSWORD` | No | `klake` | Postgres password |
 
 **Note:** When running `klake` CLI commands locally (outside Docker), set `KLAKE_STORAGE__ENDPOINT_URL=http://localhost:9000` to reach MinIO, and `KLAKE_DATABASE_URL` pointing to `localhost:5432`.
+
+
+## Documentation
+
+Deeper documentation lives in [`docs/`](docs/):
+
+- [Architecture](docs/architecture.md)
+- [Pipeline](docs/pipeline.md)
+- [Configuration](docs/configuration.md)
+- [Domain packs](docs/domain-packs.md)
+- [API reference](docs/api-reference.md)
+
+
+## Contributing
+
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md)
+to set up your environment, understand the framework invariants, and learn our
+workflow. All participants are expected to follow our
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+- 🐛 **Found a bug?** [Open an issue](https://github.com/XploreOS/knowledge-lake/issues/new/choose).
+- 💡 **Have an idea?** Start a [discussion](https://github.com/XploreOS/knowledge-lake/discussions) or open a feature request.
+- 🔒 **Security vulnerability?** Please follow our [Security Policy](SECURITY.md) — do not open a public issue.
+
+A running changelog is kept in [CHANGELOG.md](CHANGELOG.md).
+
+
+## License
+
+Copyright © 2026 XploreOS.
+
+Knowledge Lake is licensed under the [Apache License 2.0](LICENSE). See the
+[NOTICE](NOTICE) file for attribution details. This project orchestrates a
+number of third-party open-source tools, each distributed under its own license.

@@ -62,6 +62,20 @@ docker-volumes/
 # ── Ruff cache ────────────────────────────────────────────────────────────────
 .ruff_cache/
 
+# ── Hypothesis ────────────────────────────────────────────────────────────────
+.hypothesis/
 
+# ── Misc caches ───────────────────────────────────────────────────────────────
 .cache/
-domains/
+
+# ── Claude Code local settings (keep .claude/CLAUDE.md tracked) ───────────────
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# ── Domain packs ──────────────────────────────────────────────────────────────
+# Reference packs under domains/<name>/ (e.g. `healthcare`) are first-class
+# source content and ARE tracked. Do NOT ignore all of domains/.
+# Local / experimental packs live under domains/local/ and are NOT shipped —
+# author your own here, or point KLAKE_DOMAINS_ROOT at any external directory.
+/domains/local/*
+!/domains/local/.gitkeep

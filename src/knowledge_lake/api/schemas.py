@@ -23,10 +23,7 @@ Plan 12-03: SearchParams extended with all search() filter kwargs so the
 
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from pydantic import BaseModel, Field
-
 
 # ── Request schemas ────────────────────────────────────────────────────────────
 
@@ -62,7 +59,7 @@ class SearchParams(BaseModel):
         default="klake_chunks",
         description="Qdrant collection to search.",
     )
-    mode: Optional[str] = Field(
+    mode: str | None = Field(
         default=None,
         pattern=r"^(hybrid|dense|sparse)$",
         description=(
@@ -74,25 +71,25 @@ class SearchParams(BaseModel):
     # ── Filter fields added in Plan 12-03 (Pitfall 4 fix) ────────────────────
     # Each field maps directly to the same-named kwarg in pipeline.search().
     # Types and optionality mirror the search() signature (search.py:35-48).
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Payload filter: restrict results to this domain (e.g. 'healthcare').",
     )
-    document_type: Optional[str] = Field(
+    document_type: str | None = Field(
         default=None,
         description="Payload filter: restrict results to this document type (e.g. 'regulation').",
     )
-    min_quality_score: Optional[float] = Field(
+    min_quality_score: float | None = Field(
         default=None,
         description="Payload filter: only return chunks with quality_score >= this value.",
         ge=0.0,
         le=1.0,
     )
-    source_name: Optional[str] = Field(
+    source_name: str | None = Field(
         default=None,
         description="Payload filter: restrict results to this source name.",
     )
-    format: Optional[str] = Field(  # noqa: A003
+    format: str | None = Field(  # noqa: A003
         default=None,
         description=(
             "Payload filter: restrict results to this source format "
@@ -100,14 +97,14 @@ class SearchParams(BaseModel):
             "the built-in is not used within this class scope (mirrors noqa A002 in search.py)."
         ),
     )
-    tags: Optional[list[str]] = Field(
+    tags: list[str] | None = Field(
         default=None,
         description=(
             "Payload filter: restrict results to chunks whose tags contain "
             "all of the listed values. Single tag uses MatchValue; multiple use MatchAny (D-11)."
         ),
     )
-    source_id: Optional[str] = Field(
+    source_id: str | None = Field(
         default=None,
         description="Payload filter: restrict results to chunks from this source registry ID.",
     )
@@ -133,31 +130,31 @@ class SearchHit(BaseModel):
     page: int = Field(description="Page number where this chunk appears (1-indexed).")
     chunk_id: str = Field(description="Chunk artifact ID (registry ID, prefixed with 'chk_').")
     text: str = Field(default="", description="Chunk text snippet for display.")
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None, description="Domain classification from the source (e.g. 'healthcare')."
     )
-    document_type: Optional[str] = Field(
+    document_type: str | None = Field(
         default=None, description="Enrichment-derived document type (e.g. 'regulation', 'guidance')."
     )
     keywords: list[str] = Field(
         default_factory=list, description="Enrichment-derived keywords for this document."
     )
-    quality_score: Optional[float] = Field(
+    quality_score: float | None = Field(
         default=None, description="LLM-judged quality score in [0, 1] from enrichment."
     )
 
     # PAYLOAD-02: source provenance fields (Phase 7 — only populated on points indexed
     # after Phase 7 or after a full reindex; pre-Phase-7 points return None / []).
-    source_id: Optional[str] = Field(
+    source_id: str | None = Field(
         default=None, description="Registry source ID for this chunk's source (src_...)."
     )
-    source_name: Optional[str] = Field(
+    source_name: str | None = Field(
         default=None, description="Human-readable source name."
     )
-    source_url: Optional[str] = Field(
+    source_url: str | None = Field(
         default=None, description="Canonical source URL."
     )
-    format: Optional[str] = Field(
+    format: str | None = Field(
         default=None,
         description="Source format label (e.g. 'html', 'pdf', 'csv') from Source.source_type.",
     )
@@ -165,10 +162,10 @@ class SearchHit(BaseModel):
         default_factory=list,
         description="Curated source tags from Source.config (distinct from LLM-extracted keywords).",
     )
-    title: Optional[str] = Field(
+    title: str | None = Field(
         default=None, description="Document title from enrichment metadata."
     )
-    organization: Optional[str] = Field(
+    organization: str | None = Field(
         default=None,
         description="Publishing organization from Source.config (None until sources.yaml carries organization key).",
     )
@@ -187,23 +184,23 @@ class LineageNode(BaseModel):
     content_hash: str = Field(description="SHA-256 hash of the artifact bytes.")
     created_at: str = Field(description="ISO-8601 creation timestamp.")
     pipeline_version: str = Field(description="Pipeline version that created this artifact (pkg+git).")
-    storage_uri: Optional[str] = Field(
+    storage_uri: str | None = Field(
         default=None,
         description="S3 URI where the artifact bytes are stored.",
     )
 
     # Additional lineage / provenance fields
-    source_id: Optional[str] = Field(default=None, description="Source registry ID (src_...).")
-    parent_artifact_id: Optional[str] = Field(
+    source_id: str | None = Field(default=None, description="Source registry ID (src_...).")
+    parent_artifact_id: str | None = Field(
         default=None,
         description="Parent artifact ID (None for root raw_document).",
     )
     depth: int = Field(default=0, description="Depth from the queried artifact (0 = the artifact itself).")
 
     # Citation fields (available on chunk nodes)
-    section_path: Optional[str] = Field(default=None, description="Section path (chunk nodes only).")
-    page: Optional[int] = Field(default=None, description="Page number (chunk nodes only).")
-    mime_type: Optional[str] = Field(default=None, description="MIME type of the artifact.")
+    section_path: str | None = Field(default=None, description="Section path (chunk nodes only).")
+    page: int | None = Field(default=None, description="Page number (chunk nodes only).")
+    mime_type: str | None = Field(default=None, description="MIME type of the artifact.")
 
 
 class LineageGraph(BaseModel):
@@ -232,7 +229,7 @@ class ExportRequest(BaseModel):
         pattern=r"^(rag-corpus|pretrain|finetune)$",
         description="Export kind: 'rag-corpus', 'pretrain', or 'finetune'.",
     )
-    dataset_name: Optional[str] = Field(
+    dataset_name: str | None = Field(
         default=None,
         max_length=255,
         description="Required for kind='finetune'. The logical Dataset name to export.",
@@ -245,7 +242,7 @@ class ExportResponse(BaseModel):
     dataset_id: str = Field(description="Registry ID of the created/updated Dataset row.")
     storage_uri: str = Field(description="S3 URI of the exported file in the gold zone.")
     row_count: int = Field(description="Number of rows/examples written to the export file.")
-    skipped_dangling_lineage: Optional[int] = Field(
+    skipped_dangling_lineage: int | None = Field(
         default=None,
         description="(finetune only) Number of examples skipped due to unresolvable source_artifact_id.",
     )
@@ -265,11 +262,11 @@ class SourceCreate(BaseModel):
         description="https:// URL of the source to register.",
         min_length=8,
     )
-    name: Optional[str] = Field(
+    name: str | None = Field(
         default=None,
         description="Human-readable source name (defaults to URL hostname).",
     )
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Domain classification (e.g. 'healthcare', 'legal').",
         max_length=64,
@@ -287,11 +284,11 @@ class SourceOut(BaseModel):
     source_id: str = Field(description="Source registry ID (src_...).")
     name: str = Field(description="Human-readable source name.")
     url: str = Field(description="Original URL as provided.")
-    normalized_url: Optional[str] = Field(
+    normalized_url: str | None = Field(
         default=None,
         description="D-06 normalized URL used for dedup.",
     )
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Domain classification.",
     )
@@ -303,7 +300,7 @@ class UploadOut(BaseModel):
 
     source_id: str = Field(description="Source registry ID (src_...).")
     artifact_id: str = Field(description="Raw artifact ID (doc_...).")
-    storage_uri: Optional[str] = Field(
+    storage_uri: str | None = Field(
         default=None,
         description="S3 URI of the stored content.",
     )
@@ -327,12 +324,12 @@ class CrawlJobCreate(BaseModel):
         description="https:// seed URL to crawl.",
         min_length=8,
     )
-    crawler: Optional[str] = Field(
+    crawler: str | None = Field(
         default=None,
         description="Override crawler adapter name (must be a registered crawler).",
         max_length=64,
     )
-    max_pages: Optional[int] = Field(
+    max_pages: int | None = Field(
         default=None,
         description="Maximum number of pages to crawl.",
         ge=1,
@@ -378,11 +375,11 @@ class CrawlAllSourceResult(BaseModel):
 
     source_id: str = Field(description="Source registry ID (src_...).")
     status: str = Field(description="'ok' if crawl succeeded, 'failed' otherwise.")
-    error: Optional[str] = Field(
+    error: str | None = Field(
         default=None,
         description="Error message if status is 'failed', else None.",
     )
-    pages_complete: Optional[int] = Field(
+    pages_complete: int | None = Field(
         default=None,
         description="Number of pages successfully crawled (None if failed before crawl started).",
     )
@@ -512,7 +509,7 @@ class EnrichRequest(BaseModel):
 class EnrichResponse(BaseModel):
     """Response body for POST /enrich."""
 
-    artifact_id: Optional[str] = Field(
+    artifact_id: str | None = Field(
         default=None,
         description="Enriched document artifact ID (doc_...), None when skipped.",
     )
@@ -520,7 +517,7 @@ class EnrichResponse(BaseModel):
         description="'enriched', 'cached', 'skipped_budget_exceeded', or 'skipped_enrichment_failed'."
     )
     cached: bool = Field(description="True when this call was an ENRICH-04 cache hit.")
-    quality_score: Optional[float] = Field(
+    quality_score: float | None = Field(
         default=None,
         description="LLM-judged quality score in [0,1], None when skipped.",
     )
@@ -547,7 +544,7 @@ class CurateRequest(BaseModel):
 class CurateResponse(BaseModel):
     """Response body for POST /curate (CURATE-01..03)."""
 
-    artifact_id: Optional[str] = Field(
+    artifact_id: str | None = Field(
         default=None,
         description="Curated document artifact ID (doc_...), None when unavailable.",
     )
@@ -558,11 +555,11 @@ class CurateResponse(BaseModel):
         default=False,
         description="True when this call was a cache hit (same content_hash + filter_config_version).",
     )
-    quality_score: Optional[float] = Field(
+    quality_score: float | None = Field(
         default=None,
         description="Composite quality score in [0,1] spanning parse + enrich + curation stages.",
     )
-    dedup_status: Optional[str] = Field(
+    dedup_status: str | None = Field(
         default=None,
         description=(
             "'not_yet_computed' until batch_dedup_corpus() runs; "
@@ -575,11 +572,11 @@ class CuratedDocumentOut(BaseModel):
     """A single curated document summary for GET /curated-documents (CURATE-03)."""
 
     artifact_id: str = Field(description="Curated document artifact ID (doc_...).")
-    quality_score: Optional[float] = Field(
+    quality_score: float | None = Field(
         default=None,
         description="Composite quality score in [0,1], None if not yet computed.",
     )
-    dedup_status: Optional[str] = Field(
+    dedup_status: str | None = Field(
         default=None,
         description="'near_dup', 'unique', or 'not_yet_computed'.",
     )
@@ -602,7 +599,7 @@ class ReindexResponse(BaseModel):
 
     collection: str = Field(description="Qdrant alias that was reindexed.")
     new_physical: str = Field(description="New physical collection the alias now points to.")
-    old_physical: Optional[str] = Field(
+    old_physical: str | None = Field(
         default=None,
         description="Prior physical collection (retained, never auto-dropped); None on first-ever reindex.",
     )
@@ -640,15 +637,15 @@ class GenerateDatasetResponse(BaseModel):
     status: str = Field(
         description="'generated', 'cached', 'skipped_budget_exceeded', or 'skipped_generation_failed'.",
     )
-    example_id: Optional[str] = Field(
+    example_id: str | None = Field(
         default=None,
         description="DatasetExample ID (dex_...), None when skipped.",
     )
-    dataset_id: Optional[str] = Field(
+    dataset_id: str | None = Field(
         default=None,
         description="Dataset ID (dst_...) this example belongs to.",
     )
-    cost_usd: Optional[float] = Field(
+    cost_usd: float | None = Field(
         default=None,
         description="LLM call cost in USD for this generation. 0.0 on cache hit, None when skipped.",
     )
@@ -679,7 +676,7 @@ class DiscoverResultItem(BaseModel):
 
     url: str = Field(description="The discovered URL.")
     title: str = Field(description="Title from the search result.")
-    source_id: Optional[str] = Field(
+    source_id: str | None = Field(
         default=None,
         description="Registry source ID (None if skipped).",
     )
@@ -710,13 +707,13 @@ class SourceListItem(BaseModel):
 
     source_id: str = Field(description="Source registry ID (src_...).")
     name: str = Field(description="Human-readable source name.")
-    url: Optional[str] = Field(default=None, description="Canonical source URL.")
+    url: str | None = Field(default=None, description="Canonical source URL.")
     source_type: str = Field(
         default="unknown",
         description="Kind of source: 'web', 'upload', 'crawler', etc.",
     )
-    license_type: Optional[str] = Field(default=None, description="SPDX license identifier.")
-    domain: Optional[str] = Field(
+    license_type: str | None = Field(default=None, description="SPDX license identifier.")
+    domain: str | None = Field(
         default=None,
         description="Domain classification extracted from Source.config['domain'].",
     )
@@ -731,18 +728,18 @@ class ArtifactOut(BaseModel):
 
     id: str = Field(description="Artifact registry ID (type-prefixed UUIDv7).")
     artifact_type: str = Field(description="Node type: raw_document, parsed_document, chunk, etc.")
-    source_id: Optional[str] = Field(default=None, description="Source registry ID (src_...).")
-    parent_artifact_id: Optional[str] = Field(
+    source_id: str | None = Field(default=None, description="Source registry ID (src_...).")
+    parent_artifact_id: str | None = Field(
         default=None,
         description="Parent artifact ID (None for root raw_document).",
     )
     content_hash: str = Field(description="SHA-256 hash of the artifact bytes.")
     created_at: str = Field(description="ISO-8601 creation timestamp.")
-    storage_uri: Optional[str] = Field(
+    storage_uri: str | None = Field(
         default=None,
         description="S3 URI where the artifact bytes are stored.",
     )
-    mime_type: Optional[str] = Field(default=None, description="MIME type of the artifact.")
+    mime_type: str | None = Field(default=None, description="MIME type of the artifact.")
 
 
 class DatasetOut(BaseModel):
@@ -814,7 +811,7 @@ class StatsInput(BaseModel):
         default="klake_chunks",
         description="Qdrant collection to count points in.",
     )
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Optional domain to scope source and artifact counts (e.g. 'healthcare').",
     )
@@ -827,7 +824,7 @@ class ProcessCrawledInput(BaseModel):
         process_crawled(*, source_id=None, limit=100, collection="klake_chunks")
     """
 
-    source_id: Optional[str] = Field(
+    source_id: str | None = Field(
         default=None,
         description="Restrict processing to raw docs from this source registry ID.",
     )
@@ -850,7 +847,7 @@ class ListSourcesInput(BaseModel):
         list_sources(domain=None, *, limit=50, offset=0)
     """
 
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Filter results to this domain (e.g. 'healthcare').",
     )
@@ -905,7 +902,7 @@ class IngestUrlInput(BaseModel):
         min_length=1,
         max_length=255,
     )
-    mime_type: Optional[str] = Field(
+    mime_type: str | None = Field(
         default=None,
         description="MIME type override (e.g. 'application/pdf'). Defaults to Content-Type header.",
     )
@@ -929,7 +926,7 @@ class CrawlAllInput(BaseModel):
     ``settings`` is internal infrastructure — not exposed as a tool input field.
     """
 
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         default=None,
         description="Optional domain filter; when set, only sources matching this domain are crawled.",
     )

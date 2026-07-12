@@ -36,8 +36,6 @@ Returns: list of chunk_ids indexed (same order as input chunks).
 
 from __future__ import annotations
 
-from typing import Optional
-
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -57,7 +55,7 @@ def index(
     parsed_artifact_id: str,
     *,
     collection: str = "klake_chunks",
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> list[str]:
     """Upsert chunk vectors into the vector store with citation + enrichment payload.
 
@@ -147,7 +145,7 @@ def index(
     # prefix for the Qdrant point ID and preserve the full prefixed ID in the
     # payload as chunk_id so the CLI/lineage can resolve it back to the registry.
     points: list[VectorPoint] = []
-    for chunk, vector in zip(chunks, vectors):
+    for chunk, vector in zip(chunks, vectors, strict=True):
         full_chunk_id = chunk["chunk_id"]
         qdrant_point_id = _strip_prefix(full_chunk_id)
         payload = {
@@ -192,7 +190,7 @@ def reindex_collection(
     collection: str = "klake_chunks",
     *,
     hybrid: bool = False,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Zero-downtime reindex of an alias-backed collection (INDEX-02, D-06).
 

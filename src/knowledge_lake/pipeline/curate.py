@@ -29,7 +29,6 @@ a second S3 client path via fsspec/s3fs.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 import structlog
 from datasketch import MinHashLSH
@@ -39,8 +38,8 @@ from knowledge_lake.config.settings import CurateSettings, Settings, get_setting
 from knowledge_lake.pipeline.clean import compute_minhash
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.quality.scorer import compute_composite_quality_score
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.db import get_session
 from knowledge_lake.storage.s3 import StorageBackend
 
 log = structlog.get_logger(__name__)
@@ -59,8 +58,12 @@ def _build_filters(settings: CurateSettings) -> list:
     exercise the real filters never need datatrove or nltk punkt_tab installed.
     """
     from datatrove.pipeline.filters.c4_filters import C4QualityFilter  # noqa: PLC0415
-    from datatrove.pipeline.filters.gopher_quality_filter import GopherQualityFilter  # noqa: PLC0415
-    from datatrove.pipeline.filters.gopher_repetition_filter import GopherRepetitionFilter  # noqa: PLC0415
+    from datatrove.pipeline.filters.gopher_quality_filter import (
+        GopherQualityFilter,  # noqa: PLC0415
+    )
+    from datatrove.pipeline.filters.gopher_repetition_filter import (
+        GopherRepetitionFilter,  # noqa: PLC0415
+    )
 
     return [
         GopherRepetitionFilter(),
@@ -132,7 +135,7 @@ def curate_document(
     cleaned_artifact_id: str,
     source_id: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Curate a cleaned_document artifact (CURATE-01, CURATE-03).
 
@@ -304,7 +307,7 @@ def curate_document(
     return result
 
 
-def batch_dedup_corpus(*, settings: Optional[Settings] = None) -> dict:
+def batch_dedup_corpus(*, settings: Settings | None = None) -> dict:
     """Build ONE MinHash LSH index over ALL cleaned_document artifacts in a single pass.
 
     This is the Phase 5 authoritative corpus-wide deduplication (CURATE-02),

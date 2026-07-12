@@ -1,0 +1,26 @@
+Knowledge Lake (klake)
+Copyright 2026 XploreOS
+
+This product includes software developed by XploreOS and the Knowledge Lake
+contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this project except in compliance with the License. A copy of the License is
+provided in the LICENSE file and is also available at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Knowledge Lake orchestrates a number of third-party open-source projects, each
+distributed under its own license. These are declared as dependencies in
+pyproject.toml and are not redistributed as part of this source tree. Notable
+components include (non-exhaustive):
+
+  - Dagster (Apache-2.0)
+  - Docling (MIT)
+  - Crawl4AI (Apache-2.0)
+  - Qdrant client (Apache-2.0)
+  - LiteLLM (MIT)
+  - DataTrove (Apache-2.0)
+  - Polars, DuckDB, PyArrow (MIT / Apache-2.0)
+
+Refer to each dependency's distribution for its authoritative license terms.

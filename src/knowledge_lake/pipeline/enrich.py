@@ -18,7 +18,6 @@ Design decisions this module implements:
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -30,8 +29,8 @@ from knowledge_lake.llm.pricing import bootstrap_llm_pricing, compute_call_cost
 from knowledge_lake.pipeline.deterministic import extract_deterministic_fields
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.plugins.protocols import ParsedDoc
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.db import get_session
 from knowledge_lake.storage.s3 import StorageBackend
 
 log = structlog.get_logger(__name__)
@@ -171,7 +170,7 @@ def _extract_longest_valid_prefix(content: str) -> str:
 
 
 def _build_enrichment_prompt(
-    excerpt: str, deterministic: dict, domain_system_prompt: Optional[str] = None
+    excerpt: str, deterministic: dict, domain_system_prompt: str | None = None
 ) -> tuple[str, str]:
     """Build the (system_prompt, user_prompt) pair for the enrichment LLM call.
 
@@ -281,9 +280,9 @@ def enrich_document(
     cleaned_artifact_id: str,
     source_id: str,
     *,
-    parsed_doc: Optional[ParsedDoc] = None,
-    settings: Optional[Settings] = None,
-    domain_system_prompt: Optional[str] = None,
+    parsed_doc: ParsedDoc | None = None,
+    settings: Settings | None = None,
+    domain_system_prompt: str | None = None,
 ) -> dict:
     """Enrich a cleaned_document artifact with LLM-judged metadata (ENRICH-01..05).
 

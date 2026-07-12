@@ -22,6 +22,7 @@ Entry point:
 from __future__ import annotations
 
 import base64
+import contextlib
 import datetime
 import json
 import subprocess
@@ -33,7 +34,7 @@ from typing import Any
 import structlog
 
 from knowledge_lake.pipeline.ingest import validate_public_url
-from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult, CrawlerPlugin
+from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult
 
 log = structlog.get_logger(__name__)
 
@@ -190,7 +191,7 @@ class ScrapyAdapter:
             return []
 
         results: list[CrawlPageResult] = []
-        fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        fetched_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         for line in out_path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -284,7 +285,9 @@ class ScrapyAdapter:
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.communicate()  # drain pipes after kill to avoid zombie
-            raise TimeoutError(f"Scrapy crawl job {job_id} timed out after {timeout}s")
+            raise TimeoutError(
+                f"Scrapy crawl job {job_id} timed out after {timeout}s"
+            ) from None
 
         exit_code = proc.returncode
         if exit_code == 0:
@@ -310,10 +313,8 @@ class ScrapyAdapter:
         """
         tmp_dir = self._tmp_dirs.pop(job_id, None)
         if tmp_dir:
-            try:
+            with contextlib.suppress(OSError):
                 tmp_dir.cleanup()
-            except OSError:
-                pass
         self._procs.pop(job_id, None)
         self._out_paths.pop(job_id, None)
 

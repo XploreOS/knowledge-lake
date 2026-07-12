@@ -22,7 +22,6 @@ from __future__ import annotations
 import importlib.metadata
 import subprocess
 
-
 _PACKAGE_NAME = "knowledge-lake"
 """Distribution name as registered in pyproject.toml."""
 

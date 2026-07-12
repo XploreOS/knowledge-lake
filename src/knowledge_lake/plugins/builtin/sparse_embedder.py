@@ -21,22 +21,23 @@ Model reference:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import structlog
 
 if TYPE_CHECKING:
     from fastembed import SparseTextEmbedding as _SparseTextEmbeddingType
+    from qdrant_client.models import SparseVector
 
 log = structlog.get_logger(__name__)
 
 _MODEL_NAME = "Qdrant/bm25"
 
 # Module-level lazy singleton — None until first call.
-_bm25_model: Optional["_SparseTextEmbeddingType"] = None
+_bm25_model: _SparseTextEmbeddingType | None = None
 
 
-def _get_model() -> "_SparseTextEmbeddingType":
+def _get_model() -> _SparseTextEmbeddingType:
     """Return the cached BM25 model, loading it on first call.
 
     Uses a module-level singleton so the ONNX model initialises once per
@@ -53,7 +54,7 @@ def _get_model() -> "_SparseTextEmbeddingType":
     return _bm25_model
 
 
-def embed_sparse_doc(text: str) -> "SparseVector":  # type: ignore[name-defined]
+def embed_sparse_doc(text: str) -> SparseVector:
     """Produce a BM25 sparse vector for a *document* (index-time, D-03).
 
     Uses the document-side embedding method (``SparseTextEmbedding.embed``),
@@ -85,7 +86,7 @@ def embed_sparse_doc(text: str) -> "SparseVector":  # type: ignore[name-defined]
     return SparseVector(indices=e.indices.tolist(), values=e.values.tolist())
 
 
-def embed_sparse_query(text: str) -> "SparseVector":  # type: ignore[name-defined]
+def embed_sparse_query(text: str) -> SparseVector:
     """Produce a BM25 sparse vector for a *query* (search-time, D-03).
 
     Uses the query-side embedding method (``SparseTextEmbedding.query_embed``),

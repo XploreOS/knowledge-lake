@@ -9,11 +9,9 @@ PAYLOAD-01, mirrors ``pipeline/crawl.py:237-241``).
 """
 from __future__ import annotations
 
-from typing import Optional
-
 
 def list_sources(
-    domain: Optional[str] = None,
+    domain: str | None = None,
     *,
     limit: int = 50,
     offset: int = 0,
@@ -87,7 +85,7 @@ def list_sources(
 def stats(
     *,
     collection: str = "klake_chunks",
-    domain: Optional[str] = None,
+    domain: str | None = None,
 ) -> dict:
     """Return an aggregate summary of the knowledge lake state.
 
@@ -120,12 +118,12 @@ def stats(
                 "collection":       <str>,
             }
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
 
     from knowledge_lake.config.settings import get_settings
     from knowledge_lake.plugins.resolver import get_vectorstore
     from knowledge_lake.registry.db import get_session
-    from knowledge_lake.registry.models import Source, Artifact
+    from knowledge_lake.registry.models import Artifact, Source
 
     with get_session() as session:
         # Source count (optionally scoped by domain)

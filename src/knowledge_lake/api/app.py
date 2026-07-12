@@ -25,12 +25,10 @@ from __future__ import annotations
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
 import structlog
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
 
 from knowledge_lake.api.schemas import (
     ArtifactOut,
@@ -43,11 +41,11 @@ from knowledge_lake.api.schemas import (
     CrawlJobCreate,
     CrawlJobOut,
     CrawlStateOut,
+    CuratedDocumentOut,
     CurateRequest,
     CurateResponse,
-    DedupeResponse,
-    CuratedDocumentOut,
     DatasetOut,
+    DedupeResponse,
     DiscoverOut,
     DiscoverRequest,
     DiscoverResultItem,
@@ -59,13 +57,11 @@ from knowledge_lake.api.schemas import (
     ExportResponse,
     GenerateDatasetRequest,
     GenerateDatasetResponse,
-    LineageGraph,
     LineageNode,
     ParseRequest,
     ParseResponse,
     ReindexResponse,
     SearchHit,
-    SearchParams,
     SourceCreate,
     SourceListItem,
     SourceOut,
@@ -96,7 +92,7 @@ def _safe_upload_path(raw: str) -> Path:
         raise HTTPException(
             status_code=400,
             detail="Path is outside the allowed upload directory.",
-        )
+        ) from None
     return p
 
 
@@ -180,38 +176,38 @@ def search_endpoint(
         default="klake_chunks",
         description="Qdrant collection to search.",
     ),
-    domain: Optional[str] = Query(
+    domain: str | None = Query(
         default=None,
         description="Filter results to this domain.",
     ),
-    document_type: Optional[str] = Query(
+    document_type: str | None = Query(
         default=None,
         description="Filter results to this document_type.",
     ),
-    min_quality_score: Optional[float] = Query(
+    min_quality_score: float | None = Query(
         default=None,
         ge=0.0,
         le=1.0,
         description="Filter results to quality_score >= this value.",
     ),
-    source_name: Optional[str] = Query(
+    source_name: str | None = Query(
         default=None,
         description="Filter results to this source name.",
     ),
-    format: Optional[str] = Query(
+    format: str | None = Query(
         default=None,
         description="Filter results to this source format (e.g. 'html', 'pdf').",
     ),
-    source_id: Optional[str] = Query(
+    source_id: str | None = Query(
         default=None,
         description="Filter results to this source ID.",
     ),
-    tags: Optional[list[str]] = Query(
+    tags: list[str] | None = Query(
         default=None,
         description="Filter results where payload tags contain any of these values (OR logic). Each tag max 64 chars, max 64 tags.",
         max_length=64,  # per-element character limit (list length is checked separately in handler)
     ),
-    mode: Optional[str] = Query(
+    mode: str | None = Query(
         default=None,
         pattern=r"^(hybrid|dense|sparse)$",
         description=(
@@ -590,7 +586,7 @@ def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
         - job_id is parameterized in SQL (no injection).
         - Unknown IDs return 404 with a clear JSON error body.
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
 
     from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.models import CrawlState, Job
@@ -637,7 +633,7 @@ def get_crawl_job_endpoint(job_id: str) -> CrawlJobOut:
     status_code=200,
 )
 async def crawl_all_endpoint(
-    domain: Optional[str] = Query(None, description="Filter by domain (e.g. 'healthcare'). Crawls all sources if omitted."),
+    domain: str | None = Query(None, description="Filter by domain (e.g. 'healthcare'). Crawls all sources if omitted."),
 ) -> CrawlAllOut:
     """Batch-crawl all registered sources into the lake (CRAWL-02 D-08/D-09).
 
@@ -781,8 +777,8 @@ def chunk_endpoint(body: ChunkRequest) -> ChunkResponse:
     from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.chunk import chunk
     from knowledge_lake.plugins.protocols import ParsedDoc
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
     from knowledge_lake.storage.s3 import StorageBackend
 
     logger.info("api.chunk", parsed_artifact_id=body.parsed_artifact_id)
@@ -845,8 +841,8 @@ def enrich_endpoint(body: EnrichRequest) -> EnrichResponse:
     """
     from knowledge_lake.pipeline.enrich import enrich_document
     from knowledge_lake.plugins.protocols import ParsedDoc
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
 
     logger.info("api.enrich", cleaned_artifact_id=body.cleaned_artifact_id)
 
@@ -1038,7 +1034,7 @@ def generate_dataset_endpoint(body: GenerateDatasetRequest) -> GenerateDatasetRe
     status_code=200,
 )
 def list_curated_documents_endpoint(
-    min_quality_score: Optional[float] = Query(
+    min_quality_score: float | None = Query(
         default=None,
         ge=0.0,
         le=1.0,
@@ -1054,6 +1050,7 @@ def list_curated_documents_endpoint(
     CURATE-03: satisfies the "queryable via API" criterion.
     """
     from sqlalchemy import select
+
     from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.models import Artifact
 
@@ -1234,7 +1231,7 @@ def export_endpoint(body: ExportRequest) -> ExportResponse:
     status_code=200,
 )
 def list_sources_endpoint(
-    domain: Optional[str] = Query(
+    domain: str | None = Query(
         default=None,
         description="Filter by domain classification (e.g. 'healthcare').",
         max_length=64,
@@ -1318,12 +1315,12 @@ def get_source_endpoint(source_id: str) -> SourceListItem:
     status_code=200,
 )
 def list_documents_endpoint(
-    artifact_type: Optional[str] = Query(
+    artifact_type: str | None = Query(
         default=None,
         description="Filter by artifact type (e.g. 'raw_document', 'parsed_document').",
         max_length=64,
     ),
-    source_id: Optional[str] = Query(
+    source_id: str | None = Query(
         default=None,
         description="Filter by source registry ID.",
         max_length=64,
@@ -1337,6 +1334,7 @@ def list_documents_endpoint(
         - All filter parameters are bound via ORM — no string interpolation.
     """
     from sqlalchemy import select
+
     from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.models import Artifact
 
@@ -1418,6 +1416,7 @@ def list_datasets_endpoint(
         - ORM select() — no raw SQL.
     """
     from sqlalchemy import select
+
     from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.models import Dataset
 

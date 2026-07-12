@@ -57,8 +57,8 @@ def load_domain(name: str) -> dict:
     from knowledge_lake.config.settings import get_settings
     from knowledge_lake.domains.loader import DomainLoader
     from knowledge_lake.pipeline.ingest import normalize_url
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.repo import get_source_by_normalized_url
 
     settings = get_settings()

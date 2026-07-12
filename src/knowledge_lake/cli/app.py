@@ -18,9 +18,7 @@ Commands:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
 import typer
@@ -58,10 +56,10 @@ def cmd_status() -> None:
 @app.command(name="add-source")
 def cmd_add_source(
     url: str = typer.Argument(..., help="https:// URL of the source to register."),
-    name: Optional[str] = typer.Option(
+    name: str | None = typer.Option(
         None, "--name", "-n", help="Human-readable source name (defaults to URL hostname)."
     ),
-    domain: Optional[str] = typer.Option(
+    domain: str | None = typer.Option(
         None, "--domain", "-d", help="Domain classification (e.g. 'healthcare', 'legal')."
     ),
     license_type: str = typer.Option(
@@ -84,9 +82,9 @@ def cmd_add_source(
             license_type=license_type,
         )
         if result["is_new"]:
-            typer.echo(f"Registered new source:")
+            typer.echo("Registered new source:")
         else:
-            typer.echo(f"Source already exists (dedup hit):")
+            typer.echo("Source already exists (dedup hit):")
         typer.echo(f"  source_id:      {result['source_id']}")
         typer.echo(f"  name:           {result['name']}")
         typer.echo(f"  url:            {result['url']}")
@@ -95,13 +93,13 @@ def cmd_add_source(
             typer.echo(f"  domain:         {result['domain']}")
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="upload")
 def cmd_upload(
     file_path: str = typer.Argument(..., help="Path to the local file to upload."),
-    source_name: Optional[str] = typer.Option(
+    source_name: str | None = typer.Option(
         None, "--source", "-s", help="Human-readable source name."
     ),
     license_type: str = typer.Option(
@@ -122,14 +120,14 @@ def cmd_upload(
             source_name=effective_name,
             license_type=license_type,
         )
-        typer.echo(f"Uploaded:")
+        typer.echo("Uploaded:")
         typer.echo(f"  source_id:    {result['source_id']}")
         typer.echo(f"  artifact_id:  {result['artifact_id']}")
         typer.echo(f"  storage_uri:  {result['storage_uri']}")
         typer.echo(f"  content_hash: {result['content_hash']}")
     except (ValueError, FileNotFoundError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="discover")
@@ -151,7 +149,7 @@ def cmd_discover(
         results = discover_sources(query=query, limit=limit)
     except (RuntimeError, LookupError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     registered = [r for r in results if r["status"] == "registered"]
     existing = [r for r in results if r["status"] == "existing"]
@@ -176,7 +174,7 @@ def cmd_discover(
 def cmd_parse(
     raw_artifact_id: str = typer.Argument(..., help="ID of the raw_document artifact to parse."),
     source_id: str = typer.Argument(..., help="Source ID that owns the raw artifact."),
-    mime_type: Optional[str] = typer.Option(
+    mime_type: str | None = typer.Option(
         None, "--mime", "-m", help="MIME type override. Auto-detected from artifact if omitted."
     ),
 ) -> None:
@@ -190,14 +188,14 @@ def cmd_parse(
 
     try:
         result, _parsed_doc = parse(raw_artifact_id, source_id, mime_type=mime_type)
-        typer.echo(f"Parsed:")
+        typer.echo("Parsed:")
         typer.echo(f"  artifact_id:   {result['artifact_id']}")
         typer.echo(f"  quality_score: {result.get('quality_score', 'n/a')}")
         typer.echo(f"  parser_used:   {result.get('parser_used', 'n/a')}")
         typer.echo(f"  content_hash:  {result.get('content_hash', 'n/a')}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="clean")
@@ -216,14 +214,14 @@ def cmd_clean(
 
     try:
         result = clean(parsed_artifact_id, source_id)
-        typer.echo(f"Cleaned:")
+        typer.echo("Cleaned:")
         typer.echo(f"  artifact_id:   {result['artifact_id']}")
         typer.echo(f"  language:      {result['language']}")
         typer.echo(f"  dedup_status:  {result['dedup_status']}")
         typer.echo(f"  content_hash:  {result['content_hash']}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="chunk")
@@ -247,8 +245,8 @@ def cmd_chunk(
     from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.chunk import chunk
     from knowledge_lake.plugins.protocols import ParsedDoc
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
     from knowledge_lake.storage.s3 import StorageBackend
 
     s = get_settings()
@@ -278,13 +276,13 @@ def cmd_chunk(
         doc = ParsedDoc(text=parsed_text, sections=[])
 
         result = chunk(parsed_artifact_id, source_id, doc)
-        typer.echo(f"Chunked:")
+        typer.echo("Chunked:")
         typer.echo(f"  chunk_count:  {len(result)}")
         if result:
             typer.echo(f"  first_chunk:  {result[0]['artifact_id']}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="enrich")
@@ -303,8 +301,8 @@ def cmd_enrich(
     """
     from knowledge_lake.pipeline.enrich import enrich_document
     from knowledge_lake.plugins.protocols import ParsedDoc
-    from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
 
     try:
         # Reconstruct a minimal ParsedDoc from the cleaned artifact's parent
@@ -334,14 +332,14 @@ def cmd_enrich(
             cleaned_artifact_id, source_id, parsed_doc=parsed_doc,
             domain_system_prompt=domain_system_prompt,
         )
-        typer.echo(f"Enriched:")
+        typer.echo("Enriched:")
         typer.echo(f"  status:        {result['status']}")
         typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
         typer.echo(f"  quality_score: {result.get('quality_score')}")
         typer.echo(f"  cached:        {result.get('cached', False)}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="curate")
@@ -369,7 +367,7 @@ def cmd_curate(
         typer.echo(f"  dedup_status:  {result.get('dedup_status', 'not_yet_computed')}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="dedupe")
@@ -391,7 +389,7 @@ def cmd_dedupe() -> None:
         typer.echo(f"  skipped_no_curation:  {summary['skipped_no_curation']}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 class DatasetKind(str):
@@ -445,26 +443,26 @@ def cmd_generate_dataset(
         else:
             result = generate_instruction_example(source_artifact_id, dataset_name)
 
-        typer.echo(f"Dataset example generated:")
+        typer.echo("Dataset example generated:")
         typer.echo(f"  status:      {result['status']}")
         typer.echo(f"  example_id:  {result.get('example_id')}")
         typer.echo(f"  dataset_id:  {result.get('dataset_id')}")
         typer.echo(f"  cost_usd:    {result.get('cost_usd')}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="crawl")
 def cmd_crawl(
     url: str = typer.Argument(..., help="https:// seed URL to crawl."),
-    crawler: Optional[str] = typer.Option(
+    crawler: str | None = typer.Option(
         None,
         "--crawler",
         "-c",
         help="Override crawler adapter (default: settings.crawler). Must be a registered crawler.",
     ),
-    max_pages: Optional[int] = typer.Option(
+    max_pages: int | None = typer.Option(
         None,
         "--max-pages",
         "-m",
@@ -480,6 +478,7 @@ def cmd_crawl(
     Resume-safe: re-running fetches only pending URLs.
     """
     import asyncio
+
     from knowledge_lake.pipeline.crawl import crawl_source
 
     try:
@@ -488,7 +487,7 @@ def cmd_crawl(
             crawler=crawler,
             max_pages=max_pages,
         ))
-        typer.echo(f"Crawl complete:")
+        typer.echo("Crawl complete:")
         typer.echo(f"  job_id:              {result['job_id']}")
         typer.echo(f"  source_id:           {result['source_id']}")
         typer.echo(f"  crawler:             {result['crawler']}")
@@ -498,12 +497,12 @@ def cmd_crawl(
         typer.echo(f"  pages_total:         {result['pages_total']}")
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="crawl-all")
 def cmd_crawl_all(
-    domain: Optional[str] = typer.Option(
+    domain: str | None = typer.Option(
         None,
         "--domain",
         "-d",
@@ -536,16 +535,16 @@ def cmd_crawl_all(
                 typer.echo(f"  {source_id}: {status}")
     except Exception as exc:  # L-01 fix: OperationalError, ValidationError etc. need clean output
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="ingest-url")
 def cmd_ingest_url(
     url: str = typer.Argument(..., help="https:// URL to ingest (SSRF-checked)."),
-    source_name: Optional[str] = typer.Option(
+    source_name: str | None = typer.Option(
         None, "--source", "-s", help="Human-readable source name."
     ),
-    mime_type: Optional[str] = typer.Option(
+    mime_type: str | None = typer.Option(
         None, "--mime", "-m", help="MIME type override. Auto-detected from HTTP Content-Type if omitted."
     ),
     collection: str = typer.Option(
@@ -573,12 +572,12 @@ def cmd_ingest_url(
         typer.echo(f"  collection:         {result['collection']}")
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="process-crawled")
 def cmd_process_crawled(
-    source_id: Optional[str] = typer.Option(
+    source_id: str | None = typer.Option(
         None, "--source", "-s", help="Process only raw docs from this source ID."
     ),
     limit: int = typer.Option(
@@ -616,29 +615,29 @@ def cmd_search(
         "klake_chunks", "--collection", "-c", help="Qdrant collection to search."
     ),
     top_k: int = typer.Option(5, "--top-k", "-k", help="Maximum number of results."),
-    domain: Optional[str] = typer.Option(
+    domain: str | None = typer.Option(
         None, "--domain", help="Filter results to this domain."
     ),
-    document_type: Optional[str] = typer.Option(
+    document_type: str | None = typer.Option(
         None, "--document-type", help="Filter results to this document_type."
     ),
-    min_quality_score: Optional[float] = typer.Option(
+    min_quality_score: float | None = typer.Option(
         None, "--min-quality-score", help="Filter results to quality_score >= this value."
     ),
-    source_name: Optional[str] = typer.Option(
+    source_name: str | None = typer.Option(
         None, "--source-name", help="Filter results to this source name."
     ),
-    format: Optional[str] = typer.Option(
+    format: str | None = typer.Option(
         None, "--format", help="Filter results to this source format (e.g. 'html', 'pdf')."
     ),
-    source_id: Optional[str] = typer.Option(
+    source_id: str | None = typer.Option(
         None, "--source-id", help="Filter results to this source ID."
     ),
-    tag: Optional[list[str]] = typer.Option(
+    tag: list[str] | None = typer.Option(
         None, "--tag",
         help="Filter results to chunks tagged with this tag (repeatable: --tag a --tag b uses OR logic)."
     ),
-    mode: Optional[str] = typer.Option(
+    mode: str | None = typer.Option(
         None, "--mode",
         help="Search mode: hybrid|dense|sparse (default from KLAKE_SEARCH__MODE, else hybrid)."
     ),
@@ -748,7 +747,7 @@ def cmd_reindex(
         typer.echo(f"  old_physical: {result.get('old_physical')}")
     except (ValueError, LookupError, RuntimeError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="lineage")
@@ -776,7 +775,7 @@ def cmd_lineage(
         nodes = resolve_ancestry(artifact_id)
     except (LookupError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     if as_json:
         typer.echo(nodes_to_json(nodes))
@@ -816,9 +815,9 @@ def cmd_demo(
 
     This is the smoke test that proves the walking skeleton end-to-end (D-03).
     """
+    from knowledge_lake.lineage import render_tree, resolve_ancestry
     from knowledge_lake.pipeline.run import run_document
     from knowledge_lake.pipeline.search import search as do_search
-    from knowledge_lake.lineage import nodes_to_json, render_tree, resolve_ancestry
 
     typer.echo("=" * 60)
     typer.echo("Knowledge Lake — End-to-End Demo")
@@ -914,7 +913,7 @@ def cmd_export(
         ...,
         help="Export kind: 'rag-corpus' (Parquet), 'pretrain' (JSONL), or 'finetune' (JSONL).",
     ),
-    dataset_name: Optional[str] = typer.Option(
+    dataset_name: str | None = typer.Option(
         None,
         "--dataset-name",
         "-d",
@@ -958,12 +957,12 @@ def cmd_export(
             result = export_finetune_dataset(dataset_name)
     except TrainEvalContaminationError as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
-    typer.echo(f"Export complete:")
+    typer.echo("Export complete:")
     typer.echo(f"  dataset_id:  {result['dataset_id']}")
     typer.echo(f"  storage_uri: {result['storage_uri']}")
     typer.echo(f"  row_count:   {result['row_count']}")
@@ -1003,7 +1002,7 @@ def cmd_init(
         result = load_domain(domain)
     except (FileNotFoundError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     typer.echo(f"Registered {result['loaded_count']} sources from {domain} pack.")
     if result["skipped_count"] > 0:
@@ -1035,13 +1034,13 @@ def cmd_index(
         typer.echo(f"  old_physical: {result.get('old_physical')}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command(name="set-schedule")
 def cmd_set_schedule(
     source_id: str = typer.Argument(..., help="Source ID to update."),
-    cron: Optional[str] = typer.Option(
+    cron: str | None = typer.Option(
         None, "--cron", help="5-field UTC cron string (e.g. '0 3 * * *')."
     ),
     clear: bool = typer.Option(False, "--clear", help="Clear the crawl schedule."),
@@ -1088,7 +1087,7 @@ def cmd_mcp(
     sse: bool = typer.Option(
         False, "--sse", help="Serve over Streamable HTTP instead of stdio."
     ),
-    port: Optional[int] = typer.Option(
+    port: int | None = typer.Option(
         None,
         "--port",
         help="HTTP port (localhost only, --sse mode). Defaults to settings.mcp.port.",

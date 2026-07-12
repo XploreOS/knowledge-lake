@@ -23,6 +23,7 @@ Security:
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import sys
 import threading
@@ -48,7 +49,7 @@ class SSRFGuardMiddleware:
     """
 
     @classmethod
-    def from_crawler(cls, crawler: Any) -> "SSRFGuardMiddleware":
+    def from_crawler(cls, crawler: Any) -> SSRFGuardMiddleware:
         return cls()
 
     def process_request(self, request: Any, spider: Any) -> None:
@@ -105,7 +106,7 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         """Close the spider once max_pages completed pages have been written."""
 
         @classmethod
-        def from_crawler(cls, crawler: Any) -> "MaxPagesExtension":
+        def from_crawler(cls, crawler: Any) -> MaxPagesExtension:
             ext = cls()
             ext.crawler = crawler
             return ext
@@ -176,10 +177,9 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
             # H-04 fix: extract HTTP status from HttpError responses (e.g. 429, 403)
             # so the adapter can trigger CRAWL-03 adaptive backoff on rate-limited hosts.
             http_status_code: int | None = None
-            try:
+            # Non-HTTP failure (e.g. DNS error, timeout) — no status available
+            with contextlib.suppress(AttributeError):
                 http_status_code = failure.value.response.status
-            except AttributeError:
-                pass  # Non-HTTP failure (e.g. DNS error, timeout) — no status available
             _write_result(
                 {
                     "url": url,
@@ -234,13 +234,16 @@ def _run_scrapy(source_url: str, out_jsonl: str, config: dict[str, Any]) -> None
         "STATS_DUMP": False,
     }
 
+    _out_file = None
     try:
-        _out_file = open(out_jsonl, "w", encoding="utf-8")  # noqa: WPS515
+        # SIM115: the file must stay open across the blocking process.start()
+        # call and is deterministically flushed/closed in the finally block.
+        _out_file = open(out_jsonl, "w", encoding="utf-8")  # noqa: SIM115
         process = CrawlerProcess(settings=settings_dict)
         process.crawl(KlakeSpider)
         process.start()  # blocks until done — safe because this IS the reactor's lifetime
     finally:
-        if _out_file and not _out_file.closed:
+        if _out_file is not None and not _out_file.closed:
             _out_file.flush()
             _out_file.close()
 

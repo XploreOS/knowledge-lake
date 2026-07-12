@@ -22,9 +22,9 @@ No core code edits required (FOUND-08, D-11).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
-
+from typing import Any, Protocol, runtime_checkable
 
 # ---------------------------------------------------------------------------
 # Shared data structures
@@ -99,7 +99,7 @@ class VectorPoint:
     payload: dict[str, Any] = field(default_factory=dict)
     """Metadata payload. Must include: document, section_path, page, chunk_id."""
 
-    sparse: Optional[Any] = None
+    sparse: Any | None = None
     """Optional BM25 sparse vector for named collections (RETR-01, D-09).
 
     Carries the Qdrant SparseVector (indices + values) produced by the fastembed
@@ -327,10 +327,10 @@ class VectorStorePlugin(Protocol):
         collection: str,
         query: list[float],
         top_k: int,
-        query_filter: Optional[Any] = None,
+        query_filter: Any | None = None,
         *,
         mode: str = "dense",
-        sparse_query: Optional[Any] = None,
+        sparse_query: Any | None = None,
         offset: int = 0,
     ) -> list[Hit]:
         """Perform approximate nearest-neighbour search.

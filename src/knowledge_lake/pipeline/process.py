@@ -10,14 +10,13 @@ guard, PAYLOAD-01).
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
 
 def process_crawled(
     *,
-    source_id: Optional[str] = None,
+    source_id: str | None = None,
     limit: int = 100,
     collection: str = "klake_chunks",
 ) -> dict:
@@ -47,14 +46,14 @@ def process_crawled(
         for unexpected errors; expected per-doc failures are caught, counted, and
         included in ``"failed"``.
     """
-    from sqlalchemy import select, and_
+    from sqlalchemy import and_, select
     from sqlalchemy.orm import aliased
 
-    from knowledge_lake.pipeline.parse import parse
     from knowledge_lake.pipeline.chunk import chunk
     from knowledge_lake.pipeline.embed import embed
     from knowledge_lake.pipeline.index import index
     from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
+    from knowledge_lake.pipeline.parse import parse
     from knowledge_lake.registry.db import get_session
     from knowledge_lake.registry.models import Artifact
 

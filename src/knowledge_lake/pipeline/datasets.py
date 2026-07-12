@@ -34,7 +34,6 @@ Security (AI-SPEC Section 4b, T-05-04):
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError
@@ -43,8 +42,8 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.llm.pricing import bootstrap_llm_pricing, compute_call_cost
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
-from knowledge_lake.registry.db import get_session
 from knowledge_lake.registry import repo as registry_repo
+from knowledge_lake.registry.db import get_session
 from knowledge_lake.storage.s3 import StorageBackend
 
 log = structlog.get_logger(__name__)
@@ -252,7 +251,7 @@ def generate_qa_example(
     chunk_id: str,
     dataset_name: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Generate a citation-grounded Q&A pair from a chunk artifact (DATA-01).
 
@@ -387,7 +386,7 @@ def generate_instruction_example(
     enriched_document_id: str,
     dataset_name: str,
     *,
-    settings: Optional[Settings] = None,
+    settings: Settings | None = None,
 ) -> dict:
     """Generate an instruction-tuning pair from an enriched_document artifact (DATA-02).
 

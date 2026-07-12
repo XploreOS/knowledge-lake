@@ -21,7 +21,7 @@ from pathlib import Path
 
 import structlog
 
-from knowledge_lake.plugins.protocols import ParsedDoc, ParserPlugin, Section
+from knowledge_lake.plugins.protocols import ParsedDoc, Section
 
 log = structlog.get_logger(__name__)
 
@@ -118,8 +118,8 @@ class DoclingParser:
         Docling auto-detects format from file suffix for HTML/DOCX/MD/CSV/XLSX.
         """
         if mime_type == "application/pdf":
-            from docling.document_converter import DocumentConverter, PdfFormatOption
             from docling.datamodel.pipeline_options import PdfPipelineOptions
+            from docling.document_converter import DocumentConverter, PdfFormatOption
 
             pipeline_options = PdfPipelineOptions(do_ocr=False, do_table_structure=False)
             converter = DocumentConverter(

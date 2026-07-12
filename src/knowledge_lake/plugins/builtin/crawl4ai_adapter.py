@@ -24,8 +24,8 @@ from typing import Any
 
 import structlog
 
-from knowledge_lake.pipeline.ingest import validate_public_url, MAX_DOWNLOAD_BYTES
-from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult, CrawlerPlugin
+from knowledge_lake.pipeline.ingest import MAX_DOWNLOAD_BYTES, validate_public_url
+from knowledge_lake.plugins.protocols import CrawlJob, CrawlPageResult
 
 log = structlog.get_logger(__name__)
 
@@ -102,7 +102,7 @@ class Crawl4AIAdapter:
         # SSRF guard — MUST run before any fetch (T-02-09, Pitfall 2)
         validate_public_url(url)
 
-        from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
+        from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig
 
         config = CrawlerRunConfig(
             check_robots_txt=True,
@@ -158,7 +158,7 @@ class Crawl4AIAdapter:
             )
 
         markdown_text = str(result.markdown) if result.markdown else ""
-        fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        fetched_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         log.info(
             "crawl4ai.page_complete",

@@ -21,8 +21,8 @@ For tests or Dagster assets that need a custom engine, monkey-patch ``get_engine
 from __future__ import annotations
 
 import threading
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine

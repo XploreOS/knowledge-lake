@@ -26,11 +26,9 @@ Auto-selection heuristic (D-04):
 from __future__ import annotations
 
 import logging
-from typing import Optional
 from urllib.parse import urljoin
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +80,7 @@ def _looks_like_spa(html: str) -> bool:
 
 def select_crawler(
     url: str,
-    html: Optional[str] = None,
+    html: str | None = None,
     has_sitemap: bool = False,
 ) -> str:
     """Select the appropriate crawler adapter name for a URL.
@@ -224,8 +222,9 @@ def probe_site(url: str) -> tuple[str, bool]:
     ValueError
         If url fails SSRF validation (private IP, non-https).
     """
-    from knowledge_lake.pipeline.ingest import validate_public_url
     from urllib.parse import urlparse
+
+    from knowledge_lake.pipeline.ingest import validate_public_url
 
     # SSRF guard BEFORE any fetch (T-02-15)
     validate_public_url(url)

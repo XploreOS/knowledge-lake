@@ -34,9 +34,8 @@ The CLI/API surface is NOT affected by adding these assets (D-02):
   All three call the pipeline functions directly; Dagster is an additional execution path.
 """
 
-import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import structlog
 from dagster import AssetSelection, Backoff, Config, RetryPolicy, asset, define_asset_job
@@ -75,13 +74,13 @@ class IngestConfig(Config):
     must be provided. When both are absent the asset raises ValueError.
     """
 
-    fixture_path: Optional[str] = None
+    fixture_path: str | None = None
     """Local file path for hermetic fixture testing (D-05)."""
 
-    url: Optional[str] = None
+    url: str | None = None
     """https:// URL to ingest (SSRF-checked inside pipeline.ingest.ingest_url)."""
 
-    source_name: Optional[str] = None
+    source_name: str | None = None
     """Human-readable name for the source registry entry."""
 
     collection: str = DEFAULT_COLLECTION
