@@ -1,5 +1,22 @@
 # Milestones
 
+## v2.0 Agent-Ready Lake (Shipped: 2026-07-12)
+
+**Phases completed:** 6 phases, 38 plans, 60 tasks
+
+**Key accomplishments:**
+
+- **Metadata Foundation (P7 · PAYLOAD-01/02):** Every indexed chunk carries an expanded Qdrant payload (`source_id`, `source_name`, `source_url`, `format`, `tags`, `title`, `organization`) backed by keyword payload indexes — enabling source/format/tag filtered search across both the CLI and the REST API, backward-compatible with existing points.
+- **Crawl Maturation (P8 · CRAWL-01/02/03, ENRICH-07, INGEST-10):** Per-source crawl config, `klake crawl-all` batch crawling, adaptive rate limiting (429/403 exponential backoff + per-host cooldown, floored by robots.txt crawl-delay), truncation-resilient LLM enrichment (finish_reason-driven longest-valid-prefix recovery, never cached as complete), and linked-doc (`.pdf`/`.docx`) ingestion with an SSRF guard on every followed link and a bounded, deduped frontier.
+- **Storage Segmentation (P9 · STORE-01/02/03):** Domain/source-scoped S3 keys `{zone}/{domain}/{source_id}/{hash}.{ext}` with an `_unclassified` fallback, best-effort S3 object tagging, and gold-zone segmentation by domain + dataset type — all forward-only, preserving WORM raw immutability and content-addressed dedup/lineage.
+- **Hybrid Retrieval (P10 · RETR-01/03):** Hybrid BM25 + dense search via Qdrant named sparse/dense vectors with server-side RRF fusion, delivered through a zero-downtime alias-swap **re-embedding** reindex gated by a point-count parity check; `KLAKE_SEARCH__MODE=hybrid|dense|sparse` fails loud on absent vectors rather than silently degrading.
+- **Crawl Scheduling (P11 · SCHED-01/02):** A Dagster sensor drives cron-scheduled re-crawl with a normalized silver-text change gate (inline timestamps/UUIDs/nonces suppressed so the WORM raw zone doesn't thrash), a max-staleness backstop, deterministic `run_key` + cursor watermark, and per-source `QueuedRunCoordinator` concurrency for tick-storm safety.
+- **Agent Surfaces (P12 · MCP-01/02, SKILL-01/02/03):** A curated MCP server over stdio + Streamable HTTP exposing 11 intent-level tools as thin shims over `pipeline/*.py` (never proxying REST), four Claude Code skills, and OpenAPI + OpenAI tool defs generated from a single Pydantic schema source of truth — `stdio == http == openapi == openai`, proven by a parity gate.
+
+**Quality gates:** all 6 phases verified `passed` (19/19 requirements), threat-secured (`threats_open: 0` across the milestone), and Nyquist-compliant. Milestone audit: PASSED.
+
+---
+
 ## v1.0 Knowledge Lake Framework MVP (Shipped: 2026-07-07)
 
 **Phases completed:** 6 phases, 25 plans, 25 tasks

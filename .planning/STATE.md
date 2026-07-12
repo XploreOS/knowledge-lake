@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — Agent-Ready Lake
-current_phase: 12
-status: executing
+current_phase: 0
+status: Awaiting next milestone
 stopped_at: Completed 12-01 Wave 0 scaffold
-last_updated: "2026-07-11T18:42:29.523Z"
-last_activity: 2026-07-11
-last_activity_desc: Phase 12 complete
+last_updated: "2026-07-12T13:54:05.178Z"
+last_activity: 2026-07-12
+last_activity_desc: Milestone v2.0 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
@@ -21,19 +21,17 @@ current_phase_name: agent-surfaces
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-08)
+See: .planning/PROJECT.md (updated 2026-07-12)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 12 — agent-surfaces
+**Current focus:** Planning next milestone (v2.0 Agent-Ready Lake shipped 2026-07-12) — run `/gsd-new-milestone`
 
 ## Current Position
 
-Phase: 12
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-11 — Phase 12 complete
-
-Progress: [██████████] 100% (phase 11)
+Phase: Milestone v2.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-12 — Milestone v2.0 completed and archived
 
 ## Performance Metrics
 
@@ -254,4 +252,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Plan the first v2.0 phase with `/gsd-plan-phase 7`
+- Start the next milestone with /gsd-new-milestone

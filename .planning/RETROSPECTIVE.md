@@ -56,6 +56,57 @@
 
 ---
 
+## Milestone: v2.0 — Agent-Ready Lake
+
+**Shipped:** 2026-07-12
+**Phases:** 6 (7–12) | **Plans:** 38 | **Timeline:** 5 days (2026-07-08 → 2026-07-12) | **Commits:** 252 (61 feat)
+
+### What Was Built
+
+- **Metadata + filtered search (P7):** expanded Qdrant payload (7 provenance fields) + keyword payload indexes; source/format/tag filters across CLI + REST
+- **Crawl maturation (P8):** per-source config, `crawl-all`, adaptive rate limiting, truncation-resilient enrichment, linked-doc ingest with SSRF guard + bounded frontier
+- **Storage segmentation (P9):** domain/source-scoped S3 keys + object tags + gold-zone segmentation — forward-only, WORM-safe
+- **Hybrid retrieval (P10):** BM25 + dense named vectors with server-side RRF, re-embedding alias-swap reindex with count-parity gate, fail-loud mode switch
+- **Crawl scheduling (P11):** Dagster re-crawl sensor with normalized-text change gate, tick-storm dedup, per-source concurrency
+- **Agent surfaces (P12):** curated MCP server (stdio + Streamable HTTP), 11 tools, 4 Claude skills, OpenAPI + OpenAI defs from one schema source (parity-gated)
+
+### What Worked
+
+- **STRIDE threat register authored at plan time:** every PLAN carried a `<threat_model>` block, so retroactive `/gsd-secure-phase` was a cheap grep-verification (all mitigations found in code) rather than a rediscovery — 6 SECURITY.md files, `threats_open: 0`, in one pass
+- **Wave-0 RED scaffolds again paid off:** most xfail stubs flipped to XPASS on execution; the requirement→test contract in each plan-time VALIDATION.md made `/gsd-validate-phase` a straight audit
+- **Single schema source of truth:** `model_json_schema()` → OpenAPI/OpenAI/MCP with a parity gate proved `stdio==http==openapi==openai` by construction — no surface drift
+- **Forward-only changes:** domain-scoped S3 keys and additive Alembic migrations meant zero data-migration risk
+- **Integration carry-forward:** the re-audit proved `git diff -- src/` empty since the prior audit, so "all seams wired" carried forward with evidence instead of a redundant cold checker run
+
+### What Was Inefficient
+
+- **Quality gates run retroactively, not per-phase:** `/gsd-secure-phase` and `/gsd-validate-phase` weren't run during execution, so phases 7–11 shipped with `nyquist_compliant: false` drafts and no SECURITY.md — forcing a milestone re-audit after the fact. The `verify:post` hooks exist to run these inline; enabling them per-phase would have avoided the rework
+- **A self-fulfilling xfail masked a real defect:** `test_hybrid_prefetch_limits` (`xfail(strict=False)`) silently XFAILed on a test-wiring bug while the D-12 prefetch guard went unasserted; the P10 verifier logged it as a "Known Limitation" but nobody fixed it until validate-phase
+- **Dagster code-location staleness recurred:** the running daemon still holds pre-phase-11 definitions (needs a reload) — the same v1.0-era issue, now in project memory
+- **Live-service E2E still unrunnable here:** Postgres/MinIO/Qdrant absent, so STORE/PAYLOAD/RETR/SCHED live paths and the P10/P11 integration suites are gated, not green
+
+### Patterns Established
+
+- **Threat model in PLAN.md:** a STRIDE register per plan turns security verification into mechanical grep-matching later
+- **Requirement→test contract in VALIDATION.md at plan time:** binds each REQ-ID to a concrete test + command before code exists; validate-phase just confirms green
+- **Gate-local normalization:** suppress volatile tokens (timestamps/UUIDs/nonces) inside the change gate rather than mutating shared `clean.py` — keeps the WORM signature stable without redesigning the silver stage
+- **Parity gate across surfaces:** assert generated schemas are byte-equal across transports to prevent drift
+
+### Key Lessons
+
+1. **Run secure/validate gates per-phase, not at milestone close.** The `verify:post` hooks are there for a reason — retroactive gating works but forces a re-audit.
+2. **`xfail(strict=False)` can hide a genuinely failing test.** Audit xfails at phase verification; once behavior lands, remove the marker (or use strict xfail) so the assertion actually guards.
+3. **Author the STRIDE register at plan time.** It makes retroactive security verification cheap and turns "is it mitigated?" into "grep for the control."
+4. **Carry forward a verified integration result when inputs are provably unchanged.** An empty `git diff -- src/` since the last check is stronger evidence than re-deriving the same conclusion with a cold subagent.
+
+### Cost Observations
+
+- Model: Opus 4.8 for orchestration and all quality-gate work this session
+- 252 commits over 5 days; 38 plans across 6 phases; retroactive secure + validate + re-audit completed in a single session
+- Notable: authoring threat models and validation contracts at plan time made the retroactive gates fast — most of the cost was verification, not rediscovery
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -63,15 +114,19 @@
 | Milestone | Phases | Plans | Key Change |
 |-----------|--------|-------|------------|
 | v1.0 | 6 | 25 | First milestone — GSD auto-chain established; TDD wave-0 pattern validated |
+| v2.0 | 6 | 38 | Plan-time threat models + validation contracts; single schema source across agent surfaces; quality gates run retroactively (lesson: run inline) |
 
 ### Cumulative Quality
 
-| Milestone | Unit Tests | xpassed | Zero regressions |
-|-----------|------------|---------|-----------------|
-| v1.0 | 324 | 20 | ✓ all phases passed |
+| Milestone | Unit Tests | xpassed | Zero regressions | Secured | Nyquist |
+|-----------|------------|---------|-----------------|---------|---------|
+| v1.0 | 324 | 20 | ✓ all phases passed | — | — |
+| v2.0 | 522 | 39 | ✓ all phases passed | 6/6 (`threats_open: 0`) | 6/6 compliant |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. **Wire params end-to-end — function signatures aren't enough.** (v1.0)
 2. **Shared test state causes false negatives.** Plan for isolation from the start. (v1.0)
 3. **Integration checker catches what unit tests and phase verifiers miss.** Always audit cross-phase wiring before milestone close. (v1.0)
+4. **Run quality gates (secure/validate) per-phase, not retroactively.** Plan-time threat models + validation contracts make them cheap — but only if run inline via `verify:post`. (v2.0)
+5. **`xfail(strict=False)` can mask a real failure.** Audit xfails at verification; a self-fulfilling stub is worse than no test. (v2.0)

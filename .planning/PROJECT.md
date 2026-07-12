@@ -8,27 +8,26 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v1.0 — shipped 2026-07-07)
+## Current State (v2.0 — shipped 2026-07-12)
 
-- **Version:** v2.0 — Agent-Ready Lake (all phases 7–12 complete 2026-07-11; milestone ready to ship)
-- **Source lines:** ~17,500 Python
-- **Tests:** 383 unit + integration + e2e
+- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); milestone audit PASSED (19/19 requirements)
+- **Source lines:** ~21,300 Python
+- **Tests:** 522 unit passing (+39 xpass, 1 intentional xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
 - **Pipeline:** ingest → parse → clean → chunk → enrich → embed → index → curate → generate-dataset → export
-- **CLI commands:** 20 (`klake` Typer app)
-- **API endpoints:** 26 (FastAPI, Swagger at /docs)
-- **Domain packs:** 1 (healthcare, 28 curated sources)
-- **Dagster assets:** 12, all with RetryPolicy
-- **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster requires container rebuild
+- **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
+- **Retrieval:** hybrid BM25 + dense with server-side RRF fusion, mode-switchable (`hybrid|dense|sparse`, fail-loud)
+- **Scheduling:** Dagster re-crawl sensor with normalized silver-text change gate + tick-storm dedup
+- **Storage:** domain/source-scoped S3 keys + object tags; gold zone segmented by domain × dataset type
+- **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode`, `reindex --hybrid`
+- **API:** FastAPI (Swagger at /docs) extended with `/crawl-all` and mode-aware search
+- **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
+- **Quality gates:** all 6 phases verified `passed`, threat-secured (`threats_open: 0`), Nyquist-compliant
+- **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster container rebuild / code-location reload for new sensors; live-service E2E paths not exercised in this env
 
-## Current Milestone: v2.0 Agent-Ready Lake
+## Next Milestone (planning)
 
-**Goal:** Mature the v1.0 pipeline into an agent-consumable, self-maintaining knowledge lake — richer searchable metadata, domain-segmented storage, MCP/skill interfaces for AI agents, scheduled re-crawls, and hybrid retrieval.
-
-**Target features:**
-- **Metadata & Crawl Maturation** — expanded Qdrant payload + search filters, per-source crawl config, `crawl-all` batch command, adaptive rate limiting, partial-JSON enrichment recovery, PDF/doc ingest from crawled pages
-- **MinIO Domain Segmentation** — domain/source-scoped S3 keys, object tagging on every write, gold-zone segmentation by domain and dataset type
-- **AI Agent Skills** — MCP server (stdio + SSE), `klake mcp` command, Claude Code skills, static OpenAPI + OpenAI-format tool definitions
-- **Crawl Scheduling + Hybrid Search** — Dagster re-crawl sensor, content-hash change detection, hybrid BM25 + dense search with RRF fusion, configurable search mode
+v2.0 is shipped. Candidate scope for the next version is captured under **Deferred to v2.1** below.
+Run `/gsd-new-milestone` to define it (questioning → research → requirements → roadmap).
 
 ## Requirements
 
@@ -146,6 +145,13 @@ Every domain resource ingested must be traceable from raw source through every t
 | Typer downgraded to <0.25.0 | docling-core has a conflicting dependency on typer | ⚠ Revisit — upgrade when docling drops the pin |
 | uuid-utils approved (not uuid6) | PyPI legitimacy verified by human gate | ✓ — isolated to ids.py for easy stdlib swap in Python 3.14 |
 | Domain convention over plugin entry-points | Zero core code changes per new domain pack | ✓ Validated — `domains/{name}/` convention proven by healthcare pack |
+| Qdrant native sparse+dense + server-side RRF over a second search engine (OpenSearch) | Avoids operating a second engine; RRF fusion runs in Qdrant ≥1.10 | ✓ Validated (v2.0) — hybrid search live, old `RETR-02` OpenSearch req superseded |
+| Re-embedding reindex with count-parity gate (not a pure copy) for hybrid migration | Every point must gain a sparse vector; alias holds old collection until parity passes | ✓ Validated (v2.0) — zero-downtime alias swap, reversible on mismatch |
+| MCP tools as thin shims over `pipeline/*.py`, never proxying REST | One tool registry shared across stdio/HTTP/OpenAPI/OpenAI; no surface drift | ✓ Validated (v2.0) — parity gate proves `stdio==http==openapi==openai` |
+| MCP Streamable HTTP (not deprecated HTTP+SSE); `--sse` kept as flag name | Legacy HTTP+SSE transport deprecated in current MCP spec | ✓ Validated (v2.0) — localhost bind + Host guard + closed CORS + optional bearer |
+| Re-crawl change gate over normalized silver text, not raw bytes | Dynamic timestamps/nonces must not thrash the WORM raw zone; max-staleness backstop | ✓ Validated (v2.0) — inline timestamp/UUID/nonce suppression, meaningful dates survive |
+| Dagster vendored cron (`dagster._utils.schedules`), no standalone `croniter` | Avoids a SUS-flagged dependency; engine already in-tree | ⚠ Revisit — private import, no stability guarantee across Dagster minors |
+| Forward-only domain-scoped S3 keys (no backfill of existing raw objects) | Rewriting raw keys violates WORM immutability | ✓ Validated (v2.0) — `_unclassified` fallback, dedup/lineage preserved |
 
 ## Evolution
 
@@ -154,4 +160,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-11 after Phase 12 (Agent Surfaces) complete — v2.0 milestone fully executed*
+*Last updated: 2026-07-12 after v2.0 milestone (Agent-Ready Lake) shipped — audit PASSED, all phases secured + Nyquist-compliant*
