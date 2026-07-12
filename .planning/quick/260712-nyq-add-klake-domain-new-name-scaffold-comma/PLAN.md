@@ -4,7 +4,7 @@ quick_id: 260712-nyq
 slug: add-klake-domain-new-name-scaffold-comma
 date: 2026-07-12
 branch: feat/klake-domain-new
-status: in-progress
+status: complete
 ---
 
 # Quick Task: `klake domain new <name>` scaffold command
