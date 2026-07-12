@@ -40,7 +40,7 @@ class DomainLoader:
       - self.manifest  — DomainManifest (name, version, description)
       - self.sources   — list[SourceEntry] (from sources.yaml)
       - self.taxonomy  — dict (from taxonomy.yaml — raw for flexibility)
-      - self.validator — HealthcareValidator() instance (from validators/validate.py)
+      - self.validator — the pack's *Validator instance (from validators/validate.py)
       - self.render_prompt(name, **kwargs) — renders a Jinja2 .j2 template from prompts/
 
     All YAML is loaded via yaml.safe_load (never yaml.load) per T-06-04.
@@ -122,7 +122,29 @@ class DomainLoader:
         except Exception:
             sys.modules.pop(module_name, None)
             raise
-        self.validator = mod.HealthcareValidator()
+
+        # Resolve the validator class generically (domain-agnostic): pick the
+        # class defined in validate.py whose name ends with "Validator" and that
+        # exposes a callable validate_document(). This avoids hardcoding any one
+        # domain's class name (e.g. HealthcareValidator) so scaffolded packs and
+        # third-party domains load without renaming their validator (DOMAIN-01).
+        validator_cls: type | None = None
+        for attr_name in dir(mod):
+            candidate = getattr(mod, attr_name)
+            if (
+                isinstance(candidate, type)
+                and getattr(candidate, "__module__", None) == module_name
+                and attr_name.endswith("Validator")
+                and callable(getattr(candidate, "validate_document", None))
+            ):
+                validator_cls = candidate
+                break
+        if validator_cls is None:
+            raise ImportError(
+                "validators/validate.py must define a class named '*Validator' with a "
+                f"validate_document() method (domain pack: {domain_dir})"
+            )
+        self.validator = validator_cls()
 
     def render_prompt(self, template_name: str, **kwargs: Any) -> str:
         """Render a Jinja2 prompt template from the domain pack's prompts/ directory.
