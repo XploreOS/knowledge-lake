@@ -9,7 +9,10 @@ guard, PAYLOAD-01).
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 
 def process_crawled(
@@ -112,6 +115,10 @@ def process_crawled(
             processed += 1
             total_chunks += len(chunks_list)
         except Exception:
+            # Keep the batch resilient but observable: record the artifact id,
+            # exception type, and traceback so a systemic outage (Qdrant down,
+            # OOM in embed) is diagnosable rather than a bare ``failed`` count.
             failed += 1
+            log.warning("process_crawled: doc %s failed", raw_id, exc_info=True)
 
     return {"processed": processed, "chunks_indexed": total_chunks, "failed": failed}
