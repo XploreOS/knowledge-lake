@@ -437,6 +437,62 @@ def enrich_document(
 
 
 @asset(
+    group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
+    description=(
+        "Generate a hierarchical tree index from a cleaned document (TREE-01/TREE-05). "
+        "Fan-out branch off clean_document parallel to chunk_document. "
+        "Thin shell over pipeline.tree_index.tree_index(). "
+        "Requires Dagster code-location reload to appear in live daemon."
+    ),
+)
+def tree_index_document(
+    clean_document: dict[str, Any],
+    postgres: PostgresResource,
+    minio: MinIOResource,
+    litellm: LiteLLMResource,
+) -> dict[str, Any]:
+    """Tree-index stage: cleaned_document → tree index artifact.
+
+    Receives the clean_document output dict and returns the tree_index()
+    result dict (artifact_id, cached, status).
+
+    Parallel fan-out branch off clean_document — same dependency as
+    chunk_document and enrich_document; neither blocks the other (TREE-05).
+    """
+    from knowledge_lake.config.settings import Settings, StorageSettings
+    from knowledge_lake.pipeline.tree_index import tree_index
+
+    parsed_artifact_id = clean_document["parsed_artifact_id"]
+    source_id = clean_document["source_id"]
+    doc = clean_document["parsed_doc"]
+
+    settings = Settings(
+        database_url=postgres.database_url,
+        storage=StorageSettings(
+            endpoint_url=minio.endpoint_url,
+            bucket=minio.bucket,
+            access_key_id=minio.access_key_id,
+            secret_access_key=minio.secret_access_key,
+            region=minio.region,
+        ),
+        litellm_url=litellm.litellm_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.tree_index_document.start", parsed_artifact_id=parsed_artifact_id)
+
+    result = tree_index(parsed_artifact_id, source_id, doc, settings=settings)
+
+    log.info(
+        "dagster.tree_index_document.complete",
+        status=result.get("status"),
+        cached=result.get("cached"),
+    )
+    return result
+
+
+@asset(
     description=(
         "Embed chunk texts into dense vectors using the configured embedder plugin. "
         "Calls pipeline.embed.embed — no logic duplicated."
