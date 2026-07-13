@@ -100,6 +100,7 @@ def parse_with_fallback(
     Raises:
         ValueError: If all parsers in chain are exhausted without success.
     """
+    from knowledge_lake.quality.challenge import is_challenge_page
     from knowledge_lake.quality.scorer import compute_quality_score, maybe_llm_spot_check
 
     tried: list[str] = []
@@ -144,6 +145,26 @@ def parse_with_fallback(
                 exc_info=True,
             )
             continue
+
+        # Step 3b: Deterministic anti-bot/CAPTCHA challenge-page gate (Finding 3,
+        # T-QF-01). A challenge interstitial (Cloudflare "Just a moment", CAPTCHA,
+        # Akamai/Incapsula block) often scores ABOVE the quality threshold, so it
+        # must be rejected BEFORE scoring — regardless of score — so it never
+        # reaches chunk/embed/index. Rejection raises (not a fallback) because a
+        # challenge page is not a parser failure another parser could recover.
+        challenge_reason = is_challenge_page(parsed_doc.text)
+        if challenge_reason is not None:
+            log.warning(
+                "parse_with_fallback.challenge_page_rejected",
+                parser_name=parser_name,
+                mime_type=mime_type,
+                reason=challenge_reason,
+            )
+            raise ValueError(
+                f"Rejected anti-bot/challenge page (parser={parser_name!r}, "
+                f"mime_type={mime_type!r}): {challenge_reason}. "
+                "Challenge/CAPTCHA pages are never indexed."
+            )
 
         # Step 4: Compute deterministic heuristic quality score
         score = compute_quality_score(parsed_doc, mime_type, settings)

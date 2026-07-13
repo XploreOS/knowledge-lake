@@ -254,6 +254,7 @@ async def crawl_source(
     crawler: str | None = None,
     settings: Settings | None = None,
     max_pages: int | None = None,
+    domain: str | None = None,
 ) -> dict[str, Any]:
     """Crawl a source URL end-to-end: fetch pages, write raw+bronze, track state.
 
@@ -273,6 +274,10 @@ async def crawl_source(
         crawler:    Override crawler adapter name (default: settings.crawler).
         settings:   Settings override (uses get_settings() if None).
         max_pages:  Override maximum pages to crawl (default: settings.crawl.max_pages).
+        domain:     Optional domain classification (Finding 2). Forwarded to
+                    register_source so raw/bronze artifacts land under {domain}/
+                    instead of _unclassified/. None stays backward-compatible.
+                    Unrelated to same-domain crawl-scope (seed_domain host scoping).
 
     Returns:
         dict with:
@@ -301,6 +306,7 @@ async def crawl_source(
     source_result = register_source(
         url=source_url,
         name=_name_from_url(source_url),
+        domain=domain,
     )
     source_id = source_result["source_id"]
 

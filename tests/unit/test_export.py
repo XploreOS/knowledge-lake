@@ -490,6 +490,125 @@ class TestRagCorpus:
             )
 
 
+    def test_rag_corpus_reads_chunk_text_from_storage_uri(self, session, source, engine):
+        """export_rag_corpus reads chunk text back from storage_uri (Finding 1 fix)."""
+        from knowledge_lake.registry import repo as registry_repo
+
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_uri_hash"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_uri_hash",
+        )
+        session.flush()
+        # Seed a chunk with storage_uri set, but NO "text" key in metadata_ (realistic)
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_uri_hash",
+            metadata={"is_table": False, "oversized": False},
+            storage_uri="s3://test-bucket/chunks/healthcare/src_abc/chunk_uri_hash.txt",
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        known_text = b"BDNF is a growth factor known for its influence on neuronal health."
+        written_data: dict[str, bytes] = {}
+
+        def mock_put_object(key, data, **kwargs):
+            written_data[key] = data
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = mock_put_object
+        mock_storage.get_object.return_value = known_text
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        from knowledge_lake.pipeline import export as export_module
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            result = export_module.export_rag_corpus(settings=settings)
+
+        assert result["row_count"] >= 1
+
+        import polars as pl
+
+        parquet_keys = [k for k in written_data if k.endswith(".parquet")]
+        assert len(parquet_keys) == 1
+        df = pl.read_parquet(io.BytesIO(written_data[parquet_keys[0]]))
+
+        rows = df.filter(pl.col("chunk_id") == chunk.id).to_dicts()
+        assert len(rows) == 1, "chunk should appear in rag-corpus export"
+        assert rows[0]["text"] == known_text.decode("utf-8"), (
+            "exported text must equal the text fetched from storage_uri, not empty"
+        )
+        # Verify the read-back path was actually invoked
+        mock_storage.get_object.assert_called()
+
+    def test_rag_corpus_storage_uri_none_degrades_to_empty(self, session, source, engine):
+        """export_rag_corpus degrades to '' without raising when storage_uri is None."""
+        from knowledge_lake.registry import repo as registry_repo
+
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="raw_none_hash"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="parsed_none_hash",
+        )
+        session.flush()
+        # Pre-fix chunk: no storage_uri, no "text" key in metadata_
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_none_hash",
+            metadata={"is_table": False, "oversized": False},
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+        written_data: dict[str, bytes] = {}
+
+        def mock_put_object(key, data, **kwargs):
+            written_data[key] = data
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = mock_put_object
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        from knowledge_lake.pipeline import export as export_module
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            result = export_module.export_rag_corpus(settings=settings)
+
+        assert result["row_count"] >= 1
+
+        import polars as pl
+
+        parquet_keys = [k for k in written_data if k.endswith(".parquet")]
+        assert len(parquet_keys) == 1
+        df = pl.read_parquet(io.BytesIO(written_data[parquet_keys[0]]))
+
+        rows = df.filter(pl.col("chunk_id") == chunk.id).to_dicts()
+        assert len(rows) == 1
+        assert rows[0]["text"] == "", (
+            "pre-fix chunk with no storage_uri must export as empty string, not raise"
+        )
+        # get_object should NOT have been called for a chunk with no storage_uri
+        mock_storage.get_object.assert_not_called()
+
+
 class TestNoDiskWrites:
     """PROJECT.md 'no local filesystem as production store' guard."""
 

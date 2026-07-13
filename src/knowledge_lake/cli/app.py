@@ -136,6 +136,13 @@ def cmd_discover(
     limit: int = typer.Option(
         20, "--limit", "-l", help="Maximum number of results (1–100).", min=1, max=100
     ),
+    domain: str | None = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="Domain classification for discovered sources (e.g. 'healthcare'). "
+        "Defaults to the active settings.domain.domain_name when omitted.",
+    ),
 ) -> None:
     """Discover candidate sources via meta-search and auto-register them.
 
@@ -143,10 +150,13 @@ def cmd_discover(
     Discovered sources have source_type='discovered' with minimal metadata
     (URL + title only, D-09).
     """
+    from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.discover import discover_sources
 
+    effective_domain = domain or get_settings().domain.domain_name
+
     try:
-        results = discover_sources(query=query, limit=limit)
+        results = discover_sources(query=query, limit=limit, domain=effective_domain)
     except (RuntimeError, LookupError, ValueError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -470,6 +480,13 @@ def cmd_crawl(
         min=1,
         max=10000,
     ),
+    domain: str | None = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="Domain classification for the crawled source (e.g. 'healthcare'). "
+        "Defaults to the active settings.domain.domain_name when omitted.",
+    ),
 ) -> None:
     """Crawl a public site into the lake: raw HTML + bronze markdown per page.
 
@@ -479,13 +496,17 @@ def cmd_crawl(
     """
     import asyncio
 
+    from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.crawl import crawl_source
+
+    effective_domain = domain or get_settings().domain.domain_name
 
     try:
         result = asyncio.run(crawl_source(
             url,
             crawler=crawler,
             max_pages=max_pages,
+            domain=effective_domain,
         ))
         typer.echo("Crawl complete:")
         typer.echo(f"  job_id:              {result['job_id']}")
