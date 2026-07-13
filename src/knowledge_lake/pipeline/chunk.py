@@ -37,8 +37,15 @@ from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
+from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
 
 log = structlog.get_logger(__name__)
+
+# Chunk-text zone prefix. Chunk text is a derived (silver-tier) artifact — it is
+# persisted so downstream stages (QA generation) can read grounded text back via
+# the artifact's storage_uri instead of relying on in-memory pipeline state.
+# Mirrors parse.py's _SILVER_PREFIX literal convention.
+_CHUNK_PREFIX = "chunks"
 
 # Module-level tiktoken encoder — instantiated once, never re-instantiated per call.
 # Avoidance of Pitfall 2 from RESEARCH.md: get_encoding() is expensive (~100ms); caching
@@ -277,6 +284,7 @@ def chunk(
           is_table, oversized
     """
     s = settings or get_settings()
+    storage = StorageBackend(s.storage)
 
     # Build raw chunks from sections using token-aware splitting
     raw_chunks = _build_token_chunks(
@@ -290,6 +298,14 @@ def chunk(
     results: list[dict] = []
 
     with get_session() as session:
+        # Resolve the domain segment and source name once before the loop.
+        # domain routes chunk text under {domain}/ (falling back to the shared
+        # _unclassified literal so parse.py/put_bronze/chunk all agree). source_name
+        # is carried into the object tags, mirroring parse.py's silver-zone tags.
+        domain = registry_repo.get_domain_for_source(session, source_id) or _UNCLASSIFIED_DOMAIN
+        source_obj = registry_repo.get_source(session, source_id)
+        source_name = source_obj.name if source_obj else "unknown"
+
         for raw in raw_chunks:
             text = raw["text"]
             section_path = raw["section_path"]
@@ -316,11 +332,29 @@ def chunk(
                 })
                 continue
 
+            # Persist the chunk text to the chunks storage zone so QA generation
+            # can read a grounded excerpt back via storage_uri (Finding 1). Only
+            # NEW chunks are written — the get_artifact_by_hash no-op branch above
+            # returns before reaching here, so existing chunk text is never rewritten.
+            chunk_key = f"{_CHUNK_PREFIX}/{domain}/{source_id}/{content_hash}.txt"
+            storage.put_object(
+                chunk_key,
+                text.encode("utf-8"),
+                tags={
+                    "domain": domain,
+                    "source_name": source_name,
+                    "format": "txt",
+                    "artifact_type": "chunk",
+                },
+            )
+            chunk_uri = storage.object_uri(chunk_key)
+
             artifact = registry_repo.create_chunk_artifact(
                 session,
                 source_id=source_id,
                 parent_artifact_id=parsed_artifact_id,
                 content_hash=content_hash,
+                storage_uri=chunk_uri,
                 mime_type="text/plain",
                 page_ref=page,
                 section_path=section_path,

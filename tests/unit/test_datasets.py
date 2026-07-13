@@ -324,6 +324,58 @@ def test_citation_chunk_id_never_llm_producible() -> None:
     )
 
 
+def test_qa_excerpt_read_back_from_storage_uri(engine, test_settings) -> None:
+    """Finding 1 regression: when a chunk artifact carries a storage_uri, the
+    excerpt sent to the LLM equals the text fetched from storage — proving the
+    QA prompt is grounded with non-empty chunk text (not the previously-empty
+    metadata excerpt).
+    """
+    import knowledge_lake.pipeline.datasets as datasets_module
+    from knowledge_lake.registry import repo as registry_repo
+
+    grounded_text = "Beriberi results from a thiamine (vitamin B1) deficiency."
+
+    # Seed a source -> parsed -> chunk chain where the chunk has a storage_uri
+    # but NO metadata text (mirrors real chunk() output post-fix).
+    with Session(engine) as session:
+        source = registry_repo.create_source(session, name="S", source_type="web")
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash="r_h", storage_uri="s3://b/raw/r.pdf"
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="p_h",
+            storage_uri="s3://b/silver/p.md",
+        )
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash="chunk_uri_h",
+            storage_uri="s3://b/chunks/healthcare/src/chunk_uri_h.txt",
+            metadata={"is_table": False},
+        )
+        session.commit()
+        chunk_id = chunk.id
+
+    # Patch StorageBackend so get_object returns the grounded chunk text
+    fake = MagicMock()
+    fake.get_object.return_value = grounded_text.encode("utf-8")
+    with patch.object(datasets_module, "StorageBackend", lambda *_a, **_k: fake):
+        mock_completion = MagicMock(return_value=_mock_llm_response(VALID_QA_PAYLOAD))
+        with patch("litellm.completion", mock_completion):
+            result = datasets_module.generate_qa_example(
+                chunk_id, "grounded-dataset", settings=test_settings
+            )
+
+    assert result["status"] == "generated"
+    # The user message content must contain the storage-fetched grounded text
+    user_msg = mock_completion.call_args.kwargs["messages"][1]["content"]
+    assert grounded_text in user_msg
+
+
 def test_llm_call_failure_is_skipped_not_raised(
     engine, seeded, fake_storage, test_settings
 ) -> None:

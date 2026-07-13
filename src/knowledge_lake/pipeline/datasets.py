@@ -273,6 +273,7 @@ def generate_qa_example(
         ValueError: If the chunk artifact does not exist or has the wrong type.
     """
     s = settings or get_settings()
+    storage = StorageBackend(s.storage)
 
     log.info("datasets.generate_qa.start", chunk_id=chunk_id, dataset_name=dataset_name)
 
@@ -288,10 +289,22 @@ def generate_qa_example(
                 f"generate_qa_example: artifact {chunk_id!r} has type "
                 f"{chunk.artifact_type!r}, expected 'chunk'"
             )
-        chunk_text = (chunk.metadata_ or {}).get("text", "") if chunk.metadata_ else ""
+        metadata_text = (chunk.metadata_ or {}).get("text", "") if chunk.metadata_ else ""
+        storage_uri = chunk.storage_uri
         content_hash = chunk.content_hash
 
-    # Step 2: Compute synthetic cache key and apply excerpt cap
+    # Step 2: Resolve the chunk text — prefer the persisted storage_uri (Finding 1)
+    # so the LLM receives a non-empty grounded excerpt. Falls back to metadata_ text
+    # then to empty string for pre-fix chunks that carry no storage_uri (graceful
+    # degradation — never raises).
+    chunk_text = metadata_text
+    if storage_uri:
+        try:
+            chunk_text = storage.get_object(_uri_to_key(storage_uri)).decode("utf-8")
+        except Exception:  # noqa: BLE001 — fall back to metadata text on any read failure
+            chunk_text = metadata_text or ""
+
+    # Compute synthetic cache key and apply excerpt cap
     synthetic_key = _dataset_gen_cache_key(content_hash, s.dataset.prompt_version)
     excerpt = chunk_text[: s.dataset.qa_excerpt_chars]
 
