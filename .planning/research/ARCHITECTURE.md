@@ -1,305 +1,563 @@
-# Architecture Research — v2.0 Feature Integration
+# Architecture Research — v2.5 PageIndex/OpenKB Integration
 
-**Domain:** Knowledge Lake Framework (`klake`) — v2.0 "Agent-Ready Lake" integration into shipped v1.0
-**Researched:** 2026-07-08
-**Confidence:** HIGH (grounded in direct reads of the shipped v1.0 source, not inferred — every integration point cites a real file/function)
+**Domain:** Knowledge Lake Framework (`klake`) — v2.5 "PageIndex Plugin Integration" into shipped v2.0
+**Researched:** 2026-07-13
+**Confidence:** HIGH (grounded in direct reads of the shipped v2.0 source; every integration point references a real file/function)
 
 ## Scope
 
-This document answers: *how does each NEW v2.0 feature bolt onto the existing, shipped architecture?* For each feature: integration point, new-vs-modified components, data-flow changes, and migration/back-compat. It closes with a dependency-aware build order for the roadmapper.
+This document answers: *How do PageIndex tree indexing, OpenKB wiki compilation, and two-stage query routing integrate with the existing Knowledge Lake architecture?*
 
-It is **not** a from-scratch architecture (that lives in `v1.0-research/ARCHITECTURE.md`). The v1.0 layering is taken as fixed:
+Specifically:
+1. Where does tree index generation fit in the asset DAG?
+2. How to store tree indexes (new artifact type? silver zone JSON?)
+3. New plugin protocols needed (IndexerPlugin? RetrieverPlugin?)
+4. Two-stage search: document-level Qdrant -> per-doc tree search
+5. OpenKB as a new export format
+6. Query router dispatch mechanism
+7. New Dagster assets/resources needed
+
+## Existing Architecture (v2.0 baseline)
 
 ```
 Typer CLI (cli/app.py)  ─┐
 FastAPI (api/app.py)     ─┼─►  pipeline/*.py service functions  ─►  plugins (resolver-keyed)  ─►  Postgres registry + S3 + Qdrant
 Dagster assets           ─┘        (ingest/parse/clean/chunk/            (parsers/crawlers/
-  (dagster_defs/assets.py)          enrich/curate/index/search/           embedders/vectorstore/
-                                    export/datasets)                      storage/discovery)
+MCP server (agent/)               enrich/curate/index/search/           embedders/vectorstore/
+                                   export/datasets)                      storage/discovery)
 ```
 
-**The load-bearing invariant (D-02):** CLI, API, and Dagster are three thin adapters over the SAME `pipeline/*.py` functions. No adapter re-implements business logic. Every v2.0 feature MUST preserve this — new surfaces (MCP) wrap existing functions; new behavior lands in `pipeline/` or `plugins/`, never in an adapter.
-
-## Standard Architecture (v2.0 target)
-
-### System Overview
-
+**Asset DAG (current):**
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          ADAPTER LAYER (thin)                          │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────┐  ┌─────────────────┐  │
-│  │ Typer CLI│  │ FastAPI  │  │  MCP server    │  │ Dagster assets  │  │
-│  │  +crawl- │  │ +filters │  │  (NEW)         │  │ +recrawl sensor │  │
-│  │  all,mcp,│  │ +openapi │  │  stdio + SSE   │  │  (NEW)          │  │
-│  │  openapi │  │  export  │  │  11 tools      │  │                 │  │
-│  └────┬─────┘  └────┬─────┘  └───────┬────────┘  └───────┬─────────┘  │
-│       └─────────────┴───────┬────────┴───────────────────┘            │
-├──────────────────────────────┼────────────────────────────────────────┤
-│                    pipeline/*.py  SERVICE FUNCTIONS                     │
-│  ingest  crawl  parse  clean  chunk  enrich  curate  index  search     │
-│  export  datasets   crawl_all(NEW)   (all reused unchanged by MCP)     │
-├──────────────────────────────┬─────────────────────────────────────────┤
-│                       PLUGINS (resolver-keyed)                          │
-│  parsers │ crawlers(+adaptive) │ embedders(+sparse) │ qdrant(+hybrid)  │
-│                    │ storage (+domain keys +tags)                       │
-├──────┬────────────┬───────────┬──────────────────────┬─────────────────┤
-│ Postgres registry │  S3/MinIO  │      Qdrant          │   LiteLLM       │
-│ (+crawl_schedule) │(+domain seg│(+sparse named vector)│                 │
-│                   │ +obj tags) │                      │                 │
-└───────────────────┴────────────┴──────────────────────┴─────────────────┘
+ingest_raw_document → parsed_document → clean_document → ┬─ chunk_document → embed_chunks → index_chunks
+                                                          ├─ enrich_document
+                                                          └─ curate_document_asset
 ```
 
-Legend: `(NEW)` = net-new component; `+x` = additive change to an existing component.
+**Key facts from code reads:**
+- `Artifact.artifact_type` discriminator values: `raw_document`, `parsed_document`, `cleaned_document`, `chunk`, `enriched_document`, `curated_document`, `bronze_document`
+- `ids.py._PREFIX` maps entity kinds to short prefixes (`doc_`, `chk_`, `art_`, etc.)
+- Silver zone stores parsed markdown: `silver/{domain}/{source_id}/{hash}.md`
+- Chunks stored separately: `chunks/{domain}/{source_id}/{hash}.txt`
+- Gold zone: `gold/{domain}/{rag_corpus|pretrain|finetune}/{id}.{parquet|jsonl}`
+- Plugin swap via entry-point groups: `knowledge_lake.{parsers|embedders|vectorstores|crawlers|discovery}`
+- Three thin adapters (CLI/API/Dagster) + MCP server all call `pipeline/*.py` directly (D-02 invariant)
+- `ParsedDoc` carries full text + sections with heading/section_path/page/text/is_table
+- `VectorPoint` has id, vector, payload, sparse (optional)
+- Registry: self-referencing `parent_artifact_id` chain for lineage
 
-### Component Responsibilities (v2.0 deltas only)
+## Recommended Architecture
 
-| Component | v2.0 responsibility change | New / Modified |
-|-----------|----------------------------|----------------|
-| `mcp/` package (NEW) | Expose 11 lake ops as MCP tools over stdio + SSE; each tool is a shim onto a `pipeline/` function | **New** |
-| `pipeline/search.py` | Add `mode=hybrid\|dense\|sparse` + new filter kwargs; build sparse query vector | Modified (additive) |
-| `pipeline/index.py` | Assemble expanded payload; upsert dense + sparse named vectors | Modified (additive) |
-| `plugins/builtin/qdrant_store.py` | Named-vector collections (dense+sparse), RRF/prefetch hybrid query, sparse in copy/reindex | Modified (additive) |
-| `plugins/protocols.py` | Extend `VectorStorePlugin.search` signature (mode, sparse); embedder gains sparse capability | Modified (additive) |
-| `storage/s3.py` | Domain-segmented keys, object tags on every write, gold sub-zones | Modified |
-| `pipeline/crawl.py` + `crawl/ratelimit.py` | Read `Source.config['crawl_config']`; adaptive backoff on 429/403; route PDF links to ingest | Modified |
-| `pipeline/crawl_all.py` (NEW) | Batch driver over registered sources with `--domain` filter | **New** |
-| `dagster_defs/sensors.py` (NEW) | Schedule-driven re-crawl sensor + content-hash change gate | **New** |
-| Registry (`models.py`/migration) | `crawl_schedule`, `last_crawled_at`, `last_content_hash` on Source (or in `config`) | Modified (migration) |
-| `cli/app.py` `openapi` cmd (NEW) | Dump `app.openapi()` + generate OpenAI tool defs from Pydantic | **New** |
+### 1. Tree Index Generation — Placement in the Asset DAG
 
-## Feature-by-Feature Integration
+**Decision: Parallel to chunk_document, off clean_document (same fan-out pattern)**
 
-### 1. MCP server (MCP-01/02, SKILL-01)
+The tree index is a *structural representation* of a document — it captures the hierarchical section/subsection/paragraph topology. This is fundamentally different from chunking (which fragments text for embedding) and from enrichment (which adds LLM-judged metadata). The tree index preserves document structure for reasoning traversal.
 
-**Where it sits:** MCP is a **fourth adapter**, a *sibling* of CLI/FastAPI/Dagster — never above or below them. It calls `pipeline/*.py` functions directly (in-process), exactly as the CLI does. It does NOT proxy the FastAPI HTTP layer (that would add a network hop, a second serialization, and couple two adapters).
+**Why parallel to chunk, not after it:**
+- Tree indexes need the full document structure (`ParsedDoc` with sections), which is available from `clean_document` (forwarded as `parsed_doc` in-memory)
+- Tree indexes do NOT depend on chunks — they are an alternative representation
+- Chunking destroys structure (splits by token count); tree indexing preserves it
+- The fan-out pattern already proven: `clean_document → {chunk_document, enrich_document, curate_document_asset}` — adding `build_tree_index` is architecturally identical
 
+**New asset DAG:**
 ```
-MCP tool  ──►  pipeline function  ──►  plugins/registry/storage
-(thin shim)    (e.g. search(), crawl_source(), ingest_url())
+ingest_raw_document → parsed_document → clean_document → ┬─ chunk_document → embed_chunks → index_chunks
+                                                          ├─ enrich_document
+                                                          ├─ curate_document_asset
+                                                          └─ build_tree_index (NEW)
 ```
 
-**New components:**
-- `knowledge_lake/mcp/__init__.py`, `server.py` (tool registry + transports), `tools.py` (11 tool definitions).
-- New dependency: the official **`mcp` Python SDK** (FastMCP). It is NOT currently installed (verified — no `mcp`/`fastmcp` package in the venv). Pin it; it is the reference implementation and supports both stdio and SSE from one `FastMCP` instance.
-- `klake mcp` Typer command in `cli/app.py` (stdio default; `--sse --port 3001` for SSE).
+**Implementation point:** `dagster_defs/assets.py` — add a new `@asset` with `clean_document` as its dependency (same pattern as `curate_document_asset` at line 638). The asset calls a new `pipeline/tree_index.py:build_tree_index()` function (D-02: logic in pipeline, asset is thin wrapper).
 
-**One tool registry, two transports:** Define tools **once** with `@mcp.tool()` on a single `FastMCP` instance. Transport is a runtime choice at `mcp.run(transport="stdio")` vs `transport="sse")` — the tool set is transport-agnostic. Do NOT maintain two registries. `klake mcp` selects the transport from a flag.
+### 2. Tree Index Storage — New Artifact Type in Silver Zone
 
-**The 11 tools → existing functions (all pure shims, D-02):**
+**Decision: New artifact_type `tree_index`, stored as JSON in `silver/{domain}/{source_id}/{hash}_tree.json`**
 
-| MCP tool | Backing function (exists today) | Notes |
-|----------|--------------------------------|-------|
-| `search` | `pipeline.search.search()` | Add mode + filters (feature 2/4) |
-| `ingest_url` | `pipeline.run.run_document(url=...)` | Full ingest→index path already wired by `cmd_ingest_url` |
-| `crawl` | `pipeline.crawl.crawl_source()` | `async` — MCP tool can be async |
-| `crawl_all` | `pipeline.crawl_all.crawl_all()` (NEW, feature 6) | Depends on feature 6 |
-| `process_crawled` | Refactor `cmd_process_crawled` body → `pipeline.run.process_crawled()` | **Currently the loop lives in the CLI command** (cli/app.py:539) — extract it to `pipeline/` so MCP + CLI share it (D-02 fix) |
-| `add_source` | `pipeline.ingest.register_source()` | Direct |
-| `list_sources` | `registry.repo` list query (see `list_sources_endpoint`) | Extract shared helper into `pipeline`/`registry` |
-| `lineage` | `lineage.resolve_ancestry()` | Direct |
-| `export` | `pipeline.export.export_*()` | Direct (3 kinds) |
-| `init_domain` | `api.app._register_domain_sources()` | **Already extracted** as a shared helper — reuse verbatim |
-| `stats` | NEW small `registry.repo` aggregate query | Counts by artifact_type/source/domain |
+**Why a new artifact_type (not a metadata JSON blob):**
+- Tree indexes have their own lineage: `parsed_document → tree_index` (parent chain)
+- They have their own content hash (tree structure changes when doc is re-parsed)
+- They are queryable by type (`list_artifacts_by_type(session, "tree_index")`)
+- They follow the existing pattern: every distinct representation gets its own artifact_type
 
-**Data-flow change:** none to the pipeline. MCP adds an inbound edge only. Tool inputs/outputs should reuse the **same Pydantic schemas** as FastAPI (`api/schemas.py`) so shapes stay identical across surfaces (this also feeds feature 7).
+**Schema changes needed:**
+- Add `"tree_index": "idx"` to `ids.py._PREFIX` (new prefix for tree index artifacts)
+- Add `create_tree_index_artifact()` to `registry/repo.py` (follows `create_chunk_artifact` pattern)
+- No Alembic migration needed — `Artifact.artifact_type` is a plain `String(64)`, not an enum
 
-**Refactors this forces (do them first):** two CLI-embedded behaviors must move down into `pipeline/` so MCP can reuse them without duplicating logic: `process_crawled` (cli/app.py:539–630) and the `list_sources` query (api/app.py:1097). This is the only structural debt MCP introduces.
+**Storage format (silver zone JSON):**
+```json
+{
+  "version": "1.0",
+  "document_id": "doc_<parsed_artifact_id>",
+  "source_id": "src_...",
+  "root": {
+    "id": "node_0",
+    "type": "document",
+    "title": "Document Title",
+    "summary": "",
+    "children": [
+      {
+        "id": "node_1",
+        "type": "section",
+        "heading": "Introduction",
+        "section_path": "section-1",
+        "page": 1,
+        "content": "Section text...",
+        "summary": "",
+        "children": [...]
+      }
+    ]
+  }
+}
+```
 
-**Claude Code skills (SKILL-01):** thin markdown/skill wrappers that call the MCP tools (build-corpus, search-knowledge, add-source, export-dataset). No code integration beyond the MCP server; they are packaging.
+**Why silver zone (not gold):** The tree index is a processed, structured derivative of the parsed document — it lives at the same data maturity level as parsed markdown and enrichment JSON. Gold zone is for export-ready datasets. The tree index is an internal retrieval artifact, not an export.
 
-### 2. Sparse / hybrid search (RETR-01/02)
+**S3 key pattern:** `silver/{domain}/{source_id}/{content_hash}_tree.json` — mirrors existing silver zone conventions. Object tags: `{domain, source_name, format: "json", artifact_type: "tree_index"}`.
 
-**The critical migration fact:** v1.0 collections use a **single unnamed dense vector** — `qdrant_store.py` calls `create_collection(vectors_config=VectorParams(size=dim, distance=Cosine))`. Qdrant cannot add a sparse vector to an existing unnamed-vector collection in place; sparse vectors live under `sparse_vectors_config`, and coexisting dense+sparse requires the dense vector to be **named**. Therefore:
+### 3. New Plugin Protocols — IndexerPlugin and RetrieverPlugin
 
-> **Adding sparse REQUIRES recreating each collection with named-vector config and re-populating it. It is a reindex, not an ALTER.**
+**Decision: Add two new plugin protocols — `IndexerPlugin` for tree index construction and `RetrieverPlugin` for tree-based search**
 
-Good news: the **alias-swap reindex machinery already exists and is purpose-built for exactly this.** `qdrant_store.reindex(alias, dim, upsert_fn)` builds a new physical collection, populates via `upsert_fn`, and atomically repoints the alias (index.py:143 `reindex_collection`). Migration path:
+The existing protocol hierarchy has 5 plugins: ParserPlugin, EmbedderPlugin, VectorStorePlugin, DiscoveryPlugin, CrawlerPlugin. Each owns a distinct capability that is swappable. Tree indexing introduces two new swappable capabilities:
 
-1. Modify the create path (`ensure_aliased_collection`) to build **named** vectors: `vectors_config={"dense": VectorParams(size=dim, distance=Cosine)}` + `sparse_vectors_config={"sparse": SparseVectorParams()}`.
-2. Migration = call `reindex()` per alias, but `upsert_fn` must **re-embed**: `copy_all_points` copies dense vectors but cannot synthesize sparse vectors for old points. The migration `upsert_fn` re-reads chunk text (registry/silver zone) and produces both vectors. A pure copy is insufficient for the sparse backfill.
-3. Old physical collection retained (`keep_old_collections=True` default, settings.py:293) — instant rollback.
+#### IndexerPlugin (tree index construction)
 
-**Sparse vector generation — decision:** neither `fastembed` nor a SPLADE model is installed; **`rank_bm25` IS present**. Two options:
-- **(Recommended) Add `fastembed`** and use Qdrant-native BM25/SPLADE sparse embeddings. Cleanest integration with `qdrant-client` 1.18 (which ships `qdrant_fastembed` support — verified present in the venv), keeps sparse-vector construction inside the vector-store plugin, and matches the tool-agnostic plugin ethos.
-- **(Fallback) Compute sparse vectors from IDF/BM25 manually** via `rank_bm25` in a new embedder. Avoids a dependency but forces us to own corpus-IDF/vocabulary state (sparse vectors need a shared vocabulary) — more moving parts. Prefer only if adding `fastembed` is rejected.
+```python
+@runtime_checkable
+class IndexerPlugin(Protocol):
+    """Protocol for building tree indexes from parsed documents."""
 
-**Plugin interface change (additive, non-breaking):**
-- `VectorStorePlugin.search(collection, query, top_k, query_filter, *, mode="dense", sparse_query=None)` — new keyword-only params default to today's behavior. Nothing passes `mode` today → existing callers unaffected.
-- Hybrid query uses Qdrant's `query_points` with `prefetch` (dense + sparse branches) and `FusionQuery(fusion=RRF)` — server-side RRF, no client fusion code, the 1.18-native path. Replaces any need for `rank_bm25` at query time.
+    name: str
 
-**`pipeline/search.py` change:** add `mode` param; when sparse is needed, compute the sparse query vector and pass `sparse_query`; dense path unchanged. The existing filter-building block (search.py:84–92) is reused verbatim. `search()` gains `mode="dense"` default → **CLI/API/MCP callers unaffected until they opt in** (`klake search --mode hybrid`, `?mode=hybrid`).
+    def build_index(self, parsed_doc: ParsedDoc, metadata: dict[str, Any]) -> dict[str, Any]:
+        """Build a tree index from a parsed document.
 
-**`pipeline/index.py` change:** produce sparse vectors alongside dense at upsert; `VectorPoint` gains an optional `sparse` field (dataclass default `None` → back-compat). `qdrant_store.upsert` writes both named vectors.
+        Args:
+            parsed_doc: ParsedDoc with sections (from parse stage).
+            metadata: Document-level metadata (source_id, enrichment, etc.).
 
-### 3. Domain-segmented S3 keys + tags + gold sub-zones (STORE-01/02/03)
+        Returns:
+            Tree index as a JSON-serializable dict (the tree structure).
+        """
+        ...
+```
 
-**Current keys (storage/s3.py):**
-- `put_raw`:    `raw/{source_id}/{sha256}.{ext}` (s3.py:219)
-- `put_bronze`: `bronze/{source_id}/{sha256}.{ext}` (s3.py:323)
-- gold: `export.py` writes under `gold/...`
+**Why a plugin (not hardcoded):**
+- PageIndex is the first implementation, but other tree index strategies exist (RAPTOR, hierarchical clustering, knowledge graphs)
+- The framework constraint is tool-agnosticism: any processor must be swappable
+- Entry-point group: `knowledge_lake.indexers`
+- Settings swap key: `Settings.indexer = "pageindex"` (default)
+- Built-in: `plugins/builtin/pageindex_indexer.py:PageIndexBuilder`
 
-**Target (STORE-01):** `{zone}/{domain}/{source_id}/{sha256}.{ext}`, with `_unclassified` when domain is absent.
+#### RetrieverPlugin (tree-based search)
 
-**Coexistence with content-addressing + WORM + lineage — all preserved:**
-- The **SHA256 is still in the key**, so identity==content and overwrite is still structurally impossible. Domain is a *prefix* segment, not part of identity.
-- **Lineage is unaffected:** ancestry traces via `parent_artifact_id` + `Artifact.storage_uri` in the registry, NOT via key structure. The recursive-CTE ancestry walk never parses keys. The key shape can change freely as long as the registry records the actual URI.
-- **WORM unaffected:** bucket-level versioning/object-lock/delete-deny is prefix-independent.
-- **The one subtlety:** the same content hash under two domains would produce two different keys. The registry no-op (`get_artifact_by_hash`) fires BEFORE key construction (s3.py:209/313), so identical content is still a single artifact — it keeps whatever domain it was first written under. This is correct and must be preserved: **domain is resolved, but the hash no-op still short-circuits first.** Call this ordering out explicitly in the plan.
+```python
+@runtime_checkable
+class RetrieverPlugin(Protocol):
+    """Protocol for searching within a tree index."""
 
-**Where domain comes from at write time:** `Source.config['domain']` (already populated by `klake init` and `register_source`). `put_raw`/`put_bronze` receive `source_id` today; add the domain — pass it in from the caller, or look it up via `registry.repo.get_domain_for_source(session, source_id)` which **already exists** (repo.py:820). Prefer passing it in to avoid an extra hot-path query; fall back to the lookup.
+    name: str
 
-**Object tags (STORE-02):** `put_object` currently calls `put_object(Bucket, Key, Body)` with no `Tagging` (s3.py:81). Add a `tags: dict` param and pass `Tagging=urlencode(tags)` (S3 and MinIO both support object tagging). Tags: `domain, source_name, format, artifact_type`. Single-site change in `storage/s3.py`, threaded through `put_raw`/`put_bronze` and the gold writers. Additive.
+    def search(
+        self,
+        tree_index: dict[str, Any],
+        query: str,
+        *,
+        top_k: int = 5,
+        mode: str = "reasoning",
+    ) -> list[TreeHit]:
+        """Search within a tree index for relevant nodes.
 
-**Gold sub-zones (STORE-03):** `export.py` gold writers get sub-prefixes `gold/{domain}/rag_corpus|pretrain|finetune/...`. `ExportSettings.gold_prefix` already exists (settings.py:246) — extend the key builders in `pipeline/export.py`. The three export kinds already map cleanly to the three sub-zones (`cmd_export` kinds rag-corpus/pretrain/finetune).
+        Args:
+            tree_index: The tree structure (loaded from silver zone JSON).
+            query: Natural-language query string.
+            top_k: Maximum number of leaf nodes to return.
+            mode: Search mode ("reasoning" for LLM-guided traversal,
+                  "keyword" for section-heading match).
 
-**Migration story:** existing objects live at the old flat keys. Options, in preference order:
-1. **Forward-only (recommended):** new writes use the new scheme; old objects stay put; the registry's `storage_uri` already points at the real location so reads never break. No data movement, zero risk to WORM/immutability. Segmentation applies to net-new ingestion.
-2. **Backfill copy (optional, later):** a one-off job copies old→new keys and updates `Artifact.storage_uri`. Because raw is WORM/immutable, this is a copy (not move) and must update the registry transactionally. Only needed if a uniform layout is required for S3 lifecycle policies — not for v2.0 functionality.
+        Returns:
+            List of TreeHit results with node path + content + score.
+        """
+        ...
+```
 
-Recommend option 1 for v2.0; note option 2 as deferred ops tooling.
+**Why separate from VectorStorePlugin:**
+- Tree search is fundamentally different from ANN vector search
+- It may or may not use embeddings (PageIndex uses LLM-guided traversal)
+- The search input is a loaded JSON tree, not a vector collection
+- Different implementations: LLM-guided (strong_model), embedding-based top-down, keyword matching
 
-### 4. Expanded chunk payload + filters (PAYLOAD-01/02)
+**New data structures:**
+```python
+@dataclass
+class TreeHit:
+    """A single result from tree-based retrieval."""
+    node_id: str
+    node_path: list[str]  # e.g. ["Document", "Section 3", "Subsection 3.2"]
+    content: str
+    score: float
+    page: int | None = None
+    section_path: str = ""
+```
 
-The **most self-contained, lowest-risk** feature — and **foundational for feature 2's filtering value**.
+### 4. Two-Stage Search Architecture
 
-**Payload assembly point:** `pipeline/index.py` lines 106–133 build the `payload` dict per chunk. v1.0 already joins enrichment once per `index()` call (domain via `get_domain_for_source`; document_type/keywords/quality_score via `get_enriched_artifact_for_parsed`). PAYLOAD-01 adds `source_id, source_name, source_url, format, title, organization, tags` to that same dict. Source-level fields come from the `Source` row (fetch once per `index()` call alongside the existing `get_domain_for_source` — same session, negligible cost). `title`/`organization` come from enrichment metadata already fetched. `tags` come from `Source.config['tags']` (populated by `klake init`). **Purely additive** — existing payload keys unchanged, existing search results keep working.
+**Decision: Document-level Qdrant selection (stage 1) then per-document tree search (stage 2), orchestrated by a new `pipeline/tree_search.py`**
 
-**Filter build point:** `pipeline/search.py` lines 84–92 build the Qdrant `Filter.must` list. PAYLOAD-02 adds `source_name, format, tags, source_id` conditions with the same `FieldCondition`/`MatchValue` idiom (tags → `MatchAny`). The function already demonstrates the exact pattern for `domain`/`document_type`. Add matching optional kwargs to `search()`, then thread them through the three adapters (CLI options, API query params, MCP tool args) — each a mechanical mirror of the existing `--domain`/`domain=` wiring (cli/app.py:640, api/app.py:165).
+**How it works:**
+1. **Stage 1 — Document shortlist (Qdrant):** Use the existing `pipeline/search.py:search()` with expanded top_k and group results by `document` (parsed_artifact_id from payload). This identifies which documents are relevant. The grouping leverages the existing `payload["document"]` field already indexed on every chunk.
+2. **Stage 2 — Tree traversal (per shortlisted doc):** For each shortlisted document, load its `tree_index` artifact from silver zone, then invoke `RetrieverPlugin.search(tree_index, query)` to find the precise relevant nodes within that document.
 
-**Back-compat:** every new kwarg defaults to `None` → no-filter behavior identical to today. New payload fields exist only on newly-indexed points; **old points lack them** → filtering on a new field excludes old points. If that matters, a `reindex_collection` re-populates payloads. Note this coupling in the plan: *filters are only fully effective on points indexed after PAYLOAD-01, or after a reindex.*
+**New pipeline function: `pipeline/tree_search.py`**
+```python
+def tree_search(
+    query: str,
+    *,
+    collection: str = "klake_chunks",
+    shortlist_k: int = 20,
+    top_k: int = 5,
+    max_docs: int = 3,
+    mode: str = "reasoning",
+    settings: Settings | None = None,
+) -> list[TreeSearchResult]:
+    """Two-stage retrieval: Qdrant doc selection -> tree search for precision.
 
-### 5. Dagster re-crawl sensor + content-hash change detection (SCHED-01/02)
+    Stage 1: search() with shortlist_k, group by document, take top max_docs
+    Stage 2: For each doc, load tree_index, run RetrieverPlugin.search()
+    Merge and rank stage 2 results, return top_k
+    """
+```
 
-**New component:** `dagster_defs/sensors.py` with a `@sensor`, registered via `Definitions(sensors=[...])` in `definitions.py` (currently assets + one job + resources).
+**Why this architecture (not tree search alone):**
+- Tree search is expensive per document (LLM calls for reasoning mode) — you cannot traverse every indexed document
+- Qdrant is cheap and fast for narrowing to relevant documents (BM25+dense hybrid)
+- The combination gets you: recall from vector search + precision from structural reasoning
+- Existing `search()` is reused unchanged (stage 1 is just a call with higher top_k)
 
-**How the sensor drives crawl:** on each tick the sensor queries the registry for sources whose `crawl_schedule` is due (`now − last_crawled_at ≥ interval`) and yields a `RunRequest` per due source. Reuse `crawl_source()` — wrap it as a thin `crawl` asset/job (crawl is CLI/API-triggered today, not a Dagster asset), mirroring how `ingest_raw_document` wraps `ingest_*`.
+**Integration with existing search:**
+- `pipeline/search.py:search()` remains the chunk-level search (unchanged)
+- `pipeline/tree_search.py:tree_search()` is the two-stage alternative
+- Both return results with citation fields (chunk_id/node_path, section_path, page)
+- The query router (section 6) decides which path to use
 
-**Schema change:** Source has no schedule/timestamp/hash columns (verified — Source is id/name/source_type/url/normalized_url/license/robots_checked/config/created_at only). Two options:
-- Store schedule + timestamps in `Source.config` JSONB (no migration, but the sensor scans+filters in Python — fine at 28-source scale, weak at 10k).
-- **(Recommended) Add columns** `crawl_schedule TEXT`, `last_crawled_at TIMESTAMPTZ`, `last_content_hash TEXT` via a new Alembic migration (`0009`, continuing the 0001–0008 chain). Enables an indexed "due sources" query — the clean long-term shape.
+**Key implementation detail:** The Qdrant shortlist groups by `payload["document"]` (parsed_artifact_id). This field is already present on every indexed point (index.py line 153). To get document-level scores, aggregate chunk scores per document (max or mean). Then for each top-doc, look up the tree_index artifact via `registry_repo.get_child_artifact_by_type(session, parsed_id, "tree_index")`.
 
-**Where "skip unchanged" lives (SCHED-02):** two complementary layers, both partly present:
-- **Artifact layer (already works):** `put_raw` computes SHA256 and no-ops if the hash exists (s3.py:206–216). Re-crawling an unchanged page already avoids a duplicate raw artifact and all downstream reprocessing — content-hash dedup is intrinsic.
-- **Source/sensor layer (new):** to skip the *fetch* entirely (not just the write), compare a freshly-fetched page hash against `Source.last_content_hash` (or per-URL `CrawlState`) and short-circuit. Put this in `pipeline/crawl.py` (it already computes per-URL state and has the hash via `put_raw`). Registry = source of truth for "last seen hash" (queryable by the sensor); storage's hash no-op remains the write-level guard.
+### 5. OpenKB as a New Export Format
 
-**Data-flow change:** adds a scheduled inbound trigger. Sensor → RunRequest → crawl asset → `crawl_source()` → existing raw/bronze writes. The crawl pipeline itself is unchanged.
+**Decision: New export function `pipeline/export.py:export_openkb()`, writing interlinked wiki JSON to gold zone alongside existing Parquet/JSONL exports**
 
-### 6. Crawl config + crawl-all + adaptive rate limiting + PDF-from-crawl (CRAWL-01/02/03, INGEST-01)
+**What OpenKB produces:** A compiled knowledge base — a set of interlinked wiki pages derived from the ingested documents. Each page corresponds to a topic/entity/concept extracted during enrichment, with cross-references forming a graph.
 
-**CRAWL-01 (per-source crawl_config):** the config is **already stored** — `klake init` writes `Source.config['crawl_config'] = {depth, rate_limit_rps, robots_txt}` (cli/app.py:1013; sources.yaml confirms the shape). But `crawl_source` **ignores it**: crawl.py:296 hard-codes `source_config = None` before `resolve_delay`. Integration = load `Source.config['crawl_config']` at crawl start and (a) pass it as `source_config` to `resolve_delay` (the three-tier resolver already honors `source_config['rate_limit_seconds']` — **note the key mismatch:** config stores `rate_limit_rps`, resolver reads `rate_limit_seconds`; reconcile by converting rps→seconds or adding an rps tier), and (b) use `crawl_config['depth']` as the `max_depth`/`max_pages` override. Localized change in `pipeline/crawl.py` + `crawl/ratelimit.py`.
+**Where it fits:**
+- It is an **export** (gold zone output), not a pipeline intermediate
+- It builds on enriched_document metadata (entities, keywords, summaries) and tree indexes
+- Pattern: same as `export_rag_corpus()` / `export_pretrain_corpus()` — query registry, build output, write to gold zone
 
-**CRAWL-02 (`klake crawl-all`):** new `pipeline/crawl_all.py` querying registered crawl-type sources (optionally filtered by `Source.config['domain'] == --domain`), looping `crawl_source()` per source. Resume-safety is already built in (`_find_or_create_job` reuses incomplete jobs, crawl.py:142). New thin `cmd_crawl_all` CLI command + an MCP `crawl_all` tool both call it. No change to `crawl_source` itself.
+**Gold zone key:** `gold/{domain}/openkb/{export_id}/` (directory with `index.json` + per-page JSON files)
 
-**CRAWL-03 (adaptive rate limiting):** `PerHostLimiter` (ratelimit.py) tracks last-fetch per host but has **no backoff on 429/403**. Extend it: on a 429/403 (surfaced from the crawler adapter via `CrawlPageResult`), multiply the per-host delay (exponential) and set a per-host cooldown that `wait()` respects. State is per-host in the existing `_last_fetch` dict → add a parallel `_cooldown_until`/`_penalty` dict. The crawl loop already branches on result status (crawl.py:300–322); add a `rate_limited` branch feeding the limiter. Localized to `crawl/ratelimit.py` + the loop.
+**Structure:**
+```json
+// index.json
+{
+  "version": "1.0",
+  "domain": "healthcare",
+  "page_count": 42,
+  "pages": [
+    {"id": "page_001", "title": "HIPAA Administrative Safeguards", "file": "page_001.json"}
+  ],
+  "links": [
+    {"from": "page_001", "to": "page_003", "relation": "references"}
+  ]
+}
 
-**INGEST-01 (PDF-from-crawl):** `_extract_links` (crawl.py:360) follows in-domain links and does NOT skip `.pdf` (it skips images/css/js/media only). But those links are handed to the crawler adapter's `fetch_page`, which yields HTML/markdown — wrong for a PDF. Integration: in the crawl loop, when a queued link is a document type (`.pdf`, `.docx`, …), route it to **`pipeline.ingest.ingest_url()`** (proper `raw_document` with correct MIME, SSRF guard, size cap, content-hash dedup — all already implemented) instead of the HTML crawler path. The branch point is the loop's per-URL dispatch; keep same-domain + robots checks before dispatch. PDF links then become first-class raw artifacts that `process_crawled` parses.
+// page_001.json
+{
+  "id": "page_001",
+  "title": "HIPAA Administrative Safeguards",
+  "content_markdown": "...",
+  "source_documents": ["doc_...", "doc_..."],
+  "entities": [...],
+  "outgoing_links": [{"target": "page_003", "anchor_text": "...", "relation": "references"}]
+}
+```
 
-**ENRICH-01 (partial-JSON recovery):** localized to `pipeline/enrich.py` — salvage a truncated LLM JSON response (repair/parse-partial) before falling back to skip. Independent of every other feature; no cross-component integration.
+**Implementation pattern (mirrors existing exports):**
+```python
+def export_openkb(
+    *,
+    domain: str | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    """Export an interlinked wiki knowledge base to the gold zone.
 
-### 7. OpenAPI / OpenAI tool-def generation (SKILL-02/03)
+    Builds wiki pages from enriched documents' entities/summaries/keywords,
+    cross-links them by shared entities, and writes a navigable JSON structure.
+    """
+```
 
-**OpenAPI (SKILL-02) — runtime-derived, build-time-emitted:** FastAPI already generates the spec (`app.openapi()`); `/docs` works today. New `klake openapi` command imports `knowledge_lake.api.app:app`, calls `app.openapi()`, writes `docs/openapi.json`. Pure derivation — no hand-maintained spec. Run in CI to keep it fresh. Zero pipeline impact.
+**New Dagster asset:** `export_openkb` (in the `export` group, same pattern as `export_rag_corpus`).
 
-**OpenAI tool defs (SKILL-03) — derived from Pydantic:** the request schemas in `api/schemas.py` already define every operation's input shape. Emit OpenAI function-tool JSON as `{name, description, parameters: <Model>.model_json_schema()}` per operation, at build time (`klake openapi --openai-tools` → static `docs/openai_tools.json`). This is exactly why feature 1 should reuse `api/schemas.py` for MCP tool I/O — **one schema set feeds MCP tools, OpenAPI, and OpenAI tool defs.** Keep a single mapping table (operation → Pydantic request model → backing pipeline fn) as the shared source for MCP registration AND tool-def generation, so the three agent surfaces never drift.
+**CLI/API surface:** `klake export openkb [--domain healthcare]`, `POST /export/openkb`.
+
+**Key difference from Parquet/JSONL:** OpenKB is multi-file (index + pages), but still written to S3 as individual objects under a shared prefix — `StorageBackend.put_object()` handles each file. The `Dataset` registry row tracks the index URI.
+
+### 6. Query Router Dispatch Mechanism
+
+**Decision: Config-driven with query-analysis override — a new `pipeline/route.py` module**
+
+The query router decides whether a query should use:
+- **Chunk search** (`pipeline/search.py`) — fast, good for factoid questions
+- **Tree search** (`pipeline/tree_search.py`) — precise, good for reasoning/multi-hop questions
+- **Both** (merge results) — when uncertain
+
+**Architecture:**
+```python
+class RouteDecision(Enum):
+    CHUNK = "chunk"
+    TREE = "tree"
+    BOTH = "both"
+
+class QueryRouter:
+    """Routes queries to the appropriate retrieval path."""
+
+    def __init__(self, settings: Settings):
+        self.default_mode = settings.retrieval.default_route  # config-driven default
+        self.analysis_enabled = settings.retrieval.route_analysis  # LLM analysis toggle
+
+    def route(self, query: str) -> RouteDecision:
+        """Determine the retrieval path for a query.
+
+        Priority:
+        1. If route_analysis is enabled and query matches heuristic triggers
+           for tree search (multi-hop, "how does X relate to Y", structural),
+           return TREE.
+        2. Otherwise, return the configured default_mode.
+        """
+```
+
+**Two-layer dispatch (config + query analysis):**
+
+1. **Config layer (always active):** `Settings.retrieval.default_route` = `"chunk"` | `"tree"` | `"both"` | `"auto"`. Defaults to `"auto"`. When set to a specific mode, it always uses that mode (operator override).
+
+2. **Query analysis layer (when `default_route="auto"`):** Lightweight heuristic classification (regex-based, deterministic-first per project constraints):
+   - Structural indicators: "how is X organized", "what sections cover", "outline of"
+   - Multi-hop indicators: "relationship between", "how does X affect Y", "trace the path"
+   - Factoid indicators: "what is", "define", "when was"
+
+   If heuristics are inconclusive and `route_analysis=True`, use a cheap LLM call (via `cheap_model` alias) to classify. Cache by query hash.
+
+**New settings model:**
+```python
+class RetrievalSettings(BaseModel):
+    default_route: Literal["chunk", "tree", "both", "auto"] = "auto"
+    route_analysis: bool = False  # LLM-assisted routing (costs money)
+    tree_shortlist_k: int = 20
+    tree_max_docs: int = 3
+    tree_mode: str = "reasoning"
+```
+
+**Integration with existing search surface:**
+- `pipeline/search.py:search()` unchanged (chunk path)
+- New `pipeline/route.py:routed_search()` — the unified entry point that routes and merges
+- CLI: `klake search` gains `--route chunk|tree|both|auto`
+- API: `/search` gains `route` query param
+- MCP: `search` tool gains `route` parameter
+
+### 7. New Dagster Assets and Resources
+
+**New assets (all in `dagster_defs/assets.py`, following existing patterns):**
+
+| Asset | Group | Depends On | Calls | RetryPolicy |
+|-------|-------|-----------|-------|-------------|
+| `build_tree_index` | `pipeline` | `clean_document` | `pipeline.tree_index.build_tree_index()` | `_PIPELINE_RETRY` |
+| `export_openkb` | `export` | (standalone, like other exports) | `pipeline.export.export_openkb()` | `_EXPORT_RETRY` |
+
+**No new resources needed.** Tree index generation may optionally use LiteLLM (for summary generation at tree nodes), which is already available as `LiteLLMResource`. Tree storage uses MinIO (already `MinIOResource`). Tree search uses LiteLLM for reasoning traversal (already available). No new external service is introduced.
+
+**New Dagster sensor (optional, later):** A tree index rebuild sensor that triggers `build_tree_index` when a document's parsed content changes. But for v2.5 MVP, tree indexes are built as part of the standard pipeline flow (the asset dependency on `clean_document` handles this automatically).
 
 ## Data Flow — What Changes
 
-1. **Search (dense→hybrid):** `search(mode=hybrid)` → embed dense query + build sparse query → `qdrant.search` issues one `query_points` with dense+sparse `prefetch` + RRF fusion → hits. Filters (feature 4) apply identically in all modes.
-2. **Index (dense→dense+sparse+rich payload):** `index()` joins Source + enrichment (already done) → builds expanded payload → produces dense **and** sparse vectors → `upsert` writes both named vectors.
-3. **Ingest write (flat→domain-segmented+tagged):** caller resolves domain from `Source.config` → `put_raw/put_bronze` write `{zone}/{domain}/{source_id}/{hash}.{ext}` with object tags → registry records the real `storage_uri` (lineage unaffected).
-4. **Scheduled crawl (new inbound trigger):** sensor tick → due-source query → RunRequest → crawl asset → `crawl_source()` → hash-gated writes.
-5. **Agent access (new inbound surface):** MCP tool call → pipeline function → same registry/storage/Qdrant path as CLI.
+### New pipeline path (tree index):
+```
+clean_document → build_tree_index → store tree JSON in silver zone
+                                   → register tree_index artifact in Postgres
+```
+
+### New search path (two-stage):
+```
+query → router → TREE path:
+                   ├─ search() [stage 1: Qdrant shortlist, group by doc]
+                   ├─ load tree_index artifacts for top docs [registry + S3]
+                   └─ RetrieverPlugin.search() per doc [stage 2: tree traversal]
+                 → CHUNK path:
+                   └─ search() [existing, unchanged]
+                 → BOTH path:
+                   └─ merge TREE + CHUNK results, deduplicate, re-rank
+```
+
+### New export path (OpenKB):
+```
+enriched_documents + tree_indexes → compile wiki pages → cross-link by entities → write to gold zone
+```
+
+## Component Boundaries
+
+| Component | Responsibility | Communicates With |
+|-----------|---------------|-------------------|
+| `pipeline/tree_index.py` (NEW) | Build tree index from ParsedDoc; register artifact | `plugins/resolver` (IndexerPlugin), `registry/repo`, `storage/s3` |
+| `pipeline/tree_search.py` (NEW) | Two-stage search orchestration | `pipeline/search` (stage 1), `plugins/resolver` (RetrieverPlugin), `registry/repo`, `storage/s3` |
+| `pipeline/route.py` (NEW) | Query routing decision | `pipeline/search`, `pipeline/tree_search`, `config/settings` |
+| `pipeline/export.py` (MODIFIED) | Add `export_openkb()` | `registry/repo`, `storage/s3` |
+| `plugins/protocols.py` (MODIFIED) | Add `IndexerPlugin`, `RetrieverPlugin`, `TreeHit` | (protocol definitions only) |
+| `plugins/resolver.py` (MODIFIED) | Add `get_indexer()`, `get_retriever()` | `config/settings`, entry-points |
+| `plugins/builtin/pageindex_indexer.py` (NEW) | PageIndex tree index builder | `plugins/protocols` |
+| `plugins/builtin/pageindex_retriever.py` (NEW) | PageIndex tree search (LLM-guided) | `plugins/protocols`, LiteLLM |
+| `config/settings.py` (MODIFIED) | Add `RetrievalSettings`, `indexer`/`retriever` swap keys | (configuration only) |
+| `dagster_defs/assets.py` (MODIFIED) | Add `build_tree_index` asset | `pipeline/tree_index` |
+| `ids.py` (MODIFIED) | Add `"tree_index": "idx"` prefix | (ID generation only) |
+| `cli/app.py` (MODIFIED) | Add `--route` to search, `export openkb` | `pipeline/route`, `pipeline/export` |
+| `api/app.py` (MODIFIED) | Add `route` param to search, `/export/openkb` | `pipeline/route`, `pipeline/export` |
+| `agent/registry.py` (MODIFIED) | Add `route` param to search tool, `export_openkb` tool | `pipeline/route`, `pipeline/export` |
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: MCP re-implementing or HTTP-proxying pipeline logic
-**Mistake:** MCP tools call the FastAPI endpoints over HTTP, or re-code the crawl/search flow. **Why wrong:** double serialization, a network hop, two divergent code paths — violates D-02. **Instead:** MCP tools are in-process shims onto `pipeline/*.py`, sharing `api/schemas.py` shapes.
+### Anti-Pattern 1: Tree index depends on chunks
+**Mistake:** Making `build_tree_index` depend on `chunk_document` output.
+**Why wrong:** Tree indexing needs the full document structure (sections/hierarchy), which chunking destroys. They are alternative representations of the same source, not sequential.
+**Instead:** Both branch from `clean_document` independently. Tree index uses `parsed_doc` (the in-memory ParsedDoc forwarded through clean).
 
-### Anti-Pattern 2: Trying to ALTER an unnamed-vector collection to add sparse
-**Mistake:** attempting an in-place add of a sparse vector to existing `klake_chunks`. **Why wrong:** Qdrant requires named vectors for dense+sparse coexistence; there is no in-place migration. **Instead:** use the existing `reindex()` alias-swap with a **re-embedding** `upsert_fn` (copy alone can't synthesize sparse vectors for old points).
+### Anti-Pattern 2: Loading all tree indexes into memory for search
+**Mistake:** Loading every document's tree index at query time.
+**Why wrong:** At scale (1000+ documents), loading all trees for every query is O(N) in memory and I/O.
+**Instead:** Stage 1 (Qdrant) narrows to max_docs (default 3) documents FIRST. Only those trees are loaded.
 
-### Anti-Pattern 3: Encoding domain into content-hash identity
-**Mistake:** folding domain into the hash, or dropping the registry no-op so "same doc in two domains" makes two artifacts. **Why wrong:** breaks content-addressed dedup and WORM guarantees. **Instead:** domain is a key *prefix* only; the `get_artifact_by_hash` no-op still short-circuits before key construction.
+### Anti-Pattern 3: Making tree search the only search path
+**Mistake:** Replacing chunk-based search with tree search entirely.
+**Why wrong:** Tree search is slower (LLM calls), more expensive, and not better for simple factoid queries. Chunk search is fast and sufficient for most queries.
+**Instead:** Router dispatches; chunk search remains the default for simple queries.
 
-### Anti-Pattern 4: Making new search filters or payload fields required
-**Mistake:** required kwargs / non-defaulted `VectorPoint.sparse` / mandatory `mode`. **Why wrong:** breaks the many existing callers and old indexed points. **Instead:** every addition defaults to today's behavior (`mode="dense"`, filters `None`, `sparse=None`).
+### Anti-Pattern 4: Storing tree indexes as Artifact.metadata_ JSON
+**Mistake:** Putting the tree structure in the artifact's `metadata_` JSONB column.
+**Why wrong:** Tree indexes can be large (hundreds of KB for complex documents). `metadata_` is for lightweight fields. Large blobs belong in S3 with only the URI in the registry.
+**Instead:** Store in silver zone S3 (content-addressed JSON), register as an artifact with `storage_uri` pointing at the file.
 
-### Anti-Pattern 5: Putting new behavior in the CLI/API adapter
-**Mistake:** implementing `crawl_all`/`process_crawled`/`stats` inside a Typer command (as `process_crawled` is today). **Why wrong:** MCP/Dagster can't reuse it → duplication. **Instead:** land logic in `pipeline/`, adapters stay thin.
+### Anti-Pattern 5: Tight coupling between IndexerPlugin and RetrieverPlugin
+**Mistake:** Making the retriever assume a specific tree format (e.g., PageIndex's exact schema).
+**Why wrong:** If someone swaps the indexer (e.g., RAPTOR instead of PageIndex), the retriever breaks.
+**Instead:** Define a minimal tree schema contract (nodes with id/type/content/children) that both protocols agree on. The indexer produces it; the retriever consumes it.
+
+### Anti-Pattern 6: OpenKB export running LLM calls at export time
+**Mistake:** Having `export_openkb()` call the LLM to generate wiki content.
+**Why wrong:** Exports should be fast, deterministic, and cheap. LLM calls are slow and non-deterministic.
+**Instead:** OpenKB compiles from existing enrichment (summaries, entities, keywords) and tree index structure. All LLM work was done during enrich/tree-build; export just assembles and links.
+
+## Patterns to Follow
+
+### Pattern 1: Fan-out from clean_document
+**What:** Multiple independent asset branches from the same dependency.
+**Already proven by:** `chunk_document`, `enrich_document`, `curate_document_asset` all depend on `clean_document` independently (dagster_defs/assets.py).
+**Apply to:** `build_tree_index` — same pattern, same dependency, same in-memory `parsed_doc` forwarding.
+
+### Pattern 2: Content-addressed artifact with S3 storage
+**What:** Hash the content, check for existing artifact, store in S3, register with `storage_uri`.
+**Already proven by:** `pipeline/chunk.py:chunk()` lines 310-350 (hash input, check `get_artifact_by_hash`, `put_object`, `create_chunk_artifact`).
+**Apply to:** Tree index storage — hash the serialized tree JSON, check dedup, store in silver zone.
+
+### Pattern 3: Plugin via entry-point group
+**What:** Define a Protocol, register built-in(s) via `pyproject.toml` entry-points, resolve via `resolver.py`.
+**Already proven by:** All 5 existing plugin types (parsers, embedders, vectorstores, crawlers, discovery).
+**Apply to:** `knowledge_lake.indexers` and `knowledge_lake.retrievers` — two new entry-point groups.
+
+### Pattern 4: Pipeline function called by multiple adapters
+**What:** Business logic in `pipeline/*.py`, thin shim in CLI/API/Dagster/MCP.
+**Already proven by:** Every existing pipeline stage. `search()` is called by CLI (`cmd_search`), API (`/search`), MCP (`search` tool), and potentially Dagster.
+**Apply to:** `tree_search()`, `routed_search()`, `export_openkb()` — all go in `pipeline/`, all adapters call them directly.
+
+### Pattern 5: Additive defaults for back-compatibility
+**What:** New kwargs default to today's behavior. New artifact types do not require migration.
+**Already proven by:** `VectorPoint.sparse = None`, `search(mode="dense")`, `Settings.search.mode = "hybrid"` — all additive.
+**Apply to:** `Settings.retrieval.default_route = "auto"` (existing `search()` callers unaffected), `search` tool gains optional `route` param.
+
+## Scalability Considerations
+
+| Concern | At 100 docs | At 10K docs | At 100K docs |
+|---------|-------------|-------------|-------------|
+| Tree index storage | ~100 JSON files in S3 (~50KB each = 5MB total) | ~10K files (~500MB) | ~100K files (~5GB) — consider batch builds |
+| Stage 1 shortlist | Qdrant handles easily | Standard Qdrant scale | May need collection sharding |
+| Stage 2 tree traversal | 3 trees loaded per query (~150KB) | Same (only top-3 loaded) | Same (Qdrant shortlist keeps it bounded) |
+| OpenKB compilation | Fast (100 pages) | Minutes (entity graph resolution) | Needs incremental builds |
+| Tree index build (LLM) | Budget-gated by LLM spend cap | Expensive — consider heuristic-only mode | Must have non-LLM fallback |
 
 ## Integration Points Summary
 
 | Feature | Primary file(s) to modify | New file(s) | Migration? |
 |---------|---------------------------|-------------|------------|
-| MCP server | `cli/app.py` (+`mcp` cmd) | `mcp/server.py`, `mcp/tools.py`; extract `pipeline/run.process_crawled`, `registry` list/stats helpers | No (new dep: `mcp` SDK) |
-| Sparse/hybrid | `plugins/builtin/qdrant_store.py`, `pipeline/index.py`, `pipeline/search.py`, `plugins/protocols.py` | maybe `plugins/builtin/sparse_embedder.py` | **Qdrant reindex (re-embed)**; new dep `fastembed` (recommended) |
-| Domain S3 keys + tags | `storage/s3.py`, `pipeline/export.py` | — | Forward-only (backfill deferred) |
-| Payload + filters | `pipeline/index.py`, `pipeline/search.py`, `cli/app.py`, `api/app.py`, `api/schemas.py` | — | Reindex to backfill old points (optional) |
-| Re-crawl sensor + hash | `dagster_defs/definitions.py`, `pipeline/crawl.py`, `registry/models.py` | `dagster_defs/sensors.py`, Alembic `0009_source_crawl_schedule` | **Yes (Source columns)** |
-| Crawl config/all/adaptive/PDF | `pipeline/crawl.py`, `crawl/ratelimit.py`, `cli/app.py`, `pipeline/enrich.py` | `pipeline/crawl_all.py` | No |
-| OpenAPI/OpenAI tools | `cli/app.py` (+`openapi` cmd), `api/schemas.py` | `docs/openapi.json`, `docs/openai_tools.json` (generated) | No |
+| Tree index generation | `dagster_defs/assets.py`, `ids.py`, `registry/repo.py` | `pipeline/tree_index.py`, `plugins/builtin/pageindex_indexer.py` | No (artifact_type is free-form string) |
+| Tree index storage | `storage/s3.py` (no change — uses existing put_object) | — | No |
+| IndexerPlugin protocol | `plugins/protocols.py`, `plugins/resolver.py` | — | No (new entry-point group in pyproject.toml) |
+| RetrieverPlugin protocol | `plugins/protocols.py`, `plugins/resolver.py` | `plugins/builtin/pageindex_retriever.py` | No |
+| Two-stage search | `pipeline/search.py` (unchanged) | `pipeline/tree_search.py` | No |
+| Query router | `cli/app.py`, `api/app.py`, `agent/registry.py` | `pipeline/route.py` | No |
+| OpenKB export | `pipeline/export.py` | — (added to existing file) | No |
+| Settings | `config/settings.py` | — | No |
+| Dagster assets | `dagster_defs/assets.py` | — | No |
+
+**Zero Alembic migrations needed.** All new capabilities use existing schema flexibility (free-form `artifact_type`, `metadata_` JSON, `storage_uri`). The `tree_index` artifact type is just a new string value in the existing artifacts table.
 
 ## Dependency-Aware Build Order
 
-Ordering is driven by real coupling found in the code, not theme grouping:
-
 ```
-Phase A — Metadata foundation (no new deps, lowest risk)
-  1. PAYLOAD-01  Expanded chunk payload (index.py join point)          ← foundational
-  2. PAYLOAD-02  Search filters (search.py filter builder)             ← needs payload fields to filter on
-     Rationale: filters are worthless without the payload fields; payload lands first.
+Phase 1 — Tree Index Foundation (lowest risk, enables everything else)
+  1. IndexerPlugin protocol + resolver + entry-point group
+  2. pipeline/tree_index.py (build_tree_index function)
+  3. PageIndex built-in indexer (plugins/builtin/pageindex_indexer.py)
+  4. Dagster build_tree_index asset
+  5. CLI: klake build-tree-index <document_id>
+     Rationale: tree indexes must exist before tree search can work.
 
-Phase B — Crawl maturation (independent of A; unblocks crawl-all + sensor)
-  3. CRAWL-01    Wire Source.config['crawl_config'] into crawl_source  ← fixes source_config=None
-  4. CRAWL-03    Adaptive rate limiting (PerHostLimiter backoff)
-  5. INGEST-01   PDF-from-crawl routing to ingest_url
-  6. CRAWL-02    crawl-all batch driver (pipeline/crawl_all.py)        ← builds on 3–5
-  7. ENRICH-01   Partial-JSON recovery (localized to enrich.py; independent)
+Phase 2 — Tree Retrieval (depends on Phase 1)
+  6. RetrieverPlugin protocol + resolver + entry-point group
+  7. pipeline/tree_search.py (two-stage search function)
+  8. PageIndex built-in retriever (plugins/builtin/pageindex_retriever.py)
+  9. CLI/API/MCP: tree-search surface
+     Rationale: need tree indexes to search against.
 
-Phase C — Storage segmentation (independent; touches write path)
-  8. STORE-01    Domain-segmented keys (needs domain at write time)
-  9. STORE-02    Object tags on every write (same put_object change site as 8)
- 10. STORE-03    Gold sub-zones (export.py key builders)
-     Rationale: 8 and 9 are the same storage.s3 change; do together. Forward-only, no migration.
+Phase 3 — Query Router (depends on Phase 2)
+ 10. RetrievalSettings in config/settings.py
+ 11. pipeline/route.py (router logic)
+ 12. Integrate router into search surfaces (CLI --route, API ?route, MCP route param)
+     Rationale: router dispatches to tree_search() which must already exist.
 
-Phase D — Hybrid retrieval (highest technical risk; needs reindex machinery)
- 11. RETR-01    Sparse named vector: named-vector collections + re-embed reindex + fastembed
- 12. RETR-02    mode=hybrid|dense|sparse in search() + RRF query
-     Rationale: sparse infra (named collections, migration) must exist before hybrid query mode.
-     Depends on Phase A payload (filters must work in hybrid mode too).
+Phase 4 — OpenKB Export (partially independent, needs enrichment + tree indexes)
+ 13. export_openkb() in pipeline/export.py
+ 14. Dagster export_openkb asset
+ 15. CLI/API surface: klake export openkb
+     Rationale: wiki compilation needs enriched entity data + tree structure.
+     Can start in parallel with Phase 2 if tree index artifact is stored.
 
-Phase E — Scheduling (needs a runnable crawl trigger + registry columns)
- 13. SCHED-schema  Alembic migration: Source.crawl_schedule/last_crawled_at/last_content_hash
- 14. SCHED-02      Content-hash change gate in crawl.py (registry-backed)
- 15. SCHED-01      Dagster re-crawl sensor + crawl asset
-     Rationale: sensor needs the schedule columns and a crawl asset to target; hash gate needs the column.
-
-Phase F — Agent surfaces (LAST — wrap stabilized functions)
- 16. Refactor: extract process_crawled + list_sources/stats into pipeline/registry
- 17. SKILL-02   klake openapi (app.openapi() dump)
- 18. SKILL-03   OpenAI tool defs from Pydantic (shared schema/mapping table)
- 19. MCP-01/02  MCP server (stdio+SSE), klake mcp — maps 11 tools to now-stable functions
- 20. SKILL-01   Claude Code skills over the MCP tools
-     Rationale (explicit): MCP comes AFTER CLI/API stabilize and after crawl_all (tool #4)
-     and process_crawled extraction exist — otherwise the 11-tool mapping targets moving/duplicated code.
+Phase 5 — Documentation & Integration Testing
+ 16. Architecture documentation (docs/)
+ 17. Integration tests: full pipeline with tree index + two-stage search
+ 18. Performance benchmarks: tree search latency vs chunk search
 ```
 
-**Why this order (the load-bearing dependencies):**
-- **Payload before filters** — a filter can only match a field the payload carries.
-- **Crawl-config/adaptive/PDF before crawl-all** — crawl-all is a loop over a single-source crawl that must already honor per-source config and route PDFs.
-- **Sparse infra before hybrid mode** — hybrid `query_points` needs named dense+sparse collections to exist (the reindex migration is the gate).
-- **Schedule columns before the sensor** — the sensor's "due sources" query and the hash gate both read new Source columns.
-- **MCP last** — it is a thin wrapper; wrapping functions still being reshaped (crawl_all added, process_crawled/list_sources extracted) would churn the tool registry. Stabilize the service layer, then expose it.
-
-Phases A/B/C are mutually independent and can parallelize across workstreams; D depends on A; E depends on B; F depends on B (crawl_all) plus everything it wraps.
+**Why this order:**
+- **Phase 1 before 2:** Cannot search trees that do not exist
+- **Phase 2 before 3:** Router dispatches to tree_search which must be implemented
+- **Phase 4 after 1:** OpenKB needs tree indexes but not tree search (it reads the stored trees)
+- **Phase 3 after 2:** Router is thin glue — build the things it routes to first
 
 ## Sources
 
-- Direct reads of shipped v1.0 source (2026-07-08): `pipeline/{search,index,ingest,crawl,export}.py`, `plugins/{protocols,builtin/qdrant_store}.py`, `storage/s3.py`, `crawl/ratelimit.py`, `cli/app.py`, `api/app.py`, `config/settings.py`, `dagster_defs/{assets,definitions}.py`, `registry/{models,repo}.py`, `domains/healthcare/sources.yaml` — HIGH confidence (primary artifacts).
-- Dependency probe: `mcp`/`fastembed` absent, `rank_bm25` present, `qdrant-client` 1.18 with `qdrant_fastembed` present — HIGH confidence (venv inspection).
-- v1.0 architecture research: `.planning/milestones/v1.0-research/ARCHITECTURE.md` (pattern continuity) — MEDIUM confidence (prior research doc).
-- Qdrant named-vector / sparse-vector / RRF-fusion model and MCP dual-transport pattern — MEDIUM confidence (established product behavior; verify the exact `query_points` prefetch/`FusionQuery` API against qdrant-client 1.18 during Phase D planning).
+- Direct reads of shipped v2.0 source (2026-07-13): `pipeline/{search,index,chunk,export,run}.py`, `plugins/{protocols,resolver}.py`, `dagster_defs/assets.py`, `registry/{models,repo}.py`, `config/settings.py`, `ids.py`, `lineage.py` — HIGH confidence (primary artifacts).
+- PROJECT.md v2.5 milestone requirements — HIGH confidence (project specification).
+- Existing v2.0 ARCHITECTURE.md research (`.planning/research/ARCHITECTURE.md`) — HIGH confidence (verified patterns).
+- PageIndex/tree-based retrieval concepts (LlamaIndex tree index, RAPTOR, hierarchical retrieval) — MEDIUM confidence (training data, not verified against specific library versions).
+- OpenKB compiled knowledge base pattern (wiki compilation from structured sources) — MEDIUM confidence (concept-level, implementation is custom to this project).
 
 ---
-*Architecture research for: Knowledge Lake Framework v2.0 feature integration*
-*Researched: 2026-07-08*
+*Architecture research for: Knowledge Lake Framework v2.5 PageIndex/OpenKB integration*
+*Researched: 2026-07-13*
