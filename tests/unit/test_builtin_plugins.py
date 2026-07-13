@@ -22,6 +22,7 @@ import pytest
 from knowledge_lake.plugins.protocols import (
     EmbedderPlugin,
     Hit,
+    IndexerPlugin,
     ParsedDoc,
     ParserPlugin,
     VectorPoint,
@@ -330,3 +331,40 @@ class TestQdrantVectorStore:
         store._client = mock_client
         hits = store.search("col", [0.0] * 384, top_k=5)
         assert hits == []
+
+
+# ---------------------------------------------------------------------------
+# IndexerPlugin / PageIndexIndexer conformance tests (TREE-05, D-05)
+# ---------------------------------------------------------------------------
+
+
+class TestIndexerPluginBuiltin:
+    """Verify that the PageIndex indexer entry-point is registered and satisfies
+    the IndexerPlugin Protocol via runtime isinstance check (D-05).
+
+    Tests fail with ImportError until Plans 13-03 and 13-05 ship (correct RED state).
+    """
+
+    def _get_ep_names(self, group: str) -> set[str]:
+        eps = importlib.metadata.entry_points(group=group)
+        return {ep.name for ep in eps}
+
+    def test_pageindex_indexer_entry_point_registered(self) -> None:
+        """'pageindex' must be registered in the 'knowledge_lake.indexers' entry-point group.
+
+        Mirrors test_vectorstores_group_has_qdrant pattern for QdrantVectorStore.
+        """
+        names = self._get_ep_names("knowledge_lake.indexers")
+        assert "pageindex" in names, (
+            f"Expected 'pageindex' in 'knowledge_lake.indexers', got: {names}"
+        )
+
+    def test_pageindex_indexer_satisfies_protocol(self) -> None:
+        """PageIndexIndexer instance must satisfy the IndexerPlugin runtime_checkable Protocol."""
+        from knowledge_lake.plugins.builtin.pageindex_indexer import PageIndexIndexer
+
+        instance = PageIndexIndexer()
+        assert isinstance(instance, IndexerPlugin), (
+            f"PageIndexIndexer must satisfy IndexerPlugin protocol, "
+            f"isinstance check returned False"
+        )
