@@ -196,6 +196,30 @@ class EnrichSettings(BaseModel):
     """Used only if completion_cost() itself raises even after registration."""
 
 
+class TreeSettings(BaseModel):
+    """Tree-index generation config (TREE-01..05). Env override prefix: KLAKE_TREE__ (e.g. KLAKE_TREE__MODE=llm). model_alias routes through cheap_model task alias — never a hardcoded provider ID (D-08)."""
+
+    mode: Literal["deterministic", "llm"] = "deterministic"
+    """Build mode: 'deterministic' (heuristic nesting) or 'llm' (LLM-assisted summaries).
+    Deterministic-first per D-08. Override via KLAKE_TREE__MODE env var."""
+
+    budget_usd: float = 5.0
+    """Global spend cap in USD before the tree-index LLM mode halts gracefully
+    (mirrors EnrichSettings, D-08)."""
+
+    model_alias: str = "cheap_model"
+    """LiteLLM task alias for tree-index LLM calls. Never a hardcoded provider ID (CLAUDE.md)."""
+
+    schema_version: str = "1"
+    """Schema version anchor for D-02. TREE-06 migration deferred to v2.6+."""
+
+    prompt_version: str = "v1"
+    """Bumping this invalidates the LLM-mode tree-index cache (mirrors EnrichSettings)."""
+
+    max_tokens: int = 1024
+    """Maximum output tokens for per-node LLM summary calls in LLM mode."""
+
+
 class CurateSettings(BaseModel):
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03).
 
@@ -450,6 +474,12 @@ class Settings(BaseSettings):
     enrich: EnrichSettings = Field(default_factory=EnrichSettings)
     """LLM-based metadata enrichment configuration (ENRICH-01..05)."""
 
+    tree: TreeSettings = Field(default_factory=TreeSettings)
+    """Tree-index generation configuration (TREE-01..05, D-08)."""
+
+    indexer: str = "pageindex"
+    """Indexer plugin swap key. Entry-point group: knowledge_lake.indexers (D-05)."""
+
     curate: CurateSettings = Field(default_factory=CurateSettings)
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03)."""
 
@@ -480,7 +510,7 @@ class Settings(BaseSettings):
 
     # ── Validators ────────────────────────────────────────────────────────────
 
-    @field_validator("crawler", "discovery", "embedder", "parser", "vectorstore", mode="after")
+    @field_validator("crawler", "discovery", "embedder", "indexer", "parser", "vectorstore", mode="after")
     @classmethod
     def _validate_swap_key(cls, v: str) -> str:
         """Validate swap keys against ASVS V5 (input validation).
