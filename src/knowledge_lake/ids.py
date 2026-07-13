@@ -43,6 +43,7 @@ _PREFIX: dict[str, str] = {
     "curated_document": "doc",
     "dataset": "dst",
     "dataset_example": "dex",
+    "tree_index": "idx",
 }
 
 
