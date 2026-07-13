@@ -48,6 +48,7 @@ from knowledge_lake.dagster_defs.assets import (
     index_chunks,
     ingest_raw_document,
     parsed_document,
+    tree_index_document,
 )
 from knowledge_lake.dagster_defs.resources import (
     LiteLLMResource,
@@ -72,6 +73,7 @@ defs = Definitions(
         clean_document,
         chunk_document,
         enrich_document,
+        tree_index_document,
         curate_document_asset,
         generate_dataset,
         embed_chunks,
