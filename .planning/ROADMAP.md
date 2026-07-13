@@ -100,9 +100,17 @@ Plans:
   5. Multiple document trees load from S3 and traverse in parallel (asyncio) with a configurable concurrency limit
 
 **Plans**: 4 plans
+**Wave 1**
+
 - [ ] 14-01-PLAN.md — Wave 0 test scaffold (test_tree_search.py + RetrieverPlugin conformance stub) covering RETR-04..08
 - [ ] 14-02-PLAN.md — Hit.citation_source + RetrieverPlugin Protocol + TreeSearchSettings + retriever swap key (contracts)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 14-03-PLAN.md — PageIndexRetriever (heuristic DFS + opt-in budget-capped LLM-nav) + get_retriever entry-point seam
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 14-04-PLAN.md — Two-stage tree_search orchestrator (shortlist → parallel tree load → traversal) + thin klake tree-search CLI
 
 ### Phase 15: Query Router
