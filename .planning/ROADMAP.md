@@ -4,6 +4,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1-6 (shipped 2026-07-07)
 - ✅ **v2.0 Agent-Ready Lake** — Phases 7-12 (shipped 2026-07-12)
+- 🚧 **v2.5 PageIndex Plugin Integration** — Phases 13-16 (in progress)
 
 ## Phases
 
@@ -21,7 +22,7 @@ Full archive: [.planning/milestones/v2.0-ROADMAP.md](.planning/milestones/v2.0-R
 | 11 | Crawl Scheduling | 6/6 | ✅ Complete | 2026-07-10 |
 | 12 | Agent Surfaces | 8/8 | ✅ Complete | 2026-07-11 |
 
-**Total:** 6 phases, 38 plans, 252 commits, 85 files changed (+14,487/−419). All phases verified `passed` (19/19 requirements), threat-secured (`threats_open: 0`), and Nyquist-compliant.
+**Total:** 6 phases, 38 plans, 252 commits, 85 files changed (+14,487/-419). All phases verified `passed` (19/19 requirements), threat-secured (`threats_open: 0`), and Nyquist-compliant.
 
 </details>
 
@@ -43,11 +44,82 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 </details>
 
+### 🚧 v2.5 PageIndex Plugin Integration (In Progress)
+
+**Milestone Goal:** Add tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, with a two-stage hybrid routing architecture.
+
+- [ ] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type
+- [ ] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision
+- [ ] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics
+- [ ] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone
+
+## Phase Details
+
+### Phase 13: Tree Index Foundation
+**Goal**: Users can generate hierarchical tree indexes from any ingested document, stored as traceable silver-zone artifacts
+**Depends on**: Nothing (builds on existing v2.0 parse/clean pipeline)
+**Requirements**: TREE-01, TREE-02, TREE-03, TREE-04, TREE-05
+**Success Criteria** (what must be TRUE):
+  1. Running tree index generation on a parsed document produces a hierarchical JSON artifact in the silver zone with full lineage back to the source document
+  2. Re-running tree index on an unchanged document is a no-op (content-hash match skips all processing, including LLM calls)
+  3. Each tree node contains a title, summary, page range, and child nodes -- deterministic mode derives summaries from heading text without any LLM call
+  4. Setting tree index mode to LLM generates richer node summaries, gated by the existing LlmSpend budget cap
+  5. Tree index generation runs as a Dagster asset parallel to the existing chunking asset (fan-out from clean_document)
+**Plans**: 6 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Wave 0: test scaffolds for TREE-01..05 (test_tree_index.py, test_tree_index_asset.py, extend test_builtin_plugins.py)
+- [ ] 13-02-PLAN.md — Wave 1: enabling edits (ids.py _PREFIX, protocols.py TreeNode/TreeIndex/IndexerPlugin, settings.py TreeSettings)
+- [ ] 13-03-PLAN.md — Wave 1: registry helper create_tree_index_artifact (repo.py)
+- [ ] 13-04-PLAN.md — Wave 2: pipeline/tree_index.py — deterministic builder + content-hash no-op + LLM mode
+- [ ] 13-05-PLAN.md — Wave 2: PageIndexIndexer builtin + resolver.py get_indexer + entry-point registration
+- [ ] 13-06-PLAN.md — Wave 3: tree_index_document Dagster asset + definitions.py wiring + human checkpoint
+
+### Phase 14: Tree Retrieval
+**Goal**: Users can search within documents using two-stage retrieval that narrows from document selection to precise page-level results
+**Depends on**: Phase 13
+**Requirements**: RETR-04, RETR-05, RETR-06, RETR-07, RETR-08
+**Success Criteria** (what must be TRUE):
+  1. A search query first selects candidate documents via Qdrant (stage 1), then traverses each document's tree index to find relevant page ranges (stage 2)
+  2. Heuristic tree traversal retrieves relevant sections using keyword matching and DFS without any LLM calls
+  3. LLM-guided tree navigation is available as an opt-in mode that reasons through node summaries to select relevant subtrees
+  4. Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator distinguishing them from chunk hits
+  5. Multiple document trees load from S3 and traverse in parallel (asyncio) with a configurable concurrency limit
+**Plans**: TBD
+
+### Phase 15: Query Router
+**Goal**: System automatically dispatches queries to the optimal retrieval path based on query characteristics
+**Depends on**: Phase 14
+**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03, ROUTE-04
+**Success Criteria** (what must be TRUE):
+  1. User can set search route to `chunk`, `tree`, `two_stage`, or `auto` via settings, CLI flag (`--route`), and API parameter
+  2. In auto mode, the heuristic router detects structural queries (section references, page mentions, comparison patterns) and upgrades to tree search
+  3. Auto mode defaults to chunk search when no structural signals are detected (conservative routing)
+  4. MCP tools and API endpoints expose the `route` parameter alongside the existing `mode` parameter
+**Plans**: TBD
+
+### Phase 16: OpenKB Export
+**Goal**: Users can compile ingested documents into an interlinked knowledge base wiki in the gold zone
+**Depends on**: Phase 13
+**Requirements**: KB-01, KB-02, KB-03, KB-04, KB-05
+**Success Criteria** (what must be TRUE):
+  1. Running `klake export-wiki` produces a set of interlinked Markdown pages with `[[wikilinks]]` in the gold zone
+  2. Wiki output includes per-document summary pages, cross-document concept pages, and a root index page
+  3. Entity cross-linking uses IDF-filtered terms from enrichment metadata so only specific terms generate links (not common ones)
+  4. Adding a new source and re-running wiki export rebuilds only affected pages, not the entire wiki
+  5. Wiki export is available via both CLI (`klake export-wiki`) and API endpoint
+**Plans**: TBD
+
 ## Progress
 
-| Milestone | Phases | Status | Shipped |
-|-----------|--------|--------|---------|
-| v1.0 MVP | 1-6 | ✅ Shipped | 2026-07-07 |
-| v2.0 Agent-Ready Lake | 7-12 | ✅ Shipped | 2026-07-12 |
+**Execution Order:**
+Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 
-_Next milestone: run `/gsd-new-milestone` to define the next version._
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
+| 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
+| 13. Tree Index Foundation | v2.5 | 0/6 | Not started | - |
+| 14. Tree Retrieval | v2.5 | 0/0 | Not started | - |
+| 15. Query Router | v2.5 | 0/0 | Not started | - |
+| 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
