@@ -107,6 +107,9 @@ playwright = "knowledge_lake.plugins.builtin.playwright_adapter:PlaywrightAdapte
 [project.entry-points."knowledge_lake.discovery"]
 searxng = "knowledge_lake.plugins.builtin.searxng_discovery:SearXNGDiscovery"
 
+[project.entry-points."knowledge_lake.indexers"]
+pageindex = "knowledge_lake.plugins.builtin.pageindex_indexer:PageIndexIndexer"
+
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]
 build-backend = "uv_build"

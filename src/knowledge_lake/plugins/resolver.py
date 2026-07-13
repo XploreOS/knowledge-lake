@@ -40,6 +40,7 @@ GROUP_EMBEDDERS = "knowledge_lake.embedders"
 GROUP_VECTORSTORES = "knowledge_lake.vectorstores"
 GROUP_CRAWLERS = "knowledge_lake.crawlers"
 GROUP_DISCOVERY = "knowledge_lake.discovery"
+GROUP_INDEXERS = "knowledge_lake.indexers"
 
 
 def resolve(group: str, name: str) -> Any:
@@ -329,3 +330,30 @@ def get_crawler(settings: Settings) -> Any:
         An instantiated CrawlerPlugin (satisfies CrawlerPlugin Protocol).
     """
     return resolve(GROUP_CRAWLERS, settings.crawler)
+
+
+def get_indexer(settings: Settings) -> Any:
+    """Return the IndexerPlugin named by settings.indexer.
+
+    Reads the 'indexer' swap key from the provided Settings instance and
+    resolves it via the 'knowledge_lake.indexers' entry-point group (D-04/D-05).
+
+    Default: 'pageindex' → PageIndexIndexer (deterministic section-tree, no pre-release import).
+    Switch:  Any future plugin registered in the same group — no code change required (FOUND-08).
+
+    The LiteLLM proxy URL is injected from settings.litellm_url rather than read
+    from env directly (CR-03: no os.environ.get in plugin builtins).
+
+    Args:
+        settings: Application Settings instance.
+
+    Returns:
+        An instantiated IndexerPlugin (satisfies IndexerPlugin Protocol).
+    """
+    name = settings.indexer
+    kwargs = (
+        {"litellm_url": settings.litellm_url, "litellm_api_key": settings.litellm_api_key}
+        if name == "pageindex"
+        else {}
+    )
+    return _resolve_with_kwargs(GROUP_INDEXERS, name, **kwargs)

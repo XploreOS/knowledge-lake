@@ -8,4 +8,5 @@ Built-ins:
     knowledge_lake.embedders: local   → SentenceTransformerEmbedder
                               litellm → LiteLLMEmbedder
     knowledge_lake.vectorstores: qdrant → QdrantVectorStore
+    knowledge_lake.indexers  — pageindex (PageIndexIndexer: deterministic section tree)
 """
