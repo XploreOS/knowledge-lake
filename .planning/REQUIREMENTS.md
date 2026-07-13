@@ -9,11 +9,11 @@ Requirements for PageIndex Plugin Integration milestone. Each maps to roadmap ph
 
 ### Tree Indexing
 
-- [ ] **TREE-01**: System generates a hierarchical tree index (JSON) from any parsed document's sections, stored as a silver-zone artifact with full lineage
-- [ ] **TREE-02**: Tree index generation is skipped when content hash matches an existing tree artifact (no redundant LLM calls)
-- [ ] **TREE-03**: Each tree node carries a title, summary, page range, and child nodes — deterministic mode uses heading text as summary
-- [ ] **TREE-04**: LLM-generated node summaries are available as opt-in mode (via config flag), gated by LlmSpend budget cap
-- [ ] **TREE-05**: Tree index generation runs as a Dagster asset parallel to chunking (fan-out from clean_document)
+- [x] **TREE-01**: System generates a hierarchical tree index (JSON) from any parsed document's sections, stored as a silver-zone artifact with full lineage
+- [x] **TREE-02**: Tree index generation is skipped when content hash matches an existing tree artifact (no redundant LLM calls)
+- [x] **TREE-03**: Each tree node carries a title, summary, page range, and child nodes — deterministic mode uses heading text as summary
+- [x] **TREE-04**: LLM-generated node summaries are available as opt-in mode (via config flag), gated by LlmSpend budget cap
+- [x] **TREE-05**: Tree index generation runs as a Dagster asset parallel to chunking (fan-out from clean_document)
 
 ### Tree Retrieval
 
@@ -74,31 +74,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TREE-01 | Pending | Pending |
-| TREE-02 | Pending | Pending |
-| TREE-03 | Pending | Pending |
-| TREE-04 | Pending | Pending |
-| TREE-05 | Pending | Pending |
-| RETR-04 | Pending | Pending |
-| RETR-05 | Pending | Pending |
-| RETR-06 | Pending | Pending |
-| RETR-07 | Pending | Pending |
-| RETR-08 | Pending | Pending |
-| ROUTE-01 | Pending | Pending |
-| ROUTE-02 | Pending | Pending |
-| ROUTE-03 | Pending | Pending |
-| ROUTE-04 | Pending | Pending |
-| KB-01 | Pending | Pending |
-| KB-02 | Pending | Pending |
-| KB-03 | Pending | Pending |
-| KB-04 | Pending | Pending |
-| KB-05 | Pending | Pending |
+| TREE-01 | Phase 13 | Complete |
+| TREE-02 | Phase 13 | Complete |
+| TREE-03 | Phase 13 | Complete |
+| TREE-04 | Phase 13 | Complete |
+| TREE-05 | Phase 13 | Complete |
+| RETR-04 | Phase 14 | Pending |
+| RETR-05 | Phase 14 | Pending |
+| RETR-06 | Phase 14 | Pending |
+| RETR-07 | Phase 14 | Pending |
+| RETR-08 | Phase 14 | Pending |
+| ROUTE-01 | Phase 15 | Pending |
+| ROUTE-02 | Phase 15 | Pending |
+| ROUTE-03 | Phase 15 | Pending |
+| ROUTE-04 | Phase 15 | Pending |
+| KB-01 | Phase 16 | Pending |
+| KB-02 | Phase 16 | Pending |
+| KB-03 | Phase 16 | Pending |
+| KB-04 | Phase 16 | Pending |
+| KB-05 | Phase 16 | Pending |
 
 **Coverage:**
+
 - v2.5 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-13*
-*Last updated: 2026-07-13 after initial definition*
+*Last updated: 2026-07-13 after roadmap creation (traceability complete)*
