@@ -666,3 +666,141 @@ class TestTouchSourceCrawl:
     def test_scheduled_source_namedtuple_import(self) -> None:
         from knowledge_lake.registry.repo import _ScheduledSource
         assert _ScheduledSource is not None
+
+
+# ── Tree index artifact tests ─────────────────────────────────────────────────
+
+
+class TestTreeIndexArtifactCreate:
+    """create_tree_index_artifact mirrors create_chunk_artifact but uses artifact_type='tree_index'."""
+
+    @pytest.fixture()
+    def chain(self, session):
+        from knowledge_lake.registry.repo import (
+            create_parsed_artifact,
+            create_raw_artifact,
+            create_source,
+        )
+        src = create_source(session, name="TI Source", source_type="web")
+        raw = create_raw_artifact(
+            session, source_id=src.id, content_hash="ti_raw",
+            storage_uri="s3://b/raw/ti_raw.pdf",
+        )
+        parsed = create_parsed_artifact(
+            session, source_id=src.id, parent_artifact_id=raw.id,
+            content_hash="ti_parsed", storage_uri="s3://b/silver/ti_parsed.json",
+        )
+        session.flush()
+        return src, raw, parsed
+
+    def test_create_tree_index_artifact_is_importable(self) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+        assert callable(create_tree_index_artifact)
+
+    def test_tree_index_artifact_type(self, session, chain) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+
+        src, raw, parsed = chain
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_1",
+            storage_uri="s3://b/tree_index/domain/src/ti_hash_1.json",
+        )
+        assert art.artifact_type == "tree_index", (
+            f"Expected artifact_type='tree_index', got {art.artifact_type!r}"
+        )
+
+    def test_tree_index_parent_is_parsed(self, session, chain) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+
+        src, raw, parsed = chain
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_2",
+        )
+        assert art.parent_artifact_id == parsed.id, (
+            f"Expected parent_artifact_id={parsed.id!r}, got {art.parent_artifact_id!r}"
+        )
+
+    def test_tree_index_id_prefixed_idx(self, session, chain) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+
+        src, raw, parsed = chain
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_3",
+        )
+        assert art.id.startswith("idx_"), (
+            f"Expected idx_ prefix (new_id('tree_index')), got {art.id!r}"
+        )
+
+    def test_tree_index_mime_type_default_json(self, session, chain) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+
+        src, raw, parsed = chain
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_4",
+        )
+        assert art.mime_type == "application/json", (
+            f"Expected default mime_type='application/json', got {art.mime_type!r}"
+        )
+
+    def test_tree_index_storage_uri_passthrough(self, session, chain) -> None:
+        from knowledge_lake.registry.repo import create_tree_index_artifact
+
+        src, raw, parsed = chain
+        uri = "s3://bucket/tree_index/domain/src/abc123.json"
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_5",
+            storage_uri=uri,
+        )
+        assert art.storage_uri == uri, (
+            f"Expected storage_uri={uri!r}, got {art.storage_uri!r}"
+        )
+
+    def test_tree_index_dedup_by_hash(self, session, chain) -> None:
+        """get_artifact_by_hash returns the tree_index artifact after flush."""
+        from knowledge_lake.registry.repo import (
+            create_tree_index_artifact,
+            get_artifact_by_hash,
+        )
+
+        src, raw, parsed = chain
+        art = create_tree_index_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="ti_hash_6",
+        )
+        session.flush()
+        found = get_artifact_by_hash(session, "ti_hash_6", "tree_index")
+        assert found is not None, "get_artifact_by_hash must find tree_index artifact"
+        assert found.id == art.id, (
+            f"Expected artifact id={art.id!r}, got {found.id!r}"
+        )
+
+    def test_create_chunk_artifact_still_works(self, session, chain) -> None:
+        """Regression: create_chunk_artifact is not broken by the new function."""
+        from knowledge_lake.registry.repo import create_chunk_artifact
+
+        src, raw, parsed = chain
+        chunk = create_chunk_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="reg_chunk_1",
+        )
+        assert chunk.artifact_type == "chunk"
+        assert chunk.id.startswith("chk_")
