@@ -68,7 +68,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   4. Setting tree index mode to LLM generates richer node summaries, gated by the existing LlmSpend budget cap
   5. Tree index generation runs as a Dagster asset parallel to the existing chunking asset (fan-out from clean_document)
 
-**Plans**: 3/6 plans executed
+**Plans**: 5/6 plans executed
 
 Plans:
 **Wave 1**
@@ -79,8 +79,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 13-04-PLAN.md — Wave 2: pipeline/tree_index.py — deterministic builder + content-hash no-op + LLM mode
-- [ ] 13-05-PLAN.md — Wave 2: PageIndexIndexer builtin + resolver.py get_indexer + entry-point registration
+- [x] 13-04-PLAN.md — Wave 2: pipeline/tree_index.py — deterministic builder + content-hash no-op + LLM mode
+- [x] 13-05-PLAN.md — Wave 2: PageIndexIndexer builtin + resolver.py get_indexer + entry-point registration
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -139,7 +139,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 |-------|-----------|----------------|--------|-----------|
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
-| 13. Tree Index Foundation | v2.5 | 3/6 | In Progress|  |
+| 13. Tree Index Foundation | v2.5 | 5/6 | In Progress|  |
 | 14. Tree Retrieval | v2.5 | 0/0 | Not started | - |
 | 15. Query Router | v2.5 | 0/0 | Not started | - |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
