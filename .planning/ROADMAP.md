@@ -99,7 +99,11 @@ Plans:
   4. Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator distinguishing them from chunk hits
   5. Multiple document trees load from S3 and traverse in parallel (asyncio) with a configurable concurrency limit
 
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 14-01-PLAN.md — Wave 0 test scaffold (test_tree_search.py + RetrieverPlugin conformance stub) covering RETR-04..08
+- [ ] 14-02-PLAN.md — Hit.citation_source + RetrieverPlugin Protocol + TreeSearchSettings + retriever swap key (contracts)
+- [ ] 14-03-PLAN.md — PageIndexRetriever (heuristic DFS + opt-in budget-capped LLM-nav) + get_retriever entry-point seam
+- [ ] 14-04-PLAN.md — Two-stage tree_search orchestrator (shortlist → parallel tree load → traversal) + thin klake tree-search CLI
 
 ### Phase 15: Query Router
 
