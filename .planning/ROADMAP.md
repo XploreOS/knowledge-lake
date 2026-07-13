@@ -48,7 +48,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 **Milestone Goal:** Add tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, with a two-stage hybrid routing architecture.
 
-- [ ] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type
+- [x] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type (completed 2026-07-13)
 - [ ] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision
 - [ ] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics
 - [ ] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone
@@ -68,7 +68,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   4. Setting tree index mode to LLM generates richer node summaries, gated by the existing LlmSpend budget cap
   5. Tree index generation runs as a Dagster asset parallel to the existing chunking asset (fan-out from clean_document)
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -84,7 +84,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 13-06-PLAN.md — Wave 3: tree_index_document Dagster asset + definitions.py wiring + human checkpoint
+- [x] 13-06-PLAN.md — Wave 3: tree_index_document Dagster asset + definitions.py wiring + human checkpoint
 
 ### Phase 14: Tree Retrieval
 
@@ -139,7 +139,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 |-------|-----------|----------------|--------|-----------|
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
-| 13. Tree Index Foundation | v2.5 | 5/6 | In Progress|  |
+| 13. Tree Index Foundation | v2.5 | 6/6 | Complete   | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 0/0 | Not started | - |
 | 15. Query Router | v2.5 | 0/0 | Not started | - |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
