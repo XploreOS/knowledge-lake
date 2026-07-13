@@ -668,9 +668,14 @@ def generate_dataset(
         result = generate_qa_example(
             config.source_artifact_id, config.dataset_name, settings=settings
         )
-    else:
+    elif config.kind == "instruction":
         result = generate_instruction_example(
             config.source_artifact_id, config.dataset_name, settings=settings
+        )
+    else:
+        raise ValueError(
+            f"generate_dataset: unknown kind={config.kind!r}. "
+            "Valid values: 'qa', 'instruction'."
         )
 
     log.info(
