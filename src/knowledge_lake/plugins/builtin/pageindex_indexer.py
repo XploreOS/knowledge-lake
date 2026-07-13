@@ -76,7 +76,7 @@ class PageIndexIndexer:
         from knowledge_lake.pipeline.tree_index import _build_deterministic_tree
 
         meta = metadata or {}
-        page_count: int = int(parsed_doc.metadata.get("page_count", 1))
+        page_count: int = int(parsed_doc.metadata.get("page_count") or 1)
         roots = _build_deterministic_tree(parsed_doc.sections, page_count)
 
         return TreeIndex(

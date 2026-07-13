@@ -260,7 +260,7 @@ def tree_index(
             return {"artifact_id": existing.id, "cached": True, "status": "cached"}
 
     # ── Step 4: Build deterministic tree ──────────────────────────────────────
-    page_count = parsed_doc.metadata.get("page_count", 1)
+    page_count: int = int(parsed_doc.metadata.get("page_count") or 1)
 
     if not parsed_doc.sections:
         # No-sections fallback: single root node (mirrors chunk.py no-sections path)
