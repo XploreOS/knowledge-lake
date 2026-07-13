@@ -5,9 +5,9 @@ milestone_name: — Agent-Ready Lake
 current_phase: 0
 status: Awaiting next milestone
 stopped_at: Completed 12-01 Wave 0 scaffold
-last_updated: "2026-07-12T17:30:00.000Z"
-last_activity: 2026-07-12
-last_activity_desc: "Quick task 260712-nyq: klake domain new scaffold command"
+last_updated: "2026-07-13T01:45:00.000Z"
+last_activity: 2026-07-13
+last_activity_desc: "Quick task 260713-1yf: fix three functional-medicine pipeline findings (QA grounding, domain inheritance, challenge-page gate)"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-12)
 Phase: Milestone v2.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-07-12 — Milestone v2.0 completed and archived
+Last activity: 2026-07-13 — Quick task 260713-1yf: fixed three functional-medicine pipeline findings
 
 ## Performance Metrics
 
@@ -120,6 +120,7 @@ Last activity: 2026-07-12 — Milestone v2.0 completed and archived
 | 260707-ieb | create project documentation with full details on project overview, architecture, etc., in docs/ folder | 2026-07-07 | cad4e0b | [260707-ieb-create-project-documentation-with-full-d](.planning/quick/260707-ieb-create-project-documentation-with-full-d/) |
 | 260707-hoh | add documentation for knowledge-lake (klake) local setup, and usage for multiple domains with full steps and commands | 2026-07-07 | 14ad3da | [260707-hoh-add-documentation-for-knowledge-lake-kla](.planning/quick/260707-hoh-add-documentation-for-knowledge-lake-kla/) |
 | 260712-nyq | add `klake domain new <name>` scaffold command for domain-pack skeletons; generalize DomainLoader validator lookup; trim stale maintainer notes | 2026-07-12 | 0e5917c | [260712-nyq-add-klake-domain-new-name-scaffold-comma](.planning/quick/260712-nyq-add-klake-domain-new-name-scaffold-comma/) |
+| 260713-1yf | fix three functional-medicine pipeline findings: ground QA generation via chunk-text storage_uri, inherit active domain in discover/crawl, reject anti-bot/CAPTCHA challenge pages in parse gate | 2026-07-13 | 2a800d3..bd99cc1 | [260713-1yf-fix-three-pipeline-findings-qa-empty-chu](.planning/quick/260713-1yf-fix-three-pipeline-findings-qa-empty-chu/) |
 
 ## Accumulated Context
 
