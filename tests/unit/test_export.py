@@ -530,7 +530,7 @@ class TestRagCorpus:
         mock_storage.get_object.return_value = known_text
         mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
 
-        import knowledge_lake.pipeline.export as export_module
+        from knowledge_lake.pipeline import export as export_module
 
         with patch.object(export_module, "_make_storage", return_value=mock_storage):
             result = export_module.export_rag_corpus(settings=settings)
@@ -587,7 +587,7 @@ class TestRagCorpus:
         mock_storage.put_object.side_effect = mock_put_object
         mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
 
-        import knowledge_lake.pipeline.export as export_module
+        from knowledge_lake.pipeline import export as export_module
 
         with patch.object(export_module, "_make_storage", return_value=mock_storage):
             result = export_module.export_rag_corpus(settings=settings)
