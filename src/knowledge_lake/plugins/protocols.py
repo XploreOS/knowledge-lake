@@ -687,8 +687,8 @@ class IndexerPlugin(Protocol):
         self,
         parsed_doc: ParsedDoc,
         *,
-        mode: str,
-        metadata: dict[str, Any],
+        mode: str = "deterministic",
+        metadata: dict[str, Any] | None = None,
     ) -> TreeIndex:
         """Build a TreeIndex from a ParsedDoc.
 
