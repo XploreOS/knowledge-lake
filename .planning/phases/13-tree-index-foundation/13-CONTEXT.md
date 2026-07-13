@@ -93,23 +93,18 @@ versioning/migration and corpus-level meta-tree (TREE-06/07, deferred to v2.6+).
   and halts gracefully (`status: skipped_budget_exceeded`), exactly like
   `enrich_document` (D-05 / D-14 of Phase 4).
 
-### CLI / asset surface
-- **D-10:** Primary surface is the **Dagster `tree_index_document` asset** (TREE-05).
-  A thin `klake tree-index <parsed_artifact_id>` CLI wrapper calling the same
-  `pipeline.tree_index` function is a nice-to-have; keep asset and CLI as thin
-  shells over one `tree_index()` function — no logic duplicated (same convention
-  as `chunk_document` / `chunk`).
-
 ### Claude's Discretion
 - Exact `node_id` scheme (e.g. `section_path`-derived vs sequential), JSON
   serialization helper choice, and whether `schema_version` starts at `"1"` or
   `"1.0.0"` are left to the planner/executor — provided the schema contract
   (D-01/D-02) is stable and documented.
-
-### Process / execution
-- **D-11:** Per the invocation directive, **sub-agent executors run on the
-  `sonnet` model**. Pinned via `model_overrides.gsd-executor: "sonnet"` in
-  `.planning/config.json` (also the `adaptive`-profile default for gsd-executor).
+- **CLI wrapper (D-10):** Primary surface is the Dagster asset (TREE-05). A thin
+  `klake tree-index <parsed_artifact_id>` CLI wrapper is a nice-to-have; whether
+  to include it is left to the executor — the constraint is that asset + CLI share
+  one `tree_index()` function with no duplicated logic.
+- **Executor model (D-11):** Sub-agent executors run on `sonnet`. Already pinned
+  via `model_overrides.gsd-executor: "sonnet"` in `.planning/config.json` — no
+  plan task needed.
 
 </decisions>
 
