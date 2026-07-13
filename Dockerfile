@@ -1,7 +1,7 @@
 # Knowledge Lake API Dockerfile
 # Builds the FastAPI service container
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Install system utilities needed for healthchecks and operations
 RUN apt-get update -qq && \
