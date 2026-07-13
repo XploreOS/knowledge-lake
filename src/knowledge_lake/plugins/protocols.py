@@ -588,3 +588,117 @@ class CrawlerPlugin(Protocol):
             RuntimeError: If the job is not yet complete.
         """
         ...
+
+
+# ---------------------------------------------------------------------------
+# Tree index data structures (TREE-01..05, D-01, D-02)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TreeNode:
+    """Tree index node per D-02.
+
+    level and page_end are DERIVED by the builder — Section has no level or
+    page_end fields (Finding 1 in 13-RESEARCH.md). node_id is derived from
+    section_path (stable — never a uuid/clock/randomness, Pitfall 3).
+    children is a list of child TreeNode objects (nested sections).
+    """
+
+    node_id: str
+    """Stable node ID derived from section_path (e.g. 'node_1.1')."""
+
+    title: str
+    """Section heading text."""
+
+    summary: str
+    """LLM-generated or heuristic summary of the section (empty in deterministic mode)."""
+
+    page_start: int
+    """Page number where this section begins (from Section.page, 1-indexed)."""
+
+    page_end: int
+    """Page number where this section ends (DERIVED by builder — Section has no page_end)."""
+
+    level: int
+    """Nesting level (DERIVED by builder from section_path depth — Section has no level)."""
+
+    section_path: str
+    """Canonical dot-notation section path (e.g. '§3.2')."""
+
+    children: list[TreeNode] = field(default_factory=list)
+    """Child TreeNode objects (nested subsections)."""
+
+
+@dataclass
+class TreeIndex:
+    """Tree index artifact wrapper per D-02.
+
+    mode is 'deterministic' or 'llm'. schema_version anchors TREE-06 migration
+    (deferred to v2.6+). content_hash enables the dedup no-op check (D-06).
+    """
+
+    parsed_artifact_id: str
+    """ID of the parsed_document artifact this tree was built from (D-07)."""
+
+    source_id: str
+    """ID of the source this tree index belongs to."""
+
+    roots: list[TreeNode] = field(default_factory=list)
+    """Top-level TreeNode objects (level-1 sections)."""
+
+    mode: str = "deterministic"
+    """Build mode: 'deterministic' (heuristic) or 'llm' (LLM-assisted summaries)."""
+
+    schema_version: str = "1"
+    """Schema version for forward-compatibility (TREE-06 migration deferred to v2.6+)."""
+
+    content_hash: str = ""
+    """SHA-256 of parsed content + mode + schema_version for dedup no-op (D-06)."""
+
+
+# ---------------------------------------------------------------------------
+# Indexer Plugin Protocol (TREE-05, D-05)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class IndexerPlugin(Protocol):
+    """Swap-capable tree indexer plugin (D-05, FOUND-08).
+
+    Swap via settings.indexer entry-point group 'knowledge_lake.indexers'.
+
+    Implementations must expose:
+      name        — stable identifier used to register and resolve the plugin
+      build_index — build a TreeIndex from a ParsedDoc with the given mode
+
+    Default built-in: PageIndexIndexer ('pageindex') — deterministic Section-to-tree
+    nesting with optional LLM-assisted node summaries.
+
+    The indexer swap key (settings.indexer) selects the active implementation
+    via the 'knowledge_lake.indexers' entry-point group. No os.environ reads
+    in builtins (CR-03); service URLs/config injected from Settings.
+    """
+
+    name: str
+    """Stable name used to look up this implementation via the resolver."""
+
+    def build_index(
+        self,
+        parsed_doc: ParsedDoc,
+        *,
+        mode: str,
+        metadata: dict[str, Any],
+    ) -> TreeIndex:
+        """Build a TreeIndex from a ParsedDoc.
+
+        Args:
+            parsed_doc: Structured parsed document output from a ParserPlugin.
+            mode:       Build mode — 'deterministic' (heuristic nesting) or
+                        'llm' (LLM-assisted per-node summaries).
+            metadata:   Document-level metadata dict (source_id, artifact_id, etc.).
+
+        Returns:
+            TreeIndex with roots populated; content_hash and schema_version set.
+        """
+        ...
