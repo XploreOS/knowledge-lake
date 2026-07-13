@@ -170,7 +170,7 @@ class TestDeterministicTree:
             settings=settings,
         )
 
-        assert result["status"] in ("indexed", "tree_indexed", "complete"), (
+        assert result["status"] == "tree_indexed", (
             f"Expected success status, got {result['status']!r}"
         )
         assert result.get("artifact_id") is not None, "artifact_id must be set on success"
@@ -449,7 +449,7 @@ class TestLlmMode:
         assert "cost_usd" in happy_result, "LLM mode result must include cost_usd"
 
         with Session(engine) as check:
-            spend_after = registry_repo.get_llm_spend(check, scope="global")
+            spend_after = registry_repo.get_llm_spend(check, scope="tree_index")
         assert spend_after > 0, "record_llm_spend must have been called after LLM mode"
 
         # --- Budget-exceeded path ---
@@ -464,7 +464,7 @@ class TestLlmMode:
                 content_hash="llmhash2", storage_uri="s3://b/silver/llmhash2.md",
             )
             # Seed spend to the full budget amount
-            registry_repo.record_llm_spend(s3, "global", budget_usd)
+            registry_repo.record_llm_spend(s3, "tree_index", budget_usd)
             s3.commit()
             parsed_budget_id = parsed_budget.id
 
