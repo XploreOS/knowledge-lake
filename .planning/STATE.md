@@ -6,14 +6,14 @@ current_phase: 13
 current_phase_name: Tree Index Foundation
 status: executing
 stopped_at: Phase 13 context gathered
-last_updated: "2026-07-13T13:44:18.091Z"
+last_updated: "2026-07-13T13:51:26.251Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 13 execution started
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-12)
 ## Current Position
 
 Phase: 13 (Tree Index Foundation) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-13 — Phase 13 execution started
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 13 P01 | 8min | 2 tasks | 3 files |
+| Phase 13 P02 | 4min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Recent decisions affecting current work:
 - [Roadmap v2.5]: Phase 16 (OpenKB) depends on Phase 13 only (needs tree indexes + enrichment metadata) — independent of Phases 14-15
 - [Roadmap v2.5]: Deterministic-first constraint applied: Phase 13 builds heuristic tree indexing before LLM mode; Phase 14 builds keyword traversal before LLM-guided; Phase 15 builds heuristic routing before any LLM routing (deferred to v2.6+)
 - [Phase ?]: Wave 0 test scaffold in RED state: 6 tree-index tests, 2 asset tests, 2 IndexerPlugin conformance stubs fail with ImportError until Wave 1/2 ships — Nyquist compliance — all Wave 1/2 implementation tasks have automated verify targets before code is written
+- [Phase ?]: TreeNode.level and page_end are DERIVED by builder — Section has no level/page_end (Finding 1 in 13-RESEARCH.md)
+- [Phase ?]: indexer added to _validate_swap_key ASVS V5 regex to prevent malicious entry-point names (T-13-03 mitigated)
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-13T13:43:59.564Z
+Last session: 2026-07-13T13:51:18.522Z
 Stopped at: Phase 13 context gathered
 Resume file: .planning/phases/13-tree-index-foundation/13-CONTEXT.md
