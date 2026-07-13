@@ -292,7 +292,7 @@ def tree_index(
     total_cost = 0.0
     if effective_mode == "llm":
         with get_session() as session:
-            current_spend = registry_repo.get_llm_spend(session, scope="global")
+            current_spend = registry_repo.get_llm_spend(session, scope="tree_index")
             if current_spend >= s.tree.budget_usd:
                 log.warning(
                     "tree_index.budget_exceeded",
@@ -344,7 +344,7 @@ def tree_index(
     with get_session() as session:
         # Record LLM spend (LLM mode only) inside the registry session
         if effective_mode == "llm" and total_cost > 0:
-            registry_repo.record_llm_spend(session, scope="global", cost_usd=total_cost)
+            registry_repo.record_llm_spend(session, scope="tree_index", cost_usd=total_cost)
 
         artifact = registry_repo.create_tree_index_artifact(
             session,
