@@ -33,6 +33,7 @@ def discover_sources(
     query: str,
     *,
     limit: int = 20,
+    domain: str | None = None,
     settings: Settings | None = None,
 ) -> list[dict]:
     """Run a discovery query and auto-register valid results as candidate sources.
@@ -47,6 +48,9 @@ def discover_sources(
     Args:
         query:    Natural-language search query for the discovery engine.
         limit:    Maximum number of results to request from the engine.
+        domain:   Optional domain classification (Finding 2). Forwarded to
+                  register_source so discovered sources land under {domain}/
+                  instead of _unclassified/. None stays backward-compatible.
         settings: Settings override (uses get_settings() if None).
 
     Returns:
@@ -92,6 +96,7 @@ def discover_sources(
             url=item.url,
             name=item.title or item.url,
             source_type_override="discovered",
+            domain=domain,
         )
 
         status = "existing" if not reg_result["is_new"] else "registered"
