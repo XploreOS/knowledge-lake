@@ -8,12 +8,12 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.0 — shipped 2026-07-12)
+## Current State (v2.5 — Phase 13 complete 2026-07-13)
 
-- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); milestone audit PASSED (19/19 requirements)
+- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phase 13 (Tree Index Foundation) complete 2026-07-13
 - **Source lines:** ~21,300 Python
-- **Tests:** 522 unit passing (+39 xpass, 1 intentional xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
-- **Pipeline:** ingest → parse → clean → chunk → enrich → embed → index → curate → generate-dataset → export
+- **Tests:** 567 unit passing (+39 xpass, 1 intentional xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
 - **Retrieval:** hybrid BM25 + dense with server-side RRF fusion, mode-switchable (`hybrid|dense|sparse`, fail-loud)
 - **Scheduling:** Dagster re-crawl sensor with normalized silver-text change gate + tick-storm dedup
