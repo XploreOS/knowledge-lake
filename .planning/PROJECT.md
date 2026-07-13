@@ -24,10 +24,16 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Quality gates:** all 6 phases verified `passed`, threat-secured (`threats_open: 0`), Nyquist-compliant
 - **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster container rebuild / code-location reload for new sensors; live-service E2E paths not exercised in this env
 
-## Next Milestone (planning)
+## Current Milestone: v2.5 PageIndex Plugin Integration
 
-v2.0 is shipped. Candidate scope for the next version is captured under **Deferred to v2.1** below.
-Run `/gsd-new-milestone` to define it (questioning → research → requirements → roadmap).
+**Goal:** Add tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, with a two-stage hybrid routing architecture and comprehensive system documentation.
+
+**Target features:**
+- PageIndex tree index generation as a new artifact type (silver zone JSON, parallel to chunking)
+- Two-stage retrieval: Qdrant doc-level selection → PageIndex tree search for precision
+- OpenKB-style compiled knowledge base export (interlinked wiki from ingested documents)
+- Query router to dispatch between chunk-search and tree-search paths
+- Comprehensive architectural documentation of the full system
 
 ## Requirements
 

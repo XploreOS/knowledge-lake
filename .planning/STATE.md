@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: — Agent-Ready Lake
-current_phase: 0
-status: Awaiting next milestone
-stopped_at: Completed 12-01 Wave 0 scaffold
-last_updated: "2026-07-13T02:50:00.000Z"
+milestone: v2.5
+milestone_name: PageIndex Plugin Integration
+status: planning
+last_updated: "2026-07-13T05:06:40.211Z"
 last_activity: 2026-07-13
-last_activity_desc: "Quick task 260713-3le: fix export_rag_corpus empty chunk text — read from storage_uri"
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 38
-  completed_plans: 38
-  percent: 100
-current_phase_name: agent-surfaces
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-12)
 
 ## Current Position
 
-Phase: Milestone v2.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-13 — Quick task 260713-3le: fix export_rag_corpus empty chunk text
+Status: Defining requirements
+Last activity: 2026-07-13 — Milestone v2.5 started
 
 ## Performance Metrics
 
