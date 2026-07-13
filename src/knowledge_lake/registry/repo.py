@@ -300,6 +300,42 @@ def create_chunk_artifact(
     return art
 
 
+# ── Tree index ────────────────────────────────────────────────────────────────
+
+
+def create_tree_index_artifact(
+    session: Session,
+    *,
+    source_id: str,
+    parent_artifact_id: str,
+    content_hash: str,
+    storage_uri: str | None = None,
+    mime_type: str | None = "application/json",
+    metadata: Any | None = None,
+) -> Artifact:
+    """Persist a tree_index artifact node with full lineage.
+
+    ``parent_artifact_id`` must be the parsed_document artifact ID (D-07
+    lineage).  Zero Alembic migration required — artifact_type is a free-form
+    String.
+
+    Stamps ``pipeline_version`` and generates an ``idx_``-prefixed UUIDv7 ID
+    (requires ``ids._PREFIX["tree_index"] = "idx"`` — added in Plan 13-02).
+    """
+    art = _make_artifact(
+        kind="tree_index",
+        source_id=source_id,
+        artifact_type="tree_index",
+        content_hash=content_hash,
+        storage_uri=storage_uri,
+        parent_artifact_id=parent_artifact_id,
+        mime_type=mime_type,
+        metadata=metadata,
+    )
+    session.add(art)
+    return art
+
+
 # ── Lookups ───────────────────────────────────────────────────────────────────
 
 
