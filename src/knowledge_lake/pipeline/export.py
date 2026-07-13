@@ -37,6 +37,7 @@ import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.ids import new_id
+from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
@@ -292,13 +293,23 @@ def export_rag_corpus(
 
             meta = chunk.metadata_ or {}
 
+            # Resolve chunk text: prefer persisted storage_uri (Finding 1 / same pattern
+            # as datasets.generate_qa_example). Falls back to meta.get("text","") then ""
+            # for pre-fix chunks with no storage_uri — never raises (graceful degradation).
+            chunk_text = meta.get("text", "")
+            if chunk.storage_uri:
+                try:  # noqa: SIM105 — explicit fallback assignment requires try/except, not suppress
+                    chunk_text = storage.get_object(_uri_to_key(chunk.storage_uri)).decode("utf-8")
+                except Exception:  # noqa: BLE001 — fall back to metadata text on any read failure
+                    chunk_text = meta.get("text", "")
+
             # Build row strictly from allow-list — never **meta or asdict() (T-05-08)
             row = {
                 "chunk_id": chunk.id,
                 "document_id": parsed_id or "",
                 "section_path": meta.get("section_path", chunk.section_path or ""),
                 "page": meta.get("page", chunk.page_ref or 1),
-                "text": meta.get("text", ""),
+                "text": chunk_text,
                 "domain": row_domain,
                 "document_type": enrichment_metadata.get("document_type"),
                 "keywords": enrichment_metadata.get("keywords", []),
