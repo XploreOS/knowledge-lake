@@ -55,11 +55,11 @@ def fake_storage(monkeypatch):
     object_uri returns a deterministic s3:// URI so the test can assert the
     created chunk artifact's storage_uri matches the key that was written.
     """
-    import knowledge_lake.pipeline.chunk as chunk_module
+    from knowledge_lake.pipeline.chunk import StorageBackend
 
     fake = MagicMock()
     fake.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
-    monkeypatch.setattr(chunk_module, "StorageBackend", lambda *_a, **_k: fake)
+    monkeypatch.setattr("knowledge_lake.pipeline.chunk.StorageBackend", lambda *_a, **_k: fake)
     return fake
 
 
