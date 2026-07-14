@@ -103,7 +103,6 @@ from knowledge_lake.pipeline.ingest import ingest_url, register_source  # noqa: 
 from knowledge_lake.pipeline.process import process_crawled  # noqa: E402
 from knowledge_lake.pipeline.query import list_sources, stats  # noqa: E402
 from knowledge_lake.pipeline.route import routed_search  # noqa: E402
-from knowledge_lake.pipeline.search import search  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Export dispatch handler (mirrors api/app.py:1191-1204 verbatim).
