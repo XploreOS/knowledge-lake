@@ -452,6 +452,65 @@ class RouterSettings(BaseModel):
     """
 
 
+class WikiSettings(BaseModel):
+    """Wiki knowledge-base compilation configuration (KB-01..KB-05).
+
+    Controls IDF-filtered cross-linking, incremental rebuild, and optional LLM
+    summary generation for the compiled wiki in the gold zone.
+
+    Nested under Settings as settings.wiki. Environment variable pattern:
+    KLAKE_WIKI__MIN_ENTITY_IDF, KLAKE_WIKI__MIN_ENTITY_DF,
+    KLAKE_WIKI__USE_LLM_SUMMARIES, KLAKE_WIKI__SUMMARY_EXCERPT_CHARS,
+    KLAKE_WIKI__BUDGET_USD, KLAKE_WIKI__MODEL_ALIAS.
+    """
+
+    min_entity_idf: float = 1.5
+    """Minimum IDF score for an entity to qualify for a concept page (D-05, KB-03).
+
+    Higher values produce fewer, more specific cross-links. Default 1.5 is tuned
+    for a typical 28-source healthcare domain (~5-15 links per document page).
+    Override via KLAKE_WIKI__MIN_ENTITY_IDF env var.
+    """
+
+    min_entity_df: int = 2
+    """Minimum document frequency for an entity to qualify for a concept page (D-03).
+
+    Entities appearing in fewer than min_entity_df documents are excluded from
+    cross-linking regardless of IDF score. Override via KLAKE_WIKI__MIN_ENTITY_DF.
+    """
+
+    use_llm_summaries: bool = False
+    """Enable LLM-generated document summaries on wiki pages (D-09).
+
+    Deterministic-first: defaults to False (summaries assembled from enrichment
+    metadata only, no LLM call). Set to True to enable richer LLM summaries via
+    LiteLLM subject to budget_usd cap. Override via KLAKE_WIKI__USE_LLM_SUMMARIES.
+    """
+
+    summary_excerpt_chars: int = 500
+    """Maximum characters from the lead paragraph included in document summary pages (D-08).
+
+    When use_llm_summaries=False this excerpt is the primary summary content.
+    Override via KLAKE_WIKI__SUMMARY_EXCERPT_CHARS env var.
+    """
+
+    budget_usd: float = 5.0
+    """Per-invocation LLM spend cap in USD for wiki compilation (D-09).
+
+    Only relevant when use_llm_summaries=True. Compilation aborts if projected
+    cost exceeds this limit before any LLM calls are made.
+    Override via KLAKE_WIKI__BUDGET_USD env var.
+    """
+
+    model_alias: str = "cheap_model"
+    """LiteLLM task alias used for LLM summary generation (D-09).
+
+    Maps to a model entry in the LiteLLM proxy config. Uses the task-based alias
+    convention (cheap_model, strong_model, etc.) — no hardcoded provider model IDs.
+    Override via KLAKE_WIKI__MODEL_ALIAS env var.
+    """
+
+
 # Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
 _SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
@@ -580,6 +639,12 @@ class Settings(BaseSettings):
 
     Resolved via KLAKE_ROUTER__DEFAULT_ROUTE=chunk|tree|two_stage|auto
     (env_nested_delimiter='__').
+    """
+
+    wiki: WikiSettings = Field(default_factory=WikiSettings)
+    """Wiki knowledge-base compilation configuration (KB-01..KB-05).
+
+    Resolved via KLAKE_WIKI__* env vars (env_nested_delimiter='__').
     """
 
     export: ExportSettings = Field(default_factory=ExportSettings)
