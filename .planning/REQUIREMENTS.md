@@ -25,10 +25,10 @@ Requirements for PageIndex Plugin Integration milestone. Each maps to roadmap ph
 
 ### Query Routing
 
-- [ ] **ROUTE-01**: Search mode is configurable as `chunk | tree | two_stage | auto` via settings, CLI flag, and API parameter
-- [ ] **ROUTE-02**: Heuristic router detects structural/multi-hop queries (section references, page mentions, comparison patterns) and upgrades to tree search
-- [ ] **ROUTE-03**: Auto mode defaults to chunk search when no structural signals are detected (conservative routing)
-- [ ] **ROUTE-04**: MCP tools and API endpoints expose the route parameter alongside existing mode parameter
+- [x] **ROUTE-01**: Search mode is configurable as `chunk | tree | two_stage | auto` via settings, CLI flag, and API parameter
+- [x] **ROUTE-02**: Heuristic router detects structural/multi-hop queries (section references, page mentions, comparison patterns) and upgrades to tree search
+- [x] **ROUTE-03**: Auto mode defaults to chunk search when no structural signals are detected (conservative routing)
+- [x] **ROUTE-04**: MCP tools and API endpoints expose the route parameter alongside existing mode parameter
 
 ### OpenKB Export
 
@@ -84,10 +84,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RETR-06 | Phase 14 | Complete |
 | RETR-07 | Phase 14 | Complete |
 | RETR-08 | Phase 14 | Complete |
-| ROUTE-01 | Phase 15 | Pending |
-| ROUTE-02 | Phase 15 | Pending |
-| ROUTE-03 | Phase 15 | Pending |
-| ROUTE-04 | Phase 15 | Pending |
+| ROUTE-01 | Phase 15 | Complete |
+| ROUTE-02 | Phase 15 | Complete |
+| ROUTE-03 | Phase 15 | Complete |
+| ROUTE-04 | Phase 15 | Complete |
 | KB-01 | Phase 16 | Pending |
 | KB-02 | Phase 16 | Pending |
 | KB-03 | Phase 16 | Pending |

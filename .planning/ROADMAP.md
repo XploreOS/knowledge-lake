@@ -157,5 +157,5 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
-| 15. Query Router | v2.5 | 2/2 | Complete   | 2026-07-14 |
+| 15. Query Router | v2.5 | 2/2 | Complete    | 2026-07-14 |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
