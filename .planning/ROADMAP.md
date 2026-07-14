@@ -144,7 +144,11 @@ Plans:
   4. Adding a new source and re-running wiki export rebuilds only affected pages, not the entire wiki
   5. Wiki export is available via both CLI (`klake export-wiki`) and API endpoint
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 16-01-PLAN.md — Core wiki compilation pipeline (WikiSettings, pipeline/wiki.py, unit tests)
+- [ ] 16-02-PLAN.md — Wire CLI export-wiki command and API /export-wiki endpoint
 
 ## Progress
 
@@ -158,4 +162,4 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
 | 15. Query Router | v2.5 | 2/2 | Complete    | 2026-07-14 |
-| 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
+| 16. OpenKB Export | v2.5 | 0/2 | Planning complete | - |
