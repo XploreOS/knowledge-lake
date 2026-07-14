@@ -250,7 +250,13 @@ TOOLS: list[ToolDef] = [
         description=(
             "Semantic search over the knowledge lake. "
             "Returns ranked chunk hits with scores and citation metadata. "
-            "Supports dense, sparse, and hybrid retrieval modes."
+            "Supports dense, sparse, and hybrid retrieval modes. "
+            "Use 'route' to select retrieval path: 'chunk' (default flat-vector), "
+            "'tree' (document-structure-aware traversal), "
+            "'auto' (classifier-driven — routes to tree on structural queries, "
+            "chunk otherwise), or 'two_stage' (alias for tree). "
+            "Use 'tree_mode' to control tree traversal strategy: "
+            "'heuristic' or 'llm' (only effective when route is tree/two_stage/auto+tree)."
         ),
         input_model=SearchParams,
         handler=_search_handler,
