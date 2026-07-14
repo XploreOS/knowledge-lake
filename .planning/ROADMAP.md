@@ -125,7 +125,11 @@ Plans:
   3. Auto mode defaults to chunk search when no structural signals are detected (conservative routing)
   4. MCP tools and API endpoints expose the `route` parameter alongside the existing `mode` parameter
 
-**Plans**: TBD
+**Plans**: 2 plans
+**Wave 1**
+
+- [ ] 15-01-PLAN.md — Wave 0 tests + RouterSettings + SearchParams.route + pipeline/route.py (classify_route + routed_search)
+- [ ] 15-02-PLAN.md — Wire route to REST/CLI/MCP surfaces + regenerate docs/openapi.json
 
 ### Phase 16: OpenKB Export
 
@@ -153,5 +157,5 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
-| 15. Query Router | v2.5 | 0/0 | Not started | - |
+| 15. Query Router | v2.5 | 0/2 | Planned | - |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
