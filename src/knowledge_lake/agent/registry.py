@@ -27,6 +27,7 @@ Prohibitions (PLAN 12-05):
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
@@ -167,8 +168,10 @@ def _search_handler(
         source_id=source_id,
         mode=mode,
     )
-    # Return serialisable list of dicts (SDK auto-wraps)
-    return [h._asdict() if hasattr(h, "_asdict") else dict(h) for h in hits]
+    # Return serialisable list of dicts (SDK auto-wraps).
+    # Hit is a @dataclass; use dataclasses.asdict() which handles nested dataclasses
+    # recursively — dict(h) would raise TypeError since dataclass has no mapping interface.
+    return [dataclasses.asdict(h) for h in hits]
 
 
 def _ingest_url_handler(
