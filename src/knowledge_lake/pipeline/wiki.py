@@ -465,10 +465,15 @@ def compile_wiki(
     for doc in domain_docs:
         title = doc["title"] or f"document-{doc['artifact_id']}"
         base_slug = slugify(title)
-        if base_slug in used_doc_slugs:
-            slug = disambiguate_slug(base_slug, doc["content_hash"])
-        else:
+        if base_slug not in used_doc_slugs:
             slug = base_slug
+        else:
+            # Primary disambiguation: append first 8 chars of content hash.
+            slug = disambiguate_slug(base_slug, doc["content_hash"])
+            if slug in used_doc_slugs:
+                # Secondary collision: fall back to artifact_id hash suffix.
+                artifact_hash = hashlib.sha256(doc["artifact_id"].encode()).hexdigest()
+                slug = disambiguate_slug(base_slug, artifact_hash)
         used_doc_slugs[slug] = doc["artifact_id"]
         key = f"{_GOLD_PREFIX}/{domain_seg}/{_WIKI_SEGMENT}/doc/{slug}.md"
         doc_slug_map[doc["artifact_id"]] = (slug, key)
@@ -479,12 +484,15 @@ def compile_wiki(
 
     for entity in sorted(qualifying_entities):
         base_slug = slugify(entity)
-        if base_slug in used_concept_slugs:
-            # Use entity name hash for disambiguation
+        if base_slug not in used_concept_slugs:
+            slug = base_slug
+        else:
+            # Primary disambiguation: use entity name hash suffix.
             entity_hash = hashlib.sha256(entity.encode("utf-8")).hexdigest()
             slug = disambiguate_slug(base_slug, entity_hash)
-        else:
-            slug = base_slug
+            if slug in used_concept_slugs:
+                # Secondary collision: use full entity hash (next 8 chars) as suffix.
+                slug = disambiguate_slug(base_slug, entity_hash[8:16])
         used_concept_slugs[slug] = entity
         key = f"{_GOLD_PREFIX}/{domain_seg}/{_WIKI_SEGMENT}/concept/{slug}.md"
         concept_slug_map[entity] = (slug, key)
