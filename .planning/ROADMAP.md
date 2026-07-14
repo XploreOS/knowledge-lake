@@ -167,4 +167,4 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
 | 15. Query Router | v2.5 | 2/2 | Complete    | 2026-07-14 |
-| 16. OpenKB Export | v2.5 | 2/2 | Complete   | 2026-07-14 |
+| 16. OpenKB Export | v2.5 | 2/2 | Complete    | 2026-07-14 |
