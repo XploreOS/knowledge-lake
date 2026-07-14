@@ -143,3 +143,7 @@ None - no external service configuration required.
 ---
 *Phase: 14-tree-retrieval*
 *Completed: 2026-07-14*
+
+## Self-Check: PASSED
+
+All created/modified files confirmed present on disk; all task/plan commit hashes (709f21f, d46c811, a27555a) confirmed in `git log --oneline --all`.
