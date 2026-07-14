@@ -713,6 +713,77 @@
         "title": "DomainLoadResponse",
         "type": "object"
       },
+      "DomainSourceEntry": {
+        "description": "A single source entry from a domain pack's sources.yaml.\n\nMirrors ``domains.models.SourceEntry`` exactly \u2014 typed response schema for\nGET /domains/{name}/sources so FastAPI performs response validation and the\nOpenAPI spec generates a complete schema for response body items (WR-03).",
+        "properties": {
+          "crawl_config": {
+            "additionalProperties": true,
+            "description": "Crawler configuration overrides.",
+            "title": "Crawl Config",
+            "type": "object"
+          },
+          "crawl_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "5-field UTC cron string for auto-recrawl, or None.",
+            "title": "Crawl Schedule"
+          },
+          "ingest_type": {
+            "default": "crawl",
+            "description": "Ingest strategy: 'crawl' or 'upload'.",
+            "title": "Ingest Type",
+            "type": "string"
+          },
+          "license": {
+            "description": "License classification: 'public-domain', 'CC', 'open', or 'unknown'.",
+            "title": "License",
+            "type": "string"
+          },
+          "name": {
+            "description": "Human-readable source name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "requires_registration": {
+            "default": false,
+            "description": "True if the source requires user registration before downloading.",
+            "title": "Requires Registration",
+            "type": "boolean"
+          },
+          "source_type": {
+            "description": "Document format: 'html', 'pdf', 'csv', 'json', etc.",
+            "title": "Source Type",
+            "type": "string"
+          },
+          "tags": {
+            "description": "Domain taxonomy tags for this source.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "url": {
+            "description": "Canonical source URL.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "source_type",
+          "license"
+        ],
+        "title": "DomainSourceEntry",
+        "type": "object"
+      },
       "EnrichRequest": {
         "description": "Request body for POST /enrich \u2014 run the enrich pipeline stage.\n\nPydantic validates at the API boundary (ASVS V5).",
         "properties": {
@@ -2346,8 +2417,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/DomainSourceEntry"
                   },
                   "title": "Response List Domain Sources Endpoint Domains  Name  Sources Get",
                   "type": "array"
@@ -2827,6 +2897,25 @@
               ],
               "description": "Retrieval route: chunk|tree|two_stage|auto. Defaults to KLAKE_ROUTER__DEFAULT_ROUTE (auto). An unrecognised value is rejected with 422 (ASVS V5, T-15-01, fail-closed).",
               "title": "Route"
+            }
+          },
+          {
+            "description": "Tree-traversal mode: heuristic|llm. Only effective when route resolves to tree or two_stage. Defaults to settings.tree_search.mode. An unrecognised value is rejected with 422 (ASVS V5).",
+            "in": "query",
+            "name": "tree_mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(heuristic|llm)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tree-traversal mode: heuristic|llm. Only effective when route resolves to tree or two_stage. Defaults to settings.tree_search.mode. An unrecognised value is rejected with 422 (ASVS V5).",
+              "title": "Tree Mode"
             }
           }
         ],
