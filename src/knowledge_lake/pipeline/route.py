@@ -76,6 +76,7 @@ def routed_search(
     collection: str = "klake_chunks",
     top_k: int = 5,
     mode: str | None = None,
+    tree_mode: str | None = None,
     settings: Settings | None = None,
     domain: str | None = None,
     document_type: str | None = None,
@@ -96,7 +97,10 @@ def routed_search(
                            None falls through to settings.router.default_route.
         collection:        Qdrant collection to search.
         top_k:             Maximum number of results to return.
-        mode:              Retrieval sub-mode override forwarded to search()/tree_search().
+        mode:              Chunk-retrieval sub-mode forwarded to search() only:
+                           'hybrid' | 'dense' | 'sparse'. None → settings default.
+        tree_mode:         Tree-traversal mode forwarded to tree_search() only:
+                           'heuristic' | 'llm'. None → settings default.
         settings:          Settings override.
         domain:            Chunk-path filter (forwarded to search() only).
         document_type:     Chunk-path filter (forwarded to search() only).
@@ -136,7 +140,7 @@ def routed_search(
                 query,
                 collection=collection,
                 top_k=top_k,
-                mode=mode,
+                mode=tree_mode,   # tree-traversal mode: heuristic|llm
                 settings=s,
             )
             if hits:
@@ -148,7 +152,7 @@ def routed_search(
                 query,
                 collection=collection,
                 top_k=top_k,
-                mode=mode,
+                mode=mode,        # chunk-retrieval mode: hybrid|dense|sparse
                 settings=s,
                 **chunk_filters,
             )
@@ -158,7 +162,7 @@ def routed_search(
             query,
             collection=collection,
             top_k=top_k,
-            mode=mode,
+            mode=mode,            # chunk-retrieval mode: hybrid|dense|sparse
             settings=s,
             **chunk_filters,
         )
@@ -175,17 +179,19 @@ def routed_search(
             query,
             collection=collection,
             top_k=top_k,
-            mode=mode,
+            mode=tree_mode,       # tree-traversal mode: heuristic|llm
             settings=s,
         )
 
-    # effective_route == "chunk"
+    # effective_route == "chunk" (also safe fallthrough for unrecognised values — WR-02 guard below)
+    if effective_route != "chunk":
+        log.warning("route.unknown_route", effective_route=effective_route)
     log.info("route.dispatch", route="chunk", trigger="operator_override", fallback=False)
     return search(
         query,
         collection=collection,
         top_k=top_k,
-        mode=mode,
+        mode=mode,                # chunk-retrieval mode: hybrid|dense|sparse
         settings=s,
         **chunk_filters,
     )

@@ -196,6 +196,51 @@ def test_no_fallback_explicit_tree() -> None:
     assert result == [], "Expected [] when explicit tree returns empty (no fallback)"
 
 
+# ── Mode/tree_mode separation (CR-02) ────────────────────────────────────────
+
+
+def test_mode_not_forwarded_to_tree_search() -> None:
+    """mode='hybrid' is NOT forwarded to tree_search; tree_mode is used instead (CR-02)."""
+    mock_tree = MagicMock(return_value=[MagicMock()])
+    mock_search = MagicMock(return_value=[])
+
+    mock_settings = MagicMock()
+    mock_settings.router.default_route = "chunk"
+
+    with (
+        patch.object(route_module, "tree_search", mock_tree),
+        patch.object(route_module, "search", mock_search),
+    ):
+        routed_search("test query", route="tree", mode="hybrid", tree_mode="heuristic")
+
+    # tree_search must receive tree_mode='heuristic', NOT mode='hybrid'
+    call_kwargs = mock_tree.call_args.kwargs
+    assert call_kwargs.get("mode") == "heuristic", (
+        f"tree_search should receive tree_mode='heuristic', got mode={call_kwargs.get('mode')!r}"
+    )
+
+
+def test_tree_mode_not_forwarded_to_search() -> None:
+    """tree_mode='llm' is NOT forwarded to search(); mode is used instead (CR-02)."""
+    mock_tree = MagicMock(return_value=[])
+    mock_search = MagicMock(return_value=[MagicMock()])
+
+    mock_settings = MagicMock()
+    mock_settings.router.default_route = "chunk"
+
+    with (
+        patch.object(route_module, "tree_search", mock_tree),
+        patch.object(route_module, "search", mock_search),
+    ):
+        routed_search("test query", route="chunk", mode="dense", tree_mode="llm", settings=mock_settings)
+
+    # search() must receive mode='dense', never tree_mode='llm'
+    call_kwargs = mock_search.call_args.kwargs
+    assert call_kwargs.get("mode") == "dense", (
+        f"search() should receive mode='dense', got mode={call_kwargs.get('mode')!r}"
+    )
+
+
 # ── Structlog emission (D-06) ─────────────────────────────────────────────────
 
 

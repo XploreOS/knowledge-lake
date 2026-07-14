@@ -152,6 +152,7 @@ def _search_handler(
     source_id: str | None = None,
     mode: str | None = None,
     route: str | None = None,
+    tree_mode: str | None = None,
 ) -> list:
     """Thin shim: maps SearchParams fields to routed_search() signature (ROUTE-04, D-08)."""
     hits = routed_search(
@@ -167,6 +168,7 @@ def _search_handler(
         tags=tags,
         source_id=source_id,
         mode=mode,
+        tree_mode=tree_mode,
     )
     # Return serialisable list of dicts (SDK auto-wraps).
     # Hit is a @dataclass; use dataclasses.asdict() which handles nested dataclasses

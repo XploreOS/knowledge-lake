@@ -227,6 +227,16 @@ def search_endpoint(
             "An unrecognised value is rejected with 422 (ASVS V5, T-15-01, fail-closed)."
         ),
     ),
+    tree_mode: str | None = Query(
+        default=None,
+        pattern=r"^(heuristic|llm)$",
+        description=(
+            "Tree-traversal mode: heuristic|llm. "
+            "Only effective when route resolves to tree or two_stage. "
+            "Defaults to settings.tree_search.mode. "
+            "An unrecognised value is rejected with 422 (ASVS V5)."
+        ),
+    ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
 
@@ -300,6 +310,7 @@ def search_endpoint(
         tags=tags,
         mode=mode,
         route=route,
+        tree_mode=tree_mode,
     )
     hits = routed_search(
         q,
@@ -314,6 +325,7 @@ def search_endpoint(
         source_id=source_id,
         tags=tags,
         mode=mode,
+        tree_mode=tree_mode,
     )
 
     # Map Hit → SearchHit, extracting citation + enrichment fields from payload

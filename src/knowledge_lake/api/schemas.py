@@ -81,6 +81,17 @@ class SearchParams(BaseModel):
             "settings.router.default_route take effect in routed_search())."
         ),
     )
+    tree_mode: str | None = Field(
+        default=None,
+        pattern=r"^(heuristic|llm)$",
+        description=(
+            "Tree-traversal mode; only used when route is 'tree', 'two_stage', or 'auto' "
+            "and the classifier selects tree retrieval. "
+            "Must be one of: heuristic, llm. "
+            "An unrecognised value is rejected with 422 (ASVS V5). "
+            "None lets settings.tree_search.mode take effect."
+        ),
+    )
     # ── Filter fields added in Plan 12-03 (Pitfall 4 fix) ────────────────────
     # Each field maps directly to the same-named kwarg in pipeline.search().
     # Types and optionality mirror the search() signature (search.py:35-48).

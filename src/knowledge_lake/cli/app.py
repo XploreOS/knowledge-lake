@@ -666,6 +666,10 @@ def cmd_search(
         None, "--route",
         help="Retrieval route: chunk|tree|two_stage|auto (default from KLAKE_ROUTER__DEFAULT_ROUTE, else auto).",
     ),
+    tree_mode: str | None = typer.Option(
+        None, "--tree-mode",
+        help="Tree-traversal mode: heuristic|llm (only used when route is tree/two_stage/auto+tree).",
+    ),
 ) -> None:
     """Embed a query and return the top-K matching chunks with citation.
 
@@ -681,6 +685,10 @@ def cmd_search(
     Route selection (Phase 15 ROUTE-01):
         --route chunk|tree|two_stage|auto — selects retrieval path.
         Omitting --route lets routed_search fall back to settings.router.default_route (auto).
+
+    Tree-traversal mode (Phase 15 ROUTE-01):
+        --tree-mode heuristic|llm — controls tree_search() traversal strategy.
+        Only relevant when route resolves to tree or two_stage.
 
     D-13 backward-compat note:
         source_name, format, tags, source_id filters are only effective on points indexed
@@ -703,6 +711,14 @@ def cmd_search(
         )
         raise typer.Exit(code=1)
 
+    VALID_TREE_MODES = {"heuristic", "llm"}
+    if tree_mode is not None and tree_mode not in VALID_TREE_MODES:
+        typer.echo(
+            f"Error: --tree-mode must be one of {sorted(VALID_TREE_MODES)}, got {tree_mode!r}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     from knowledge_lake.pipeline.route import routed_search
 
     hits = routed_search(
@@ -718,6 +734,7 @@ def cmd_search(
         source_id=source_id,
         tags=tag,  # CLI param is named 'tag' (list[str]); routed_search() expects 'tags'
         mode=mode,
+        tree_mode=tree_mode,
     )
 
     if not hits:
