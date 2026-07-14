@@ -426,6 +426,32 @@ class SearchSettings(BaseModel):
     """
 
 
+class RouterSettings(BaseModel):
+    """Query-router dispatch configuration (ROUTE-01, D-07).
+
+    Nested under Settings as settings.router. Environment variable pattern:
+    KLAKE_ROUTER__DEFAULT_ROUTE=chunk|tree|two_stage|auto
+
+    Defaults to 'auto' (classifier-driven routing). The Literal constraint is the
+    fail-closed input-validation boundary (ASVS V5): unknown values raise a
+    Pydantic ValidationError at config load time, never reaching the dispatcher.
+
+    Cheap rollback: set KLAKE_ROUTER__DEFAULT_ROUTE=chunk to disable tree routing
+    globally without code changes (D-07).
+    """
+
+    default_route: Literal["chunk", "tree", "two_stage", "auto"] = "auto"
+    """Dispatch strategy applied when per-call route is None.
+
+    - 'auto'       — classifier-driven: classify_route() decides chunk vs tree (default).
+    - 'chunk'      — always call search() (semantic chunk retrieval).
+    - 'tree'       — always call tree_search() (two-stage tree retrieval).
+    - 'two_stage'  — alias for 'tree' (D-01).
+
+    Override via KLAKE_ROUTER__DEFAULT_ROUTE env var (env_nested_delimiter='__').
+    """
+
+
 # Regex for swap key validation (ASVS V5 — alphanumeric + hyphen/underscore, 1-64 chars)
 _SWAP_KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
 
@@ -547,6 +573,13 @@ class Settings(BaseSettings):
     """Hybrid-retrieval mode configuration (RETR-03, D-08).
 
     Resolved via KLAKE_SEARCH__MODE=hybrid|dense|sparse (env_nested_delimiter='__').
+    """
+
+    router: RouterSettings = Field(default_factory=RouterSettings)
+    """Query-router dispatch configuration (ROUTE-01, D-07).
+
+    Resolved via KLAKE_ROUTER__DEFAULT_ROUTE=chunk|tree|two_stage|auto
+    (env_nested_delimiter='__').
     """
 
     export: ExportSettings = Field(default_factory=ExportSettings)

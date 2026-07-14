@@ -68,6 +68,19 @@ class SearchParams(BaseModel):
             "An unrecognised value is rejected with 422 (T-10-02, ASVS V5)."
         ),
     )
+    route: str | None = Field(
+        default=None,
+        pattern=r"^(chunk|tree|two_stage|auto)$",
+        description=(
+            "Retrieval route; default resolves from KLAKE_ROUTER__DEFAULT_ROUTE (auto). "
+            "Must be one of: chunk, tree, two_stage, auto. "
+            "An unrecognised value is rejected with 422 (ASVS V5, ROUTE-04). "
+            "This field feeds the MCP inputSchema and OpenAI tool defs automatically "
+            "via model_json_schema() (Pitfall 5 — default=None, not 'auto', so "
+            "model_dump(exclude_none=True) omits it when unset, letting "
+            "settings.router.default_route take effect in routed_search())."
+        ),
+    )
     # ── Filter fields added in Plan 12-03 (Pitfall 4 fix) ────────────────────
     # Each field maps directly to the same-named kwarg in pipeline.search().
     # Types and optionality mirror the search() signature (search.py:35-48).
