@@ -5,15 +5,15 @@ milestone_name: PageIndex Plugin Integration
 current_phase: 14
 current_phase_name: tree-retrieval
 status: executing
-stopped_at: Completed 14-02-PLAN.md
-last_updated: "2026-07-14T02:30:54.653Z"
+stopped_at: Completed 14-03-PLAN.md
+last_updated: "2026-07-14T02:43:02.186Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 14 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-12)
 ## Current Position
 
 Phase: 14 (tree-retrieval) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 14 execution started
 
@@ -69,6 +69,7 @@ Progress: [██████████] 100%
 | Phase 13 P06 | 4min | 2 tasks | 2 files |
 | Phase 14 P01 | 15min | 2 tasks | 2 files |
 | Phase 14 P02 | 12min | 2 tasks | 2 files |
+| Phase 14 P03 | 25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase ?]: No TreeHit type added — Hit reused directly per D-01 (overrides ARCHITECTURE.md TreeHit sketch)
 - [Phase ?]: model_alias added to TreeSearchSettings beyond D-12 literal field list per Assumption A1 (needed for D-06 LLM-nav cheap_model alias)
 - [Phase ?]: retriever added to _validate_swap_key ASVS V5 validator tuple per Assumption A2, mirroring T-13-03
+- [Phase 14]: PageIndexRetriever computes heuristic Hits first regardless of mode, so LLM-nav always has an identical fallback (A4)
+- [Phase 14]: LLM-nav spend isolated to scope=tree_search, distinct from Phase-13 tree_index and global scopes (D-07)
+- [Phase 14]: LLM-nav reorders heuristic Hits by validated node_ids rather than replacing them - invalid/unknown node_ids discarded, unmentioned heuristic hits kept at the end
 
 ### Pending Todos
 
@@ -123,6 +127,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-14T02:30:54.644Z
-Stopped at: Completed 14-02-PLAN.md
+Last session: 2026-07-14T02:40:14.815Z
+Stopped at: Completed 14-03-PLAN.md
 Resume file: None
