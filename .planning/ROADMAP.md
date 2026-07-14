@@ -50,7 +50,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 - [x] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type (completed 2026-07-13)
 - [x] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision (completed 2026-07-14)
-- [ ] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics
+- [x] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics (completed 2026-07-14)
 - [ ] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone
 
 ## Phase Details
@@ -125,11 +125,11 @@ Plans:
   3. Auto mode defaults to chunk search when no structural signals are detected (conservative routing)
   4. MCP tools and API endpoints expose the `route` parameter alongside the existing `mode` parameter
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 **Wave 1**
 
 - [x] 15-01-PLAN.md — Wave 0 tests + RouterSettings + SearchParams.route + pipeline/route.py (classify_route + routed_search)
-- [ ] 15-02-PLAN.md — Wire route to REST/CLI/MCP surfaces + regenerate docs/openapi.json
+- [x] 15-02-PLAN.md — Wire route to REST/CLI/MCP surfaces + regenerate docs/openapi.json
 
 ### Phase 16: OpenKB Export
 
@@ -157,5 +157,5 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
-| 15. Query Router | v2.5 | 1/2 | In Progress|  |
+| 15. Query Router | v2.5 | 2/2 | Complete   | 2026-07-14 |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
