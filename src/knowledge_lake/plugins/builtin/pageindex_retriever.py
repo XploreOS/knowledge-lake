@@ -235,15 +235,19 @@ class PageIndexRetriever:
         from knowledge_lake.registry import repo as registry_repo
         from knowledge_lake.registry.db import get_session
 
-        with get_session() as session:
-            current_spend = registry_repo.get_llm_spend(session, scope="tree_search")
+        try:
+            with get_session() as session:
+                current_spend = registry_repo.get_llm_spend(session, scope="tree_search")
 
-        if current_spend >= s.tree_search.budget_usd:
-            log.warning(
-                "tree_search.budget_exceeded",
-                current_spend=current_spend,
-                budget_usd=s.tree_search.budget_usd,
-            )
+            if current_spend >= s.tree_search.budget_usd:
+                log.warning(
+                    "tree_search.budget_exceeded",
+                    current_spend=current_spend,
+                    budget_usd=s.tree_search.budget_usd,
+                )
+                return heuristic_hits
+        except Exception as exc:  # noqa: BLE001 — budget-check failure must degrade, not raise (D-06)
+            log.warning("tree_search.budget_check_failed", error=str(exc))
             return heuristic_hits
 
         try:
