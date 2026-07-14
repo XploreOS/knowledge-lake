@@ -253,6 +253,17 @@ class TreeSearchSettings(BaseModel):
     provider ID (CLAUDE.md). Added beyond the D-12 literal field list per
     Assumption A1 — required by the D-06 LLM-nav path."""
 
+    @field_validator("concurrency", "shortlist_k", "max_docs", "top_k", mode="after")
+    @classmethod
+    def _positive(cls, v: int) -> int:
+        """Reject non-positive values (WR-06). A concurrency of 0 constructs
+        asyncio.Semaphore(0), which permits zero concurrent acquisitions and
+        deadlocks the tree loader forever — fail fast at config-load time
+        instead."""
+        if v < 1:
+            raise ValueError("must be >= 1")
+        return v
+
 
 class CurateSettings(BaseModel):
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03).

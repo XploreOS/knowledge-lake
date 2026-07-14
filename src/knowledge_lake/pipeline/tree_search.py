@@ -48,6 +48,11 @@ from knowledge_lake.storage.s3 import StorageBackend
 
 log = structlog.get_logger(__name__)
 
+# Per-key timeout (seconds) for the storage.get_object() call in _load_all's
+# executor offload. Bounds a single hung backend call so it degrades that one
+# document to None instead of blocking the whole batch forever (WR-06).
+_TREE_LOAD_TIMEOUT_SECONDS = 30.0
+
 
 # ── Deserialization (D-11, inverse of tree_index.py:_tree_to_dict) ───────────
 
@@ -110,7 +115,10 @@ async def _load_all(
     async def _load_one(key: str) -> bytes | None:
         async with semaphore:
             try:
-                return await loop.run_in_executor(None, storage.get_object, key)
+                return await asyncio.wait_for(
+                    loop.run_in_executor(None, storage.get_object, key),
+                    timeout=_TREE_LOAD_TIMEOUT_SECONDS,
+                )
             except Exception as exc:  # noqa: BLE001 — never fail the batch on one load (D-09)
                 log.warning("tree_search.tree_load_failed", key=key, error=str(exc))
                 return None
@@ -216,7 +224,18 @@ def tree_search(
     keys = [key for _parsed_id, key in resolved]
     # Single, non-nested event-loop entry point drives the batch — a future
     # async caller (e.g. the Phase-15 router) must await _load_all() directly
-    # instead (CR-02).
+    # instead (CR-02, WR-03). Fail fast with a clear message rather than an
+    # opaque asyncio RuntimeError if this is ever invoked from within a
+    # running event loop.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError(
+            "tree_search() cannot be called from within a running event loop; "
+            "await _load_all() directly instead (see module docstring, CR-02)."
+        )
     raw_blobs = asyncio.run(_load_all(keys, storage, s.tree_search.concurrency))
 
     # ── Deserialize + dispatch (D-11) ─────────────────────────────────────────
