@@ -110,6 +110,9 @@ searxng = "knowledge_lake.plugins.builtin.searxng_discovery:SearXNGDiscovery"
 [project.entry-points."knowledge_lake.indexers"]
 pageindex = "knowledge_lake.plugins.builtin.pageindex_indexer:PageIndexIndexer"
 
+[project.entry-points."knowledge_lake.retrievers"]
+pageindex = "knowledge_lake.plugins.builtin.pageindex_retriever:PageIndexRetriever"
+
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]
 build-backend = "uv_build"

@@ -9,4 +9,6 @@ Built-ins:
                               litellm → LiteLLMEmbedder
     knowledge_lake.vectorstores: qdrant → QdrantVectorStore
     knowledge_lake.indexers  — pageindex (PageIndexIndexer: deterministic section tree)
+    knowledge_lake.retrievers — pageindex (PageIndexRetriever: heuristic keyword+DFS traversal,
+                                opt-in budget-capped LLM-guided navigation)
 """

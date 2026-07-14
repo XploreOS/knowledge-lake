@@ -15,6 +15,8 @@ Entry-point groups:
     knowledge_lake.parsers       — ParserPlugin implementations
     knowledge_lake.embedders     — EmbedderPlugin implementations
     knowledge_lake.vectorstores  — VectorStorePlugin implementations
+    knowledge_lake.indexers      — IndexerPlugin implementations
+    knowledge_lake.retrievers    — RetrieverPlugin implementations
 
 Swap example:
     KLAKE_EMBEDDER=litellm  →  get_embedder(settings) returns the LiteLLMEmbedder
@@ -41,6 +43,7 @@ GROUP_VECTORSTORES = "knowledge_lake.vectorstores"
 GROUP_CRAWLERS = "knowledge_lake.crawlers"
 GROUP_DISCOVERY = "knowledge_lake.discovery"
 GROUP_INDEXERS = "knowledge_lake.indexers"
+GROUP_RETRIEVERS = "knowledge_lake.retrievers"
 
 
 def resolve(group: str, name: str) -> Any:
@@ -357,3 +360,31 @@ def get_indexer(settings: Settings) -> Any:
         else {}
     )
     return _resolve_with_kwargs(GROUP_INDEXERS, name, **kwargs)
+
+
+def get_retriever(settings: Settings) -> Any:
+    """Return the RetrieverPlugin named by settings.retriever.
+
+    Reads the 'retriever' swap key from the provided Settings instance and
+    resolves it via the 'knowledge_lake.retrievers' entry-point group (D-04).
+
+    Default: 'pageindex' → PageIndexRetriever (heuristic keyword+DFS traversal,
+    with an opt-in budget-capped LLM-guided navigation mode).
+    Switch:  Any future plugin registered in the same group — no code change required (FOUND-08).
+
+    The LiteLLM proxy URL is injected from settings.litellm_url rather than read
+    from env directly (CR-03: no os.environ.get in plugin builtins).
+
+    Args:
+        settings: Application Settings instance.
+
+    Returns:
+        An instantiated RetrieverPlugin (satisfies RetrieverPlugin Protocol).
+    """
+    name = settings.retriever
+    kwargs = (
+        {"litellm_url": settings.litellm_url, "litellm_api_key": settings.litellm_api_key}
+        if name == "pageindex"
+        else {}
+    )
+    return _resolve_with_kwargs(GROUP_RETRIEVERS, name, **kwargs)
