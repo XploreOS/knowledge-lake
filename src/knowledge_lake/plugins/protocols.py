@@ -128,6 +128,11 @@ class Hit:
     payload: dict[str, Any] = field(default_factory=dict)
     """Payload from the matched VectorPoint (includes citation fields)."""
 
+    citation_source: str = "chunk"
+    """Provenance discriminator (D-02). Defaults to 'chunk' so existing chunk
+    search results are unchanged (additive-default, mirrors VectorPoint.sparse).
+    Tree search (Phase 14) sets this to 'tree' for page-level tree hits."""
+
 
 # ---------------------------------------------------------------------------
 # Plugin Protocols
@@ -700,5 +705,64 @@ class IndexerPlugin(Protocol):
 
         Returns:
             TreeIndex with roots populated; content_hash and schema_version set.
+        """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Retriever Plugin Protocol (RETR-04, D-03)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class RetrieverPlugin(Protocol):
+    """Swap-capable tree retriever plugin (D-03, FOUND-08).
+
+    Swap via settings.retriever entry-point group 'knowledge_lake.retrievers'.
+
+    Implementations must expose:
+      name   — stable identifier used to register and resolve the plugin
+      search — traverse a TreeIndex for a query and return page-level Hits
+
+    The retriever consumes only the shared TreeIndex/TreeNode contract
+    (plugins/protocols.py) and must never depend on PageIndex's internal tree
+    schema (ARCHITECTURE.md Anti-Pattern 5: indexer<->retriever decoupled).
+
+    Default built-in: PageIndexRetriever ('pageindex') — heuristic keyword+DFS
+    traversal by default, with an opt-in budget-capped LLM-guided mode.
+
+    The retriever swap key (settings.retriever) selects the active
+    implementation via the 'knowledge_lake.retrievers' entry-point group. No
+    os.environ reads in builtins (CR-03); service URLs/config injected from
+    Settings.
+    """
+
+    name: str
+    """Stable name used to look up this implementation via the resolver."""
+
+    def search(
+        self,
+        tree_index: TreeIndex,
+        query: str,
+        *,
+        top_k: int = 5,
+        mode: str = "heuristic",
+        settings: Any | None = None,
+    ) -> list[Hit]:
+        """Traverse a TreeIndex for a query and return page-level Hits.
+
+        Args:
+            tree_index: The TreeIndex to search (deserialized tree contract).
+            query:      Natural-language or keyword query string.
+            top_k:      Maximum number of Hits to return.
+            mode:       Traversal mode — 'heuristic' (default, deterministic
+                        keyword+DFS, no LLM) or 'llm' (budget-capped LLM-guided
+                        navigation, degrades to heuristic on budget/failure).
+            settings:   Optional Settings object (carries TreeSearchSettings).
+
+        Returns:
+            list[Hit] with citation_source='tree' and page-level citation
+            fields (page_start, page_end, section_path, node_id, node_path,
+            document) in payload.
         """
         ...
