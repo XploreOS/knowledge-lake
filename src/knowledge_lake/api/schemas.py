@@ -310,6 +310,10 @@ class WikiExportResponse(BaseModel):
     pages_unchanged: int = Field(description="Number of pages skipped (no content change).")
     concept_pages: int = Field(description="Number of IDF-filtered concept pages written.")
     manifest_uri: str = Field(description="S3 URI of the wiki manifest JSON.")
+    pages_removed: int = Field(
+        default=0,
+        description="Number of stale wiki pages deleted from S3 during incremental rebuild.",
+    )
     archive_uri: str | None = Field(
         default=None,
         description="S3 URI of the .tar.gz wiki archive (None if --archive not requested).",

@@ -1288,6 +1288,7 @@ def wiki_export_endpoint(body: WikiExportRequest) -> WikiExportResponse:
         pages_created=result["pages_created"],
         pages_updated=result["pages_updated"],
         pages_unchanged=result["pages_unchanged"],
+        pages_removed=result.get("pages_removed", 0),
         concept_pages=result["concept_pages"],
         manifest_uri=result["manifest_uri"],
         archive_uri=result.get("archive_uri"),

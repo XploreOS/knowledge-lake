@@ -1111,6 +1111,7 @@ def cmd_export_wiki(
     typer.echo(f"  pages_created:   {result['pages_created']}")
     typer.echo(f"  pages_updated:   {result['pages_updated']}")
     typer.echo(f"  pages_unchanged: {result['pages_unchanged']}")
+    typer.echo(f"  pages_removed:   {result.get('pages_removed', 0)}")
     typer.echo(f"  concept_pages:   {result['concept_pages']}")
     typer.echo(f"  manifest_uri:    {result['manifest_uri']}")
     if result.get("archive_uri") is not None:
