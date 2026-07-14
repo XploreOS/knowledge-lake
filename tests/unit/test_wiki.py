@@ -472,3 +472,148 @@ class TestCompileWiki:
         result = wiki_module.compile_wiki(domain="healthcare", settings=settings)
         # Should still complete (full rebuild)
         assert result["pages_created"] >= 5
+
+
+# ── KB-05: CLI and API surface tests ──────────────────────────────────────────
+
+_MOCK_COMPILE_RESULT = {
+    "pages_created": 3,
+    "pages_updated": 1,
+    "pages_unchanged": 2,
+    "concept_pages": 2,
+    "manifest_uri": "s3://test-bucket/gold/healthcare/wiki/_manifest.json",
+    "archive_uri": None,
+}
+
+_MOCK_COMPILE_RESULT_ARCHIVE = {
+    **_MOCK_COMPILE_RESULT,
+    "archive_uri": "s3://test-bucket/gold/healthcare/wiki/_archive.tar.gz",
+}
+
+_PATCH_TARGET = "knowledge_lake.pipeline.wiki.compile_wiki"
+
+
+class TestCliExportWiki:
+    """Surface tests for the `klake export-wiki` CLI command (KB-05)."""
+
+    def test_cli_export_wiki_success(self):
+        """Successful invocation prints result fields and exits 0."""
+        from typer.testing import CliRunner
+
+        from knowledge_lake.cli.app import app
+
+        runner = CliRunner()
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT) as mock_fn:
+            result = runner.invoke(app, ["export-wiki", "--domain", "healthcare"])
+
+        assert result.exit_code == 0, result.output
+        assert "pages_created" in result.output
+        assert "manifest_uri" in result.output
+        mock_fn.assert_called_once()
+        call_kwargs = mock_fn.call_args[1] if mock_fn.call_args[1] else {}
+        call_args = mock_fn.call_args[0] if mock_fn.call_args[0] else ()
+        # domain can be positional or keyword
+        assert "healthcare" in call_args or call_kwargs.get("domain") == "healthcare"
+
+    def test_cli_export_wiki_force(self):
+        """--force flag passes force=True to compile_wiki."""
+        from typer.testing import CliRunner
+
+        from knowledge_lake.cli.app import app
+
+        runner = CliRunner()
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT) as mock_fn:
+            result = runner.invoke(app, ["export-wiki", "--domain", "healthcare", "--force"])
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_fn.call_args
+        assert kwargs.get("force") is True
+
+    def test_cli_export_wiki_dry_run(self):
+        """--dry-run flag passes dry_run=True to compile_wiki."""
+        from typer.testing import CliRunner
+
+        from knowledge_lake.cli.app import app
+
+        runner = CliRunner()
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT) as mock_fn:
+            result = runner.invoke(app, ["export-wiki", "--domain", "healthcare", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        _, kwargs = mock_fn.call_args
+        assert kwargs.get("dry_run") is True
+
+    def test_cli_export_wiki_error(self):
+        """ValueError from compile_wiki prints 'Error:' to output and exits 1."""
+        from typer.testing import CliRunner
+
+        from knowledge_lake.cli.app import app
+
+        runner = CliRunner()
+        with patch(_PATCH_TARGET, side_effect=ValueError("no docs found")):
+            result = runner.invoke(app, ["export-wiki", "--domain", "healthcare"])
+
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+
+    def test_cli_export_wiki_archive_uri_shown(self):
+        """archive_uri is printed when present in compile_wiki result."""
+        from typer.testing import CliRunner
+
+        from knowledge_lake.cli.app import app
+
+        runner = CliRunner()
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT_ARCHIVE):
+            result = runner.invoke(app, ["export-wiki", "--domain", "healthcare", "--archive"])
+
+        assert result.exit_code == 0, result.output
+        assert "archive_uri" in result.output
+
+
+class TestApiExportWiki:
+    """Surface tests for the POST /export-wiki API endpoint (KB-05)."""
+
+    def test_api_export_wiki_success(self):
+        """POST /export-wiki with valid domain returns 200 with WikiExportResponse fields."""
+        from fastapi.testclient import TestClient
+
+        from knowledge_lake.api.app import app
+
+        client = TestClient(app)
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT):
+            response = client.post("/export-wiki", json={"domain": "healthcare"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["pages_created"] == 3
+        assert body["pages_updated"] == 1
+        assert body["pages_unchanged"] == 2
+        assert body["concept_pages"] == 2
+        assert "manifest_uri" in body
+        assert body["archive_uri"] is None
+
+    def test_api_export_wiki_force(self):
+        """POST /export-wiki with force=true passes force=True to compile_wiki."""
+        from fastapi.testclient import TestClient
+
+        from knowledge_lake.api.app import app
+
+        client = TestClient(app)
+        with patch(_PATCH_TARGET, return_value=_MOCK_COMPILE_RESULT) as mock_fn:
+            response = client.post("/export-wiki", json={"domain": "healthcare", "force": True})
+
+        assert response.status_code == 200
+        _, kwargs = mock_fn.call_args
+        assert kwargs.get("force") is True
+
+    def test_api_export_wiki_error(self):
+        """ValueError from compile_wiki returns HTTP 422."""
+        from fastapi.testclient import TestClient
+
+        from knowledge_lake.api.app import app
+
+        client = TestClient(app)
+        with patch(_PATCH_TARGET, side_effect=ValueError("no docs found")):
+            response = client.post("/export-wiki", json={"domain": "healthcare"})
+
+        assert response.status_code == 422

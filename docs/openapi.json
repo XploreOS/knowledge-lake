@@ -1654,6 +1654,80 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WikiExportRequest": {
+        "description": "Request body for POST /export-wiki.\n\nDomain name is validated at the API boundary (T-16-06: prevents injection\nvia min_length/max_length; slugify in wiki.py provides further sanitisation).",
+        "properties": {
+          "domain": {
+            "description": "Domain to compile wiki for (required, per D-10/D-11).",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "force": {
+            "default": false,
+            "description": "Ignore manifest, trigger full rebuild.",
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "title": "WikiExportRequest",
+        "type": "object"
+      },
+      "WikiExportResponse": {
+        "description": "Response body for POST /export-wiki.",
+        "properties": {
+          "archive_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "S3 URI of the .tar.gz wiki archive (None if --archive not requested).",
+            "title": "Archive Uri"
+          },
+          "concept_pages": {
+            "description": "Number of IDF-filtered concept pages written.",
+            "title": "Concept Pages",
+            "type": "integer"
+          },
+          "manifest_uri": {
+            "description": "S3 URI of the wiki manifest JSON.",
+            "title": "Manifest Uri",
+            "type": "string"
+          },
+          "pages_created": {
+            "description": "Number of new wiki pages written.",
+            "title": "Pages Created",
+            "type": "integer"
+          },
+          "pages_unchanged": {
+            "description": "Number of pages skipped (no content change).",
+            "title": "Pages Unchanged",
+            "type": "integer"
+          },
+          "pages_updated": {
+            "description": "Number of existing pages updated.",
+            "title": "Pages Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pages_created",
+          "pages_updated",
+          "pages_unchanged",
+          "concept_pages",
+          "manifest_uri"
+        ],
+        "title": "WikiExportResponse",
+        "type": "object"
       }
     }
   },
@@ -2478,6 +2552,48 @@
         "summary": "Enrich a cleaned document artifact with LLM-judged metadata",
         "tags": [
           "pipeline"
+        ]
+      }
+    },
+    "/export-wiki": {
+      "post": {
+        "description": "Compile the interlinked wiki knowledge base for a domain (KB-05).\n\nReads enriched document artifacts for the given domain, applies IDF\nfiltering for concept pages, and writes Markdown pages + manifest to\nthe S3 gold zone.\n\nSecurity (T-16-06 / ASVS V5):\n    - ``domain`` is bounded to min_length=1, max_length=100 via Pydantic.\n    - ``slugify()`` in wiki.py further sanitises before S3 key construction.\n    - ``ValueError`` (unknown domain, no documents) \u2192 422.\n\nD-02 compliance:\n    Calls the same pipeline.wiki.compile_wiki() as the CLI export-wiki command.",
+        "operationId": "wiki_export_endpoint_export_wiki_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WikiExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WikiExportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compile interlinked wiki knowledge base in the gold zone (KB-01..05)",
+        "tags": [
+          "export"
         ]
       }
     },
