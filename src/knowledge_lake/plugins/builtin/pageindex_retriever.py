@@ -41,6 +41,12 @@ _NODE_EXCERPT_CHARS = 512
 # attacker-influenced output before it is used to reorder Hits (ASVS V5).
 _MAX_NAV_NODE_IDS = 50
 
+# Maximum number of tree nodes included in the LLM-nav prompt's request side
+# (WR-04). Without this cap, a large/deeply-nested document tree can produce
+# a prompt that either exceeds the model's context window or silently
+# inflates per-call cost, undermining the budget_usd cap's intent.
+_MAX_NAV_NODES = 300
+
 # ── LLM navigation prompt (prompt-injection mitigation, mirrors _SUMMARY_SYSTEM_PROMPT) ──
 
 _NAV_SYSTEM_PROMPT = """\
@@ -257,7 +263,7 @@ class PageIndexRetriever:
         try:
             import litellm  # noqa: PLC0415 — lazy import, avoids proxy dep in unit tests
 
-            all_nodes = list(_iter_nodes(tree_index.roots))
+            all_nodes = list(_iter_nodes(tree_index.roots))[:_MAX_NAV_NODES]
             lines = [
                 f"{node.node_id}: {node.title} - {node.summary}"[:_NODE_EXCERPT_CHARS]
                 for node in all_nodes
