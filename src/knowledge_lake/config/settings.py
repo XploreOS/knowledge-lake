@@ -220,6 +220,40 @@ class TreeSettings(BaseModel):
     """Maximum output tokens for per-node LLM summary calls in LLM mode."""
 
 
+class TreeSearchSettings(BaseModel):
+    """Two-stage tree retrieval config (RETR-04..08, D-12). Env override prefix:
+    KLAKE_TREE_SEARCH__ (e.g. KLAKE_TREE_SEARCH__MODE=llm). model_alias routes
+    through cheap_model task alias — never a hardcoded provider ID (A1, D-06)."""
+
+    mode: Literal["heuristic", "llm"] = "heuristic"
+    """Traversal mode: 'heuristic' (default, deterministic keyword+DFS, zero
+    LLM calls, RETR-05) or 'llm' (opt-in, budget-capped LLM-guided navigation,
+    RETR-06). Deterministic-first per the framework constraint."""
+
+    shortlist_k: int = 20
+    """Stage-1 chunk-search top_k used to build the per-document shortlist
+    before stage-2 tree traversal (D-08)."""
+
+    max_docs: int = 3
+    """Maximum number of shortlisted documents whose trees are loaded and
+    traversed in stage 2 (D-08, ARCHITECTURE.md Anti-Pattern 2)."""
+
+    top_k: int = 5
+    """Maximum number of Hits returned by tree search."""
+
+    concurrency: int = 5
+    """Semaphore limit for concurrent async tree loads from S3 (RETR-07, D-10)."""
+
+    budget_usd: float = 5.0
+    """Spend cap in USD (scope='tree_search') before LLM-guided navigation
+    halts gracefully and degrades to the heuristic result (D-06, D-07)."""
+
+    model_alias: str = "cheap_model"
+    """LiteLLM task alias for LLM-guided tree navigation. Never a hardcoded
+    provider ID (CLAUDE.md). Added beyond the D-12 literal field list per
+    Assumption A1 — required by the D-06 LLM-nav path."""
+
+
 class CurateSettings(BaseModel):
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03).
 
@@ -480,6 +514,15 @@ class Settings(BaseSettings):
     indexer: str = "pageindex"
     """Indexer plugin swap key. Entry-point group: knowledge_lake.indexers (D-05)."""
 
+    tree_search: TreeSearchSettings = Field(default_factory=TreeSearchSettings)
+    """Two-stage tree retrieval configuration (RETR-04..08, D-12).
+
+    Resolved via KLAKE_TREE_SEARCH__* env vars (env_nested_delimiter='__').
+    """
+
+    retriever: str = "pageindex"
+    """Retriever plugin swap key. Entry-point group: knowledge_lake.retrievers (D-04)."""
+
     curate: CurateSettings = Field(default_factory=CurateSettings)
     """DataTrove-style curation and composite quality scoring configuration (CURATE-01..03)."""
 
@@ -510,7 +553,7 @@ class Settings(BaseSettings):
 
     # ── Validators ────────────────────────────────────────────────────────────
 
-    @field_validator("crawler", "discovery", "embedder", "indexer", "parser", "vectorstore", mode="after")
+    @field_validator("crawler", "discovery", "embedder", "indexer", "parser", "retriever", "vectorstore", mode="after")
     @classmethod
     def _validate_swap_key(cls, v: str) -> str:
         """Validate swap keys against ASVS V5 (input validation).
