@@ -1070,6 +1070,51 @@ def cmd_export(
         typer.echo(f"  skipped_dangling_lineage: {result['skipped_dangling_lineage']}")
 
 
+@app.command(name="export-wiki")
+def cmd_export_wiki(
+    domain: str = typer.Option(
+        ..., "--domain", "-d", help="Domain to compile wiki for (required)."
+    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Ignore manifest, full rebuild."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing."),
+    archive: bool = typer.Option(False, "--archive", help="Also write a .tar.gz archive of the wiki."),
+) -> None:
+    """Compile the interlinked wiki knowledge base for a domain.
+
+    Reads enriched document artifacts for the given domain, applies IDF
+    filtering for concept pages, and writes Markdown pages + manifest to
+    the S3 gold zone.  Supports manifest-based incremental rebuild (only
+    changed pages are re-written) and optional .tar.gz archive.
+
+    Examples:
+        klake export-wiki --domain healthcare
+        klake export-wiki --domain healthcare --force
+        klake export-wiki --domain healthcare --dry-run
+        klake export-wiki --domain healthcare --archive
+    """
+    from knowledge_lake.pipeline.wiki import compile_wiki
+
+    try:
+        result = compile_wiki(
+            domain=domain,
+            force=force,
+            dry_run=dry_run,
+            archive=archive,
+        )
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("Wiki export complete:")
+    typer.echo(f"  pages_created:   {result['pages_created']}")
+    typer.echo(f"  pages_updated:   {result['pages_updated']}")
+    typer.echo(f"  pages_unchanged: {result['pages_unchanged']}")
+    typer.echo(f"  concept_pages:   {result['concept_pages']}")
+    typer.echo(f"  manifest_uri:    {result['manifest_uri']}")
+    if result.get("archive_uri") is not None:
+        typer.echo(f"  archive_uri:     {result['archive_uri']}")
+
+
 @app.command(name="init")
 def cmd_init(
     domain: str = typer.Option(

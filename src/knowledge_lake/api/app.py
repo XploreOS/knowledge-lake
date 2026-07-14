@@ -56,6 +56,8 @@ from knowledge_lake.api.schemas import (
     EnrichResponse,
     ExportRequest,
     ExportResponse,
+    WikiExportRequest,
+    WikiExportResponse,
     GenerateDatasetRequest,
     GenerateDatasetResponse,
     LineageNode,
@@ -1236,6 +1238,54 @@ def export_endpoint(body: ExportRequest) -> ExportResponse:
         storage_uri=result["storage_uri"],
         row_count=result["row_count"],
         skipped_dangling_lineage=result.get("skipped_dangling_lineage"),
+    )
+
+
+@app.post(
+    "/export-wiki",
+    response_model=WikiExportResponse,
+    tags=["export"],
+    summary="Compile interlinked wiki knowledge base in the gold zone (KB-01..05)",
+    status_code=200,
+)
+def wiki_export_endpoint(body: WikiExportRequest) -> WikiExportResponse:
+    """Compile the interlinked wiki knowledge base for a domain (KB-05).
+
+    Reads enriched document artifacts for the given domain, applies IDF
+    filtering for concept pages, and writes Markdown pages + manifest to
+    the S3 gold zone.
+
+    Security (T-16-06 / ASVS V5):
+        - ``domain`` is bounded to min_length=1, max_length=100 via Pydantic.
+        - ``slugify()`` in wiki.py further sanitises before S3 key construction.
+        - ``ValueError`` (unknown domain, no documents) → 422.
+
+    D-02 compliance:
+        Calls the same pipeline.wiki.compile_wiki() as the CLI export-wiki command.
+    """
+    from knowledge_lake.pipeline.wiki import compile_wiki
+
+    logger.info("api.wiki_export", domain=body.domain)
+
+    try:
+        result = compile_wiki(domain=body.domain, force=body.force)
+    except ValueError as exc:
+        logger.warning("api.wiki_export.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info(
+        "api.wiki_export.complete",
+        domain=body.domain,
+        pages_created=result.get("pages_created"),
+        pages_updated=result.get("pages_updated"),
+    )
+    return WikiExportResponse(
+        pages_created=result["pages_created"],
+        pages_updated=result["pages_updated"],
+        pages_unchanged=result["pages_unchanged"],
+        concept_pages=result["concept_pages"],
+        manifest_uri=result["manifest_uri"],
+        archive_uri=result.get("archive_uri"),
     )
 
 

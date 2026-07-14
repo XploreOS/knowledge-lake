@@ -272,6 +272,42 @@ class ExportResponse(BaseModel):
     )
 
 
+# ── Wiki export schemas (KB-05) ────────────────────────────────────────────────
+
+
+class WikiExportRequest(BaseModel):
+    """Request body for POST /export-wiki.
+
+    Domain name is validated at the API boundary (T-16-06: prevents injection
+    via min_length/max_length; slugify in wiki.py provides further sanitisation).
+    """
+
+    domain: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Domain to compile wiki for (required, per D-10/D-11).",
+    )
+    force: bool = Field(
+        default=False,
+        description="Ignore manifest, trigger full rebuild.",
+    )
+
+
+class WikiExportResponse(BaseModel):
+    """Response body for POST /export-wiki."""
+
+    pages_created: int = Field(description="Number of new wiki pages written.")
+    pages_updated: int = Field(description="Number of existing pages updated.")
+    pages_unchanged: int = Field(description="Number of pages skipped (no content change).")
+    concept_pages: int = Field(description="Number of IDF-filtered concept pages written.")
+    manifest_uri: str = Field(description="S3 URI of the wiki manifest JSON.")
+    archive_uri: str | None = Field(
+        default=None,
+        description="S3 URI of the .tar.gz wiki archive (None if --archive not requested).",
+    )
+
+
 # ── Source registration schemas (02-01) ──────────────────────────────────────
 
 
