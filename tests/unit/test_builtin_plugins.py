@@ -25,6 +25,7 @@ from knowledge_lake.plugins.protocols import (
     IndexerPlugin,
     ParsedDoc,
     ParserPlugin,
+    RetrieverPlugin,
     VectorPoint,
     VectorStorePlugin,
 )
@@ -366,5 +367,46 @@ class TestIndexerPluginBuiltin:
         instance = PageIndexIndexer()
         assert isinstance(instance, IndexerPlugin), (
             f"PageIndexIndexer must satisfy IndexerPlugin protocol, "
+            f"isinstance check returned False"
+        )
+
+
+# ---------------------------------------------------------------------------
+# RetrieverPlugin / PageIndexRetriever conformance tests (RETR-04..08, D-04)
+# ---------------------------------------------------------------------------
+
+
+class TestPageIndexRetriever:
+    """Verify that the PageIndex retriever entry-point is registered and
+    satisfies the RetrieverPlugin Protocol via runtime isinstance check (D-04).
+
+    Mirrors TestIndexerPluginBuiltin. Tests fail with ImportError until
+    Plans 14-02 and 14-03 ship (correct Wave 0 RED state).
+    """
+
+    def _get_ep_names(self, group: str) -> set[str]:
+        eps = importlib.metadata.entry_points(group=group)
+        return {ep.name for ep in eps}
+
+    def test_pageindex_retriever_entry_point_registered(self) -> None:
+        """'pageindex' must be registered in the 'knowledge_lake.retrievers'
+        entry-point group.
+
+        Mirrors test_pageindex_indexer_entry_point_registered for the
+        indexer sibling group.
+        """
+        names = self._get_ep_names("knowledge_lake.retrievers")
+        assert "pageindex" in names, (
+            f"Expected 'pageindex' in 'knowledge_lake.retrievers', got: {names}"
+        )
+
+    def test_pageindex_retriever_satisfies_protocol(self) -> None:
+        """PageIndexRetriever instance must satisfy the RetrieverPlugin
+        runtime_checkable Protocol."""
+        from knowledge_lake.plugins.builtin.pageindex_retriever import PageIndexRetriever
+
+        instance = PageIndexRetriever()
+        assert isinstance(instance, RetrieverPlugin), (
+            f"PageIndexRetriever must satisfy RetrieverPlugin protocol, "
             f"isinstance check returned False"
         )
