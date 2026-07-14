@@ -312,17 +312,12 @@ class PageIndexRetriever:
 
     @staticmethod
     def _extract_cost(response: Any, s: Any) -> float:
-        """Extract LLM call cost in USD from the completion response (mirrors
-        tree_index.py:_summarize_nodes_llm cost accumulation)."""
-        usage = getattr(response, "usage", None)
-        if usage is None:
-            return 0.0
-        cost = getattr(usage, "total_cost", None)
-        if cost is not None:
-            return float(cost)
-        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
-        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
-        return (
-            prompt_tokens / 1000 * s.enrich.fallback_cost_per_1k_input
-            + completion_tokens / 1000 * s.enrich.fallback_cost_per_1k_output
-        )
+        """Extract LLM call cost in USD from the completion response.
+
+        Delegates to the project's shared cost helper (WR-01) instead of
+        reimplementing it — tries litellm.completion_cost() first (accurate,
+        once bootstrap_llm_pricing() has registered the model) and falls back
+        to the per-1k-token estimate only if that raises."""
+        from knowledge_lake.llm.pricing import compute_call_cost
+
+        return compute_call_cost(response, s)
