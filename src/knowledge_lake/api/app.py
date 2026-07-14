@@ -1268,7 +1268,12 @@ def wiki_export_endpoint(body: WikiExportRequest) -> WikiExportResponse:
     logger.info("api.wiki_export", domain=body.domain)
 
     try:
-        result = compile_wiki(domain=body.domain, force=body.force)
+        result = compile_wiki(
+            domain=body.domain,
+            force=body.force,
+            dry_run=body.dry_run,
+            archive=body.archive,
+        )
     except ValueError as exc:
         logger.warning("api.wiki_export.error", error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc

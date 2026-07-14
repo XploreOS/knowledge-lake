@@ -292,6 +292,14 @@ class WikiExportRequest(BaseModel):
         default=False,
         description="Ignore manifest, trigger full rebuild.",
     )
+    dry_run: bool = Field(
+        default=False,
+        description="Preview changes without writing to S3.",
+    )
+    archive: bool = Field(
+        default=False,
+        description="Also write a .tar.gz archive of all wiki pages.",
+    )
 
 
 class WikiExportResponse(BaseModel):
