@@ -218,6 +218,15 @@ def search_endpoint(
             "store's clear error (fail-loud, D-10)."
         ),
     ),
+    route: str | None = Query(
+        default=None,
+        pattern=r"^(chunk|tree|two_stage|auto)$",
+        description=(
+            "Retrieval route: chunk|tree|two_stage|auto. "
+            "Defaults to KLAKE_ROUTER__DEFAULT_ROUTE (auto). "
+            "An unrecognised value is rejected with 422 (ASVS V5, T-15-01, fail-closed)."
+        ),
+    ),
 ) -> list[SearchHit]:
     """Embed a query and return the top-k nearest chunk hits with citation fields.
 
@@ -245,6 +254,7 @@ def search_endpoint(
         source_id:         Optional filter — payload['source_id'] must match exactly.
         tags:              Optional OR filter — payload['tags'] must contain any of these values.
         mode:              Optional search mode override (hybrid|dense|sparse). None → settings default.
+        route:             Optional retrieval route override (chunk|tree|two_stage|auto). None → settings default.
 
     D-13 backward-compat note:
         source_name, format, tags, source_id filters are only effective on points indexed
@@ -255,7 +265,7 @@ def search_endpoint(
         A list of SearchHit objects ordered by score descending.
         Returns an empty list when the query is empty/whitespace.
     """
-    from knowledge_lake.pipeline.search import search
+    from knowledge_lake.pipeline.route import routed_search
 
     # Validate collection name format before passing to Qdrant (WR-04, T-01-14).
     # Prevents collection enumeration attacks and rejects malformed names early.
@@ -289,9 +299,11 @@ def search_endpoint(
         source_id=source_id,
         tags=tags,
         mode=mode,
+        route=route,
     )
-    hits = search(
+    hits = routed_search(
         q,
+        route=route,
         collection=collection,
         top_k=top_k,
         domain=domain,

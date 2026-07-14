@@ -101,6 +101,7 @@ from knowledge_lake.pipeline.export import (  # noqa: E402
 from knowledge_lake.pipeline.ingest import ingest_url, register_source  # noqa: E402
 from knowledge_lake.pipeline.process import process_crawled  # noqa: E402
 from knowledge_lake.pipeline.query import list_sources, stats  # noqa: E402
+from knowledge_lake.pipeline.route import routed_search  # noqa: E402
 from knowledge_lake.pipeline.search import search  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -149,10 +150,12 @@ def _search_handler(
     tags: list[str] | None = None,
     source_id: str | None = None,
     mode: str | None = None,
+    route: str | None = None,
 ) -> list:
-    """Thin shim: maps SearchParams fields to search() signature."""
-    hits = search(
+    """Thin shim: maps SearchParams fields to routed_search() signature (ROUTE-04, D-08)."""
+    hits = routed_search(
         query=q,
+        route=route,
         collection=collection,
         top_k=top_k,
         domain=domain,

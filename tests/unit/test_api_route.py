@@ -1,11 +1,8 @@
 """Unit tests for API /search?route= parameter threading (ROUTE-04, ASVS V5).
 
-Wave 0 scaffold: the ?route= query param does not yet exist on the search endpoint
-(Plan 15-02 adds it). Tests are marked xfail(strict=False) so the suite stays green.
-
 Pattern mirrors tests/unit/test_api_search_mode.py: starlette TestClient +
 try/except ImportError guard. The routed_search seam is patched at the import
-location used by the REST handler (Plan 15-02 will import from pipeline.route).
+location used by the REST handler.
 """
 
 from __future__ import annotations
@@ -36,10 +33,6 @@ def api_client():
 class TestApiRouteForwarding:
     """API ?route= query param threads route into routed_search (ROUTE-04)."""
 
-    @pytest.mark.xfail(
-        reason="Plan 15-02: ?route= query param not yet added to search_endpoint in api/app.py",
-        strict=False,
-    )
     def test_route_param_forwarded(self, api_client) -> None:
         """GET /search?q=test&route=tree verifies routed_search called with route='tree'."""
         captured_kwargs: dict = {}
@@ -63,10 +56,6 @@ class TestApiRouteForwarding:
             f"got: {captured_kwargs.get('route')!r}. Full kwargs: {captured_kwargs}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 15-02: ?route= with pattern validation not yet added to search_endpoint",
-        strict=False,
-    )
     def test_route_invalid_422(self, api_client) -> None:
         """GET /search?q=test&route=bogus returns HTTP 422 (ASVS V5 fail-closed)."""
         resp = api_client.get("/search", params={"q": "test query", "route": "bogus"})
@@ -75,10 +64,6 @@ class TestApiRouteForwarding:
             f"got {resp.status_code}. Body: {resp.text!r}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 15-02: ?route= query param not yet added to search_endpoint in api/app.py",
-        strict=False,
-    )
     def test_route_omitted_forwards_none(self, api_client) -> None:
         """GET /search?q=test (no route) calls routed_search with route=None."""
         captured_kwargs: dict = {}

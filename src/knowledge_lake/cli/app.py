@@ -662,6 +662,10 @@ def cmd_search(
         None, "--mode",
         help="Search mode: hybrid|dense|sparse (default from KLAKE_SEARCH__MODE, else hybrid)."
     ),
+    route: str | None = typer.Option(
+        None, "--route",
+        help="Retrieval route: chunk|tree|two_stage|auto (default from KLAKE_ROUTER__DEFAULT_ROUTE, else auto).",
+    ),
 ) -> None:
     """Embed a query and return the top-K matching chunks with citation.
 
@@ -673,6 +677,10 @@ def cmd_search(
     Mode selection (Phase 10 RETR-03):
         --mode hybrid|dense|sparse — overrides KLAKE_SEARCH__MODE for this call.
         Omitting --mode lets pipeline.search fall back to settings.search.mode (default hybrid).
+
+    Route selection (Phase 15 ROUTE-01):
+        --route chunk|tree|two_stage|auto — selects retrieval path.
+        Omitting --route lets routed_search fall back to settings.router.default_route (auto).
 
     D-13 backward-compat note:
         source_name, format, tags, source_id filters are only effective on points indexed
@@ -687,10 +695,19 @@ def cmd_search(
         )
         raise typer.Exit(code=1)
 
-    from knowledge_lake.pipeline.search import search
+    VALID_ROUTES = {"chunk", "tree", "two_stage", "auto"}
+    if route is not None and route not in VALID_ROUTES:
+        typer.echo(
+            f"Error: --route must be one of {sorted(VALID_ROUTES)}, got {route!r}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
-    hits = search(
+    from knowledge_lake.pipeline.route import routed_search
+
+    hits = routed_search(
         query,
+        route=route,
         collection=collection,
         top_k=top_k,
         domain=domain,
@@ -699,7 +716,7 @@ def cmd_search(
         source_name=source_name,
         format=format,
         source_id=source_id,
-        tags=tag,  # CLI param is named 'tag' (list[str]); search() expects 'tags'
+        tags=tag,  # CLI param is named 'tag' (list[str]); routed_search() expects 'tags'
         mode=mode,
     )
 
