@@ -732,6 +732,51 @@ def cmd_search(
         typer.echo()
 
 
+@app.command(name="tree-search")
+def cmd_tree_search(
+    query: str = typer.Argument(..., help="Natural-language search query."),
+    top_k: int | None = typer.Option(
+        None, "--top-k", "-k",
+        help="Maximum number of results (default from KLAKE_TREE_SEARCH__TOP_K, else 5).",
+    ),
+    mode: str | None = typer.Option(
+        None, "--mode",
+        help="Tree traversal mode: heuristic|llm (default from KLAKE_TREE_SEARCH__MODE, else heuristic).",
+    ),
+) -> None:
+    """Two-stage tree retrieval: Qdrant shortlist -> per-document tree search (RETR-04).
+
+    Thin shim over pipeline.tree_search.tree_search() — validates args and
+    delegates; no orchestration logic lives here (D-13).
+    """
+    VALID_MODES = {"heuristic", "llm"}
+    if mode is not None and mode not in VALID_MODES:
+        typer.echo(
+            f"Error: --mode must be one of {sorted(VALID_MODES)}, got {mode!r}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    from knowledge_lake.pipeline.tree_search import tree_search
+
+    hits = tree_search(query, top_k=top_k, mode=mode)
+
+    if not hits:
+        typer.echo(f"No results for query: {query!r}")
+        return
+
+    typer.echo(f"Results for: {query!r}")
+    typer.echo()
+    for i, hit in enumerate(hits, 1):
+        payload = hit.payload
+        typer.echo(f"  [{i}] score={hit.score:.4f}")
+        typer.echo(f"      document:     {payload.get('document', '?')}")
+        typer.echo(f"      section_path: {payload.get('section_path', '?')}")
+        typer.echo(f"      pages:        {payload.get('page_start', '?')}-{payload.get('page_end', '?')}")
+        typer.echo(f"      node_path:    {payload.get('node_path', '?')}")
+        typer.echo()
+
+
 @app.command(name="reindex")
 def cmd_reindex(
     collection: str = typer.Option(
