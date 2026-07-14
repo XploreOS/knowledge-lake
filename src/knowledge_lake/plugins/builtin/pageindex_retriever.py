@@ -205,12 +205,16 @@ class PageIndexRetriever:
         if not terms or not tree_index.roots:
             return []
 
-        heuristic_hits = self._heuristic_hits(tree_index, terms)[:top_k]
+        # Untruncated candidate pool (WR-02): the LLM sees every node in the
+        # tree, so it must be able to select/reorder any heuristic hit — not
+        # just the ones that already survived a pre-LLM top_k truncation.
+        candidate_pool = self._heuristic_hits(tree_index, terms)
+        heuristic_hits = candidate_pool[:top_k]
 
         if mode != "llm":
             return heuristic_hits
 
-        return self._llm_nav_search(tree_index, terms, heuristic_hits, top_k, settings)
+        return self._llm_nav_search(tree_index, terms, candidate_pool, top_k, settings)[:top_k]
 
     def _llm_nav_search(
         self,
