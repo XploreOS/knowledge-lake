@@ -57,6 +57,27 @@ _MULTI_HYPHEN_RE = re.compile(r"-{2,}")
 # ── Pure helper functions ─────────────────────────────────────────────────────
 
 
+def _sanitize_wikilink_display(text: str) -> str:
+    """Strip characters that break Obsidian wikilink display text.
+
+    In ``[[target|display]]`` syntax:
+    - A ``|`` inside *display* acts as a second separator, silently truncating.
+    - A ``]]`` inside *display* prematurely closes the wikilink.
+    - A newline inside a ``# heading`` breaks the Markdown heading.
+
+    Parameters
+    ----------
+    text:
+        Raw display text (entity name, document title, etc.) from LLM output.
+
+    Returns
+    -------
+    str
+        Sanitized display text safe for use in Obsidian wikilinks and headings.
+    """
+    return text.replace("|", "-").replace("]]", "").replace("\n", " ").replace("\r", " ")
+
+
 def slugify(title: str) -> str:
     """Produce a deterministic ASCII slug from a title (D-02, T-16-01).
 
@@ -241,7 +262,7 @@ def _render_doc_page(
         lines.append("## Related Concepts")
         lines.append("")
         for entity_name, concept_slug in entities_with_slugs:
-            lines.append(f"- [[{concept_slug}|{entity_name}]]")
+            lines.append(f"- [[{concept_slug}|{_sanitize_wikilink_display(entity_name)}]]")
         lines.append("")
 
     return "\n".join(lines)
@@ -278,7 +299,7 @@ def _render_concept_page(
         lines.append("## Documents")
         lines.append("")
         for doc_slug, doc_title in doc_links:
-            lines.append(f"- [[{doc_slug}|{doc_title}]]")
+            lines.append(f"- [[{doc_slug}|{_sanitize_wikilink_display(doc_title)}]]")
         lines.append("")
 
     return "\n".join(lines)
@@ -321,14 +342,14 @@ def _render_index_page(
         lines.append(f"### {source_name}")
         lines.append("")
         for slug, title in sorted(by_source[source_name], key=lambda x: x[1]):
-            lines.append(f"- [[{slug}|{title}]]")
+            lines.append(f"- [[{slug}|{_sanitize_wikilink_display(title)}]]")
         lines.append("")
 
     if concept_entries:
         lines.append("## Concepts")
         lines.append("")
         for slug, entity_name in sorted(concept_entries, key=lambda x: x[1]):
-            lines.append(f"- [[{slug}|{entity_name}]]")
+            lines.append(f"- [[{slug}|{_sanitize_wikilink_display(entity_name)}]]")
         lines.append("")
 
     return "\n".join(lines)
