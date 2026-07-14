@@ -17,11 +17,11 @@ Requirements for PageIndex Plugin Integration milestone. Each maps to roadmap ph
 
 ### Tree Retrieval
 
-- [ ] **RETR-04**: Two-stage search composes Qdrant document-level shortlist (stage 1) with per-document tree traversal (stage 2)
-- [ ] **RETR-05**: Heuristic tree traversal (keyword matching + DFS) retrieves relevant page ranges without LLM calls
-- [ ] **RETR-06**: LLM-guided tree navigation reasons through node summaries to select relevant subtrees (opt-in mode)
-- [ ] **RETR-07**: Tree search loads candidate document trees in parallel (asyncio) with configurable concurrency limit
-- [ ] **RETR-08**: Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator
+- [x] **RETR-04**: Two-stage search composes Qdrant document-level shortlist (stage 1) with per-document tree traversal (stage 2)
+- [x] **RETR-05**: Heuristic tree traversal (keyword matching + DFS) retrieves relevant page ranges without LLM calls
+- [x] **RETR-06**: LLM-guided tree navigation reasons through node summaries to select relevant subtrees (opt-in mode)
+- [x] **RETR-07**: Tree search loads candidate document trees in parallel (asyncio) with configurable concurrency limit
+- [x] **RETR-08**: Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator
 
 ### Query Routing
 
@@ -79,11 +79,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TREE-03 | Phase 13 | Complete |
 | TREE-04 | Phase 13 | Complete |
 | TREE-05 | Phase 13 | Complete |
-| RETR-04 | Phase 14 | Pending |
-| RETR-05 | Phase 14 | Pending |
-| RETR-06 | Phase 14 | Pending |
-| RETR-07 | Phase 14 | Pending |
-| RETR-08 | Phase 14 | Pending |
+| RETR-04 | Phase 14 | Complete |
+| RETR-05 | Phase 14 | Complete |
+| RETR-06 | Phase 14 | Complete |
+| RETR-07 | Phase 14 | Complete |
+| RETR-08 | Phase 14 | Complete |
 | ROUTE-01 | Phase 15 | Pending |
 | ROUTE-02 | Phase 15 | Pending |
 | ROUTE-03 | Phase 15 | Pending |

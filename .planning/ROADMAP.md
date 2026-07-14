@@ -99,10 +99,10 @@ Plans:
   4. Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator distinguishing them from chunk hits
   5. Multiple document trees load from S3 and traverse in parallel (asyncio) with a configurable concurrency limit
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 **Wave 1**
 
-- [ ] 14-01-PLAN.md — Wave 0 test scaffold (test_tree_search.py + RetrieverPlugin conformance stub) covering RETR-04..08
+- [x] 14-01-PLAN.md — Wave 0 test scaffold (test_tree_search.py + RetrieverPlugin conformance stub) covering RETR-04..08
 - [ ] 14-02-PLAN.md — Hit.citation_source + RetrieverPlugin Protocol + TreeSearchSettings + retriever swap key (contracts)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -152,6 +152,6 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
-| 14. Tree Retrieval | v2.5 | 0/0 | Not started | - |
+| 14. Tree Retrieval | v2.5 | 1/4 | In Progress|  |
 | 15. Query Router | v2.5 | 0/0 | Not started | - |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |
