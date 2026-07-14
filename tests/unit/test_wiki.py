@@ -136,25 +136,26 @@ def three_doc_corpus(session):
         parsed = registry_repo.create_parsed_artifact(
             session,
             source_id=source.id,
-            parent_id=raw.id,
+            parent_artifact_id=raw.id,
             content_hash=f"parsed_hash_{i}",
             storage_uri=f"s3://test/parsed/doc{i}.json",
         )
         cleaned = registry_repo.create_cleaned_artifact(
             session,
             source_id=source.id,
-            parent_id=parsed.id,
+            parent_artifact_id=parsed.id,
             content_hash=f"cleaned_hash_{i}",
             storage_uri=f"s3://test/cleaned/doc{i}.json",
         )
         enriched = registry_repo.create_enriched_artifact(
             session,
             source_id=source.id,
-            parent_id=cleaned.id,
+            parent_artifact_id=cleaned.id,
             content_hash=f"enriched_hash_{i}",
-            storage_uri=f"s3://test/enriched/doc{i}.json",
-            metadata_=data,
+            metadata=data,
         )
+        # Store title in metadata for wiki
+        enriched.metadata_["title"] = data["title"]
         enriched_artifacts.append(enriched)
 
     session.commit()
