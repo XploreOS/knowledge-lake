@@ -21,10 +21,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-12)
+See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 15 — query-router
+**Current focus:** Phase 16 — openkb-export
 
 ## Current Position
 
@@ -102,6 +102,10 @@ Recent decisions affecting current work:
 - [Phase 14]: LLM-nav reorders heuristic Hits by validated node_ids rather than replacing them - invalid/unknown node_ids discarded, unmentioned heuristic hits kept at the end
 - [Phase 14]: tree_search() adds a max_docs kwarg (beyond top_k/mode/collection/settings) mirroring the per-request settings-override pattern, required by the test suite's shortlisting calls
 - [Phase 14]: tree_search.py imports search() and StorageBackend at module level (not lazily) so tests can patch tree_search_module.search / .StorageBackend directly, mirroring tree_index.py's import style
+- [Phase 15]: routed_search() plain function (not QueryRouter class) — function-over-class convention, simpler alias handling
+- [Phase 15]: default_route="auto" (classifier-driven) — ops rollback is KLAKE_ROUTER__DEFAULT_ROUTE=chunk (no code change)
+- [Phase 15]: MCP _search_handler uses `hasattr(h, "_asdict")` which is always False for dataclasses — CR-01 crash on non-empty results; fix: `dataclasses.asdict(h)`
+- [Phase 15]: mode param forwarded to both search() and tree_search() creates dual-semantics bug (CR-02) — needs split into mode/tree_mode
 
 ### Pending Todos
 
@@ -112,7 +116,8 @@ None yet.
 - [Phase 13]: PageIndex pinned to pre-release 0.3.0.dev3 — API may change; vendoring fallback plan exists but untested
 - [Phase 14]: Tree traversal prompt quality unvalidated — no ground-truth benchmarks for healthcare domain
 - [Phase 14]: Two-stage search latency (3-15s without parallelization) — async loading + concurrency limit needed
-- [Phase 15]: No labeled query dataset to validate heuristic routing patterns — start conservative, tune with production data
+- [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
+- [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
 
 ## Deferred Items
@@ -131,6 +136,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-14T03:39:33.074Z
-Stopped at: Phase 15 context gathered
-Resume file: .planning/phases/15-query-router/15-CONTEXT.md
+Last session: 2026-07-14
+Stopped at: Phase 15 complete, ready to plan Phase 16
+Resume file: None

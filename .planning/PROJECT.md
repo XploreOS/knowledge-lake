@@ -8,21 +8,22 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.5 — Phase 13 complete 2026-07-13)
+## Current State (v2.5 — Phase 15 complete 2026-07-14)
 
-- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phase 13 (Tree Index Foundation) complete 2026-07-13
-- **Source lines:** ~21,300 Python
-- **Tests:** 567 unit passing (+39 xpass, 1 intentional xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phases 13–15 complete (Tree Index, Tree Retrieval, Query Router)
+- **Source lines:** ~21,600 Python
+- **Tests:** 608 unit passing (+35 xpass, 5 xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
 - **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
-- **Retrieval:** hybrid BM25 + dense with server-side RRF fusion, mode-switchable (`hybrid|dense|sparse`, fail-loud)
+- **Retrieval:** hybrid BM25 + dense (RRF), mode-switchable (`hybrid|dense|sparse`); two-stage tree retrieval; query router dispatching between chunk and tree paths (`chunk|tree|two_stage|auto`)
+- **Query routing:** `classify_route()` heuristic classifier (section/comparison/structural triggers) + `routed_search()` dispatcher with auto-fallback on empty tree results; KLAKE_ROUTER__DEFAULT_ROUTE env var
 - **Scheduling:** Dagster re-crawl sensor with normalized silver-text change gate + tick-storm dedup
 - **Storage:** domain/source-scoped S3 keys + object tags; gold zone segmented by domain × dataset type
-- **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode`, `reindex --hybrid`
-- **API:** FastAPI (Swagger at /docs) extended with `/crawl-all` and mode-aware search
+- **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode --route`, `reindex --hybrid`
+- **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
-- **Quality gates:** all 6 phases verified `passed`, threat-secured (`threats_open: 0`), Nyquist-compliant
-- **Tech debt:** Typer <0.25.0 pin; E2E test contamination workaround; Dagster container rebuild / code-location reload for new sensors; live-service E2E paths not exercised in this env
+- **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; code review: 2 criticals (MCP Hit serialization, mode param dual-semantics) flagged for fix
+- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (CR-01); `mode` param has dual semantics on tree path (CR-02); Dagster container rebuild / code-location reload for new sensors
 
 ## Current Milestone: v2.5 PageIndex Plugin Integration
 
@@ -98,6 +99,14 @@ Every domain resource ingested must be traceable from raw source through every t
 - [x] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion) — Phase 10
 - [x] RETR-03: Configurable search mode (hybrid | dense | sparse) — Phase 10
 
+**PageIndex / Tree Retrieval (v2.5, Phases 13–15)**
+- [x] TREE-01..05: Hierarchical tree index from parsed documents (silver zone JSON artifact) — Phase 13
+- [x] RETR-04..08: Two-stage tree retrieval (Qdrant shortlist → per-document tree traversal) — Phase 14
+- [x] ROUTE-01: `routed_search()` dispatcher with per-call override → settings.router.default_route fallthrough — Phase 15
+- [x] ROUTE-02: `classify_route()` heuristic classifier (section_page_ref, comparison_multihop, structural_breadth) — Phase 15
+- [x] ROUTE-03: chunk/tree/two_stage/auto dispatch with D-05 auto-fallback semantics — Phase 15
+- [x] ROUTE-04: route param wired to REST (`?route=`), CLI (`--route`), MCP, and OpenAPI spec — Phase 15
+
 ### Deferred to v2.1
 
 - EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-05/06 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-02 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy), QUALITY-01 (quality-score search propagation)
@@ -158,6 +167,9 @@ Every domain resource ingested must be traceable from raw source through every t
 | Re-crawl change gate over normalized silver text, not raw bytes | Dynamic timestamps/nonces must not thrash the WORM raw zone; max-staleness backstop | ✓ Validated (v2.0) — inline timestamp/UUID/nonce suppression, meaningful dates survive |
 | Dagster vendored cron (`dagster._utils.schedules`), no standalone `croniter` | Avoids a SUS-flagged dependency; engine already in-tree | ⚠ Revisit — private import, no stability guarantee across Dagster minors |
 | Forward-only domain-scoped S3 keys (no backfill of existing raw objects) | Rewriting raw keys violates WORM immutability | ✓ Validated (v2.0) — `_unclassified` fallback, dedup/lineage preserved |
+| `routed_search()` as plain function dispatch (not QueryRouter class) | Function-over-class convention; simpler, no class-based alias complexity | ✓ Validated (Phase 15) — 25 unit tests, all surfaces wired |
+| Query router default `auto` (classifier-driven) not `chunk` | Auto routing ships silently; ops can pin to `chunk` via KLAKE_ROUTER__DEFAULT_ROUTE=chunk without code change | ✓ Validated (Phase 15) — cheap rollback lever confirmed |
+| No `both`/`merge` route — only single-path dispatch | Avoids merged-result complexity; tree and chunk are mutually exclusive per query | ✓ Validated (Phase 15) — D-09 prohibition verified in code review |
 
 ## Evolution
 
