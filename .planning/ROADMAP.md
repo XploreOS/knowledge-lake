@@ -147,7 +147,12 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 16-01-PLAN.md — Core wiki compilation pipeline (WikiSettings, pipeline/wiki.py, unit tests)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 16-02-PLAN.md — Wire CLI export-wiki command and API /export-wiki endpoint
 
 ## Progress

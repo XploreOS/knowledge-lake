@@ -496,17 +496,17 @@ def cmd_export_wiki(
 | A3 | tarfile module can write .tar.gz to BytesIO without intermediate filesystem | Code Examples | Very low -- stdlib documented behavior |
 | A4 | Enrichment metadata `entities` field is populated for all enriched documents | Architecture Patterns | Low -- Phase 4 guarantees this; empty list is the fallback |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **IDF threshold empirical value**
+   - RESOLVED: Default to 1.5 via `WikiSettings.min_entity_idf`; exposed as `KLAKE_WIKI__MIN_ENTITY_IDF` for operator tuning; dry-run output shows link distribution per page (implemented in `compile_wiki`).
    - What we know: D-05 specifies ~5-15 links per doc page; standard log-based IDF with threshold ~1.5 is a reasonable starting point
-   - What's unclear: Exact optimal value for the healthcare domain's 28 sources
-   - Recommendation: Default to 1.5; expose via `KLAKE_WIKI__MIN_ENTITY_IDF`; add dry-run output showing link distribution
+   - What was unclear: Exact optimal value for the healthcare domain's 28 sources
 
 2. **Wikilink format for Obsidian compatibility**
+   - RESOLVED: Use `[[slug|Entity Name]]` in document pages (readable) and `[[doc-slug|Document Title]]` in concept pages. The slug portion matches the filename for resolution; the display text after `|` is shown to the user.
    - What we know: Obsidian resolves `[[filename]]` where filename = stem without extension. CONTEXT.md says "slug = filename without extension"
-   - What's unclear: Whether to use `[[slug]]` or `[[slug|Display Name]]` for better readability
-   - Recommendation: Use `[[slug|Entity Name]]` in document pages (readable) and `[[doc-slug|Document Title]]` in concept pages. The slug portion matches the filename for resolution; the display text after `|` is shown to the user.
+   - What was unclear: Whether to use `[[slug]]` or `[[slug|Display Name]]` for better readability
 
 ## Validation Architecture
 
