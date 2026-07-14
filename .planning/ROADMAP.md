@@ -49,7 +49,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 **Milestone Goal:** Add tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, with a two-stage hybrid routing architecture.
 
 - [x] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type (completed 2026-07-13)
-- [ ] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision
+- [x] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision (completed 2026-07-14)
 - [ ] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics
 - [ ] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone
 
@@ -99,7 +99,7 @@ Plans:
   4. Tree search results produce Hit objects with page-level citations and a `citation_source: tree` discriminator distinguishing them from chunk hits
   5. Multiple document trees load from S3 and traverse in parallel (asyncio) with a configurable concurrency limit
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 **Wave 1**
 
 - [x] 14-01-PLAN.md — Wave 0 test scaffold (test_tree_search.py + RetrieverPlugin conformance stub) covering RETR-04..08
@@ -111,7 +111,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 14-04-PLAN.md — Two-stage tree_search orchestrator (shortlist → parallel tree load → traversal) + thin klake tree-search CLI
+- [x] 14-04-PLAN.md — Two-stage tree_search orchestrator (shortlist → parallel tree load → traversal) + thin klake tree-search CLI
 
 ### Phase 15: Query Router
 
@@ -152,6 +152,6 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
-| 14. Tree Retrieval | v2.5 | 3/4 | In Progress|  |
+| 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
 | 15. Query Router | v2.5 | 0/0 | Not started | - |
 | 16. OpenKB Export | v2.5 | 0/0 | Not started | - |

@@ -4,17 +4,17 @@ milestone: v2.5
 milestone_name: PageIndex Plugin Integration
 current_phase: 14
 current_phase_name: tree-retrieval
-status: executing
-stopped_at: Completed 14-03-PLAN.md
-last_updated: "2026-07-14T02:43:02.186Z"
+status: verifying
+stopped_at: Completed 14-04-PLAN.md (Phase 14 execution complete)
+last_updated: "2026-07-14T02:49:56.242Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 14 execution started
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 9
-  percent: 25
+  completed_plans: 10
+  percent: 50
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-12)
 
 Phase: 14 (tree-retrieval) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-14 — Phase 14 execution started
 
 Progress: [██████████] 100%
@@ -70,6 +70,7 @@ Progress: [██████████] 100%
 | Phase 14 P01 | 15min | 2 tasks | 2 files |
 | Phase 14 P02 | 12min | 2 tasks | 2 files |
 | Phase 14 P03 | 25min | 2 tasks | 4 files |
+| Phase 14 P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Recent decisions affecting current work:
 - [Phase 14]: PageIndexRetriever computes heuristic Hits first regardless of mode, so LLM-nav always has an identical fallback (A4)
 - [Phase 14]: LLM-nav spend isolated to scope=tree_search, distinct from Phase-13 tree_index and global scopes (D-07)
 - [Phase 14]: LLM-nav reorders heuristic Hits by validated node_ids rather than replacing them - invalid/unknown node_ids discarded, unmentioned heuristic hits kept at the end
+- [Phase 14]: tree_search() adds a max_docs kwarg (beyond top_k/mode/collection/settings) mirroring the per-request settings-override pattern, required by the test suite's shortlisting calls
+- [Phase 14]: tree_search.py imports search() and StorageBackend at module level (not lazily) so tests can patch tree_search_module.search / .StorageBackend directly, mirroring tree_index.py's import style
 
 ### Pending Todos
 
@@ -127,6 +130,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-14T02:40:14.815Z
-Stopped at: Completed 14-03-PLAN.md
+Last session: 2026-07-14T02:49:56.233Z
+Stopped at: Completed 14-04-PLAN.md (Phase 14 execution complete)
 Resume file: None
