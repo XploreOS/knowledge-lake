@@ -56,8 +56,6 @@ from knowledge_lake.api.schemas import (
     EnrichResponse,
     ExportRequest,
     ExportResponse,
-    WikiExportRequest,
-    WikiExportResponse,
     GenerateDatasetRequest,
     GenerateDatasetResponse,
     LineageNode,
@@ -69,6 +67,8 @@ from knowledge_lake.api.schemas import (
     SourceListItem,
     SourceOut,
     UploadOut,
+    WikiExportRequest,
+    WikiExportResponse,
 )
 from knowledge_lake.config.settings import get_settings
 

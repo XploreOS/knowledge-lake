@@ -249,7 +249,7 @@ def tree_index(
     # Mode is part of the hash so switching modes produces a distinct artifact
     # rather than a false cache hit.
     content_hash = hashlib.sha256(
-        f"{parsed_content_hash}:{effective_mode}:{schema_ver}".encode("utf-8")
+        f"{parsed_content_hash}:{effective_mode}:{schema_ver}".encode()
     ).hexdigest()
 
     # ── Step 3: Content-hash no-op (TREE-02) ──────────────────────────────────

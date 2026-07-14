@@ -1658,12 +1658,24 @@
       "WikiExportRequest": {
         "description": "Request body for POST /export-wiki.\n\nDomain name is validated at the API boundary (T-16-06: prevents injection\nvia min_length/max_length; slugify in wiki.py provides further sanitisation).",
         "properties": {
+          "archive": {
+            "default": false,
+            "description": "Also write a .tar.gz archive of all wiki pages.",
+            "title": "Archive",
+            "type": "boolean"
+          },
           "domain": {
             "description": "Domain to compile wiki for (required, per D-10/D-11).",
             "maxLength": 100,
             "minLength": 1,
             "title": "Domain",
             "type": "string"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Preview changes without writing to S3.",
+            "title": "Dry Run",
+            "type": "boolean"
           },
           "force": {
             "default": false,
@@ -1706,6 +1718,12 @@
           "pages_created": {
             "description": "Number of new wiki pages written.",
             "title": "Pages Created",
+            "type": "integer"
+          },
+          "pages_removed": {
+            "default": 0,
+            "description": "Number of stale wiki pages deleted from S3 during incremental rebuild.",
+            "title": "Pages Removed",
             "type": "integer"
           },
           "pages_unchanged": {

@@ -241,7 +241,7 @@ def tree_search(
     # ── Deserialize + dispatch (D-11) ─────────────────────────────────────────
     retriever = get_retriever(s)
     results: list[Hit] = []
-    for (parsed_id, _key), raw in zip(resolved, raw_blobs):
+    for (parsed_id, _key), raw in zip(resolved, raw_blobs, strict=False):
         if raw is None:
             continue
         try:

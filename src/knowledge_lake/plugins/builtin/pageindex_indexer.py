@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from knowledge_lake.plugins.protocols import IndexerPlugin, ParsedDoc, TreeIndex
+from knowledge_lake.plugins.protocols import ParsedDoc, TreeIndex
 
 
 class PageIndexIndexer:
