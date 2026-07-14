@@ -51,7 +51,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 - [x] **Phase 13: Tree Index Foundation** - Hierarchical tree index generation from parsed documents as a new silver-zone artifact type (completed 2026-07-13)
 - [x] **Phase 14: Tree Retrieval** - Two-stage search: Qdrant document shortlist then per-document tree traversal for page-level precision (completed 2026-07-14)
 - [x] **Phase 15: Query Router** - Dispatch queries between chunk-search and tree-search paths based on query characteristics (completed 2026-07-14)
-- [ ] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone
+- [x] **Phase 16: OpenKB Export** - Compiled interlinked wiki knowledge base from ingested documents in the gold zone (completed 2026-07-14)
 
 ## Phase Details
 
@@ -144,7 +144,7 @@ Plans:
   4. Adding a new source and re-running wiki export rebuilds only affected pages, not the entire wiki
   5. Wiki export is available via both CLI (`klake export-wiki`) and API endpoint
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -153,7 +153,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 16-02-PLAN.md — Wire CLI export-wiki command and API /export-wiki endpoint
+- [x] 16-02-PLAN.md — Wire CLI export-wiki command and API /export-wiki endpoint
 
 ## Progress
 
@@ -167,4 +167,4 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16
 | 13. Tree Index Foundation | v2.5 | 6/6 | Complete    | 2026-07-13 |
 | 14. Tree Retrieval | v2.5 | 4/4 | Complete   | 2026-07-14 |
 | 15. Query Router | v2.5 | 2/2 | Complete    | 2026-07-14 |
-| 16. OpenKB Export | v2.5 | 1/2 | In Progress|  |
+| 16. OpenKB Export | v2.5 | 2/2 | Complete   | 2026-07-14 |

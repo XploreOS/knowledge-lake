@@ -6,15 +6,15 @@ current_phase: 16
 current_phase_name: openkb-export
 status: executing
 stopped_at: Phase 16 context gathered
-last_updated: "2026-07-14T06:57:53.196Z"
+last_updated: "2026-07-14T07:11:50.373Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 16 execution started
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
-  completed_plans: 12
-  percent: 75
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 16 (openkb-export) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 16
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-07-14 — Phase 16 execution started
 
 Progress: [██████████] 100%
@@ -72,6 +72,7 @@ Progress: [██████████] 100%
 | Phase 14 P02 | 12min | 2 tasks | 2 files |
 | Phase 14 P03 | 25min | 2 tasks | 4 files |
 | Phase 14 P04 | 8min | 2 tasks | 2 files |
+| Phase 16 P02 | 5min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,8 @@ Recent decisions affecting current work:
 - [Phase 15]: default_route="auto" (classifier-driven) — ops rollback is KLAKE_ROUTER__DEFAULT_ROUTE=chunk (no code change)
 - [Phase 15]: MCP _search_handler uses `hasattr(h, "_asdict")` which is always False for dataclasses — CR-01 crash on non-empty results; fix: `dataclasses.asdict(h)`
 - [Phase 15]: mode param forwarded to both search() and tree_search() creates dual-semantics bug (CR-02) — needs split into mode/tree_mode
+- [Phase ?]: Lazy import compile_wiki inside CLI/API body — consistent with cmd_export pattern
+- [Phase ?]: docs/openapi.json must be regenerated after adding new API endpoint (determinism gate test_openapi_export.py)
 
 ### Pending Todos
 
@@ -136,6 +139,6 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-14T05:48:26.121Z
+Last session: 2026-07-14T07:11:17.707Z
 Stopped at: Phase 16 context gathered
 Resume file: .planning/phases/16-openkb-export/16-CONTEXT.md

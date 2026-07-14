@@ -36,7 +36,7 @@ Requirements for PageIndex Plugin Integration milestone. Each maps to roadmap ph
 - [ ] **KB-02**: Wiki pages include per-document summaries, cross-document concept pages, and a root index
 - [ ] **KB-03**: Entity cross-linking uses IDF-filtered entities from enrichment metadata (only link on specific terms)
 - [ ] **KB-04**: Wiki compilation is incremental — adding a new source rebuilds only affected pages, not the full wiki
-- [ ] **KB-05**: Wiki export is available via CLI (`klake export-wiki`) and API endpoint
+- [x] **KB-05**: Wiki export is available via CLI (`klake export-wiki`) and API endpoint
 
 ## Future Requirements
 
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | KB-02 | Phase 16 | Pending |
 | KB-03 | Phase 16 | Pending |
 | KB-04 | Phase 16 | Pending |
-| KB-05 | Phase 16 | Pending |
+| KB-05 | Phase 16 | Complete |
 
 **Coverage:**
 
