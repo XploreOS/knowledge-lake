@@ -30,6 +30,7 @@ import io
 import math
 import re
 import tarfile
+import time
 from typing import Any
 
 import orjson
@@ -705,6 +706,7 @@ def compile_wiki(
     archive_uri: str | None = None
     if archive:
         buf = io.BytesIO()
+        _archive_mtime = int(time.time())  # single timestamp for all entries (consistent sort)
         with tarfile.open(fileobj=buf, mode="w:gz") as tar:
             for key, data in pages.items():
                 # Preserve directory structure within the tar
@@ -713,6 +715,7 @@ def compile_wiki(
                 arc_name = key[len(prefix):] if key.startswith(prefix) else key
                 info = tarfile.TarInfo(name=arc_name)
                 info.size = len(data)
+                info.mtime = _archive_mtime
                 tar.addfile(info, io.BytesIO(data))
         buf.seek(0)
         archive_hash = hashlib.sha256(buf.getvalue()).hexdigest()[:12]
