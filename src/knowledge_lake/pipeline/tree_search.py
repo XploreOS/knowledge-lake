@@ -232,15 +232,18 @@ def tree_search(
             log.warning("tree_search.tree_parse_failed", document=parsed_id, error=str(exc))
             continue
 
-        results.extend(
-            retriever.search(
+        try:
+            hits = retriever.search(
                 tree_index_obj,
                 query,
                 top_k=effective_top_k,
                 mode=effective_mode,
                 settings=s,
             )
-        )
+        except Exception as exc:  # noqa: BLE001 — a retriever plugin bug must not fail the query (D-09)
+            log.warning("tree_search.retriever_failed", document=parsed_id, error=str(exc))
+            continue
+        results.extend(hits)
 
     # ── Merge (deterministic) ─────────────────────────────────────────────────
     results.sort(
