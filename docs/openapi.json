@@ -2619,7 +2619,7 @@
     },
     "/search": {
       "get": {
-        "description": "Embed a query and return the top-k nearest chunk hits with citation fields.\n\nCalls ``pipeline.search.search()`` \u2014 the same function the CLI uses (D-02).\n\nSecurity (T-01-14 / ASVS V5):\n    - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.\n    - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.\n    - ``tags`` list: element count capped at 64 by the handler guard (WR-02);\n      each element also validated to max 64 characters (T-07-04-01).\n    - ``mode`` is bounded to the Literal set {hybrid, dense, sparse} via the\n      Query pattern \u2014 any other value is automatically rejected with 422 before\n      the handler body runs (T-10-02, ASVS V5).\n    - Empty/whitespace queries return an empty list (not an error).\n\nArgs:\n    q:                 Natural-language search query.\n    top_k:             Maximum number of results (1\u2013100, default 5).\n    collection:        Qdrant collection to search (default: klake_chunks).\n    domain:            Optional filter \u2014 payload['domain'] must match exactly.\n    document_type:     Optional filter \u2014 payload['document_type'] must match exactly.\n    min_quality_score: Optional filter \u2014 payload['quality_score'] must be >= this value.\n    source_name:       Optional filter \u2014 payload['source_name'] must match exactly.\n    format:            Optional filter \u2014 payload['format'] must match exactly.\n    source_id:         Optional filter \u2014 payload['source_id'] must match exactly.\n    tags:              Optional OR filter \u2014 payload['tags'] must contain any of these values.\n    mode:              Optional search mode override (hybrid|dense|sparse). None \u2192 settings default.\n\nD-13 backward-compat note:\n    source_name, format, tags, source_id filters are only effective on points indexed\n    after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points\n    will not match.\n\nReturns:\n    A list of SearchHit objects ordered by score descending.\n    Returns an empty list when the query is empty/whitespace.",
+        "description": "Embed a query and return the top-k nearest chunk hits with citation fields.\n\nCalls ``pipeline.search.search()`` \u2014 the same function the CLI uses (D-02).\n\nSecurity (T-01-14 / ASVS V5):\n    - ``top_k`` is bounded [1, 100] by the ``ge``/``le`` constraints.\n    - ``min_quality_score`` is bounded [0.0, 1.0] by the ``ge``/``le`` constraints.\n    - ``tags`` list: element count capped at 64 by the handler guard (WR-02);\n      each element also validated to max 64 characters (T-07-04-01).\n    - ``mode`` is bounded to the Literal set {hybrid, dense, sparse} via the\n      Query pattern \u2014 any other value is automatically rejected with 422 before\n      the handler body runs (T-10-02, ASVS V5).\n    - Empty/whitespace queries return an empty list (not an error).\n\nArgs:\n    q:                 Natural-language search query.\n    top_k:             Maximum number of results (1\u2013100, default 5).\n    collection:        Qdrant collection to search (default: klake_chunks).\n    domain:            Optional filter \u2014 payload['domain'] must match exactly.\n    document_type:     Optional filter \u2014 payload['document_type'] must match exactly.\n    min_quality_score: Optional filter \u2014 payload['quality_score'] must be >= this value.\n    source_name:       Optional filter \u2014 payload['source_name'] must match exactly.\n    format:            Optional filter \u2014 payload['format'] must match exactly.\n    source_id:         Optional filter \u2014 payload['source_id'] must match exactly.\n    tags:              Optional OR filter \u2014 payload['tags'] must contain any of these values.\n    mode:              Optional search mode override (hybrid|dense|sparse). None \u2192 settings default.\n    route:             Optional retrieval route override (chunk|tree|two_stage|auto). None \u2192 settings default.\n\nD-13 backward-compat note:\n    source_name, format, tags, source_id filters are only effective on points indexed\n    after Phase 7 (or after a full reindex from source chunks). Pre-Phase-7 points\n    will not match.\n\nReturns:\n    A list of SearchHit objects ordered by score descending.\n    Returns an empty list when the query is empty/whitespace.",
         "operationId": "search_endpoint_search_get",
         "parameters": [
           {
@@ -2808,6 +2808,25 @@
               ],
               "description": "Search mode: hybrid|dense|sparse. Defaults to KLAKE_SEARCH__MODE setting (hybrid). An unrecognised value is rejected with 422 (T-10-02, ASVS V5, fail-closed). A hybrid or sparse request against a sparse-less collection returns the store's clear error (fail-loud, D-10).",
               "title": "Mode"
+            }
+          },
+          {
+            "description": "Retrieval route: chunk|tree|two_stage|auto. Defaults to KLAKE_ROUTER__DEFAULT_ROUTE (auto). An unrecognised value is rejected with 422 (ASVS V5, T-15-01, fail-closed).",
+            "in": "query",
+            "name": "route",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(chunk|tree|two_stage|auto)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Retrieval route: chunk|tree|two_stage|auto. Defaults to KLAKE_ROUTER__DEFAULT_ROUTE (auto). An unrecognised value is rejected with 422 (ASVS V5, T-15-01, fail-closed).",
+              "title": "Route"
             }
           }
         ],
