@@ -8,22 +8,23 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.5 — Phase 15 complete 2026-07-14)
+## Current State (v2.5 — Phase 16 complete 2026-07-14)
 
-- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phases 13–15 complete (Tree Index, Tree Retrieval, Query Router)
-- **Source lines:** ~21,600 Python
-- **Tests:** 608 unit passing (+35 xpass, 5 xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
-- **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export
+- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phases 13–16 complete (Tree Index, Tree Retrieval, Query Router, OpenKB Export)
+- **Source lines:** ~22,000 Python
+- **Tests:** 651 unit passing (+35 xpass, 5 xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
 - **Retrieval:** hybrid BM25 + dense (RRF), mode-switchable (`hybrid|dense|sparse`); two-stage tree retrieval; query router dispatching between chunk and tree paths (`chunk|tree|two_stage|auto`)
 - **Query routing:** `classify_route()` heuristic classifier (section/comparison/structural triggers) + `routed_search()` dispatcher with auto-fallback on empty tree results; KLAKE_ROUTER__DEFAULT_ROUTE env var
+- **Wiki export:** `compile_wiki()` builds interlinked Markdown knowledge base from enrichment metadata — IDF-filtered entity cross-links, per-document summary pages, concept pages, root index; manifest-based incremental rebuild; archive export for Obsidian vault import
 - **Scheduling:** Dagster re-crawl sensor with normalized silver-text change gate + tick-storm dedup
-- **Storage:** domain/source-scoped S3 keys + object tags; gold zone segmented by domain × dataset type
-- **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode --route`, `reindex --hybrid`
-- **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search
+- **Storage:** domain/source-scoped S3 keys + object tags; gold zone segmented by domain × dataset type (including `wiki/` prefix)
+- **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode --route`, `reindex --hybrid`, `export-wiki`
+- **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search, `/export-wiki`
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
-- **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; code review: 2 criticals (MCP Hit serialization, mode param dual-semantics) flagged for fix
-- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (CR-01); `mode` param has dual semantics on tree path (CR-02); Dagster container rebuild / code-location reload for new sensors
+- **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; code review phase 16: 2 criticals (orphan S3 page deletion, slug disambiguation) flagged for fix
+- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results; `mode` param dual semantics on tree path; wiki orphan page deletion (CR-01); wiki slug second-collision overwrite (CR-02); Dagster container rebuild / code-location reload for new sensors
 
 ## Current Milestone: v2.5 PageIndex Plugin Integration
 
@@ -178,4 +179,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-12 after v2.0 milestone (Agent-Ready Lake) shipped — audit PASSED, all phases secured + Nyquist-compliant*
+*Last updated: 2026-07-14 after v2.5 Phase 16 (OpenKB Export) complete — all v2.5 phases shipped, milestone complete*
