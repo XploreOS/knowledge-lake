@@ -196,7 +196,17 @@ def tree_search(
             if artifact is None:
                 log.info("tree_search.no_tree_index", document=parsed_id)
                 continue
-            resolved.append((parsed_id, uri_to_key(artifact.storage_uri)))
+            try:
+                key = uri_to_key(artifact.storage_uri)
+            except (ValueError, AttributeError) as exc:
+                log.warning(
+                    "tree_search.bad_storage_uri",
+                    document=parsed_id,
+                    storage_uri=artifact.storage_uri,
+                    error=str(exc),
+                )
+                continue
+            resolved.append((parsed_id, key))
 
     if not resolved:
         return []
