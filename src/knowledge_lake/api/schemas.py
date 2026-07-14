@@ -781,6 +781,28 @@ class DatasetOut(BaseModel):
     )
 
 
+class DomainSourceEntry(BaseModel):
+    """A single source entry from a domain pack's sources.yaml.
+
+    Mirrors ``domains.models.SourceEntry`` exactly — typed response schema for
+    GET /domains/{name}/sources so FastAPI performs response validation and the
+    OpenAPI spec generates a complete schema for response body items (WR-03).
+    """
+
+    name: str = Field(description="Human-readable source name.")
+    url: str = Field(description="Canonical source URL.")
+    source_type: str = Field(description="Document format: 'html', 'pdf', 'csv', 'json', etc.")
+    license: str = Field(description="License classification: 'public-domain', 'CC', 'open', or 'unknown'.")
+    tags: list[str] = Field(default_factory=list, description="Domain taxonomy tags for this source.")
+    crawl_config: dict = Field(default_factory=dict, description="Crawler configuration overrides.")
+    crawl_schedule: str | None = Field(default=None, description="5-field UTC cron string for auto-recrawl, or None.")
+    ingest_type: str = Field(default="crawl", description="Ingest strategy: 'crawl' or 'upload'.")
+    requires_registration: bool = Field(
+        default=False,
+        description="True if the source requires user registration before downloading.",
+    )
+
+
 class DomainLoadRequest(BaseModel):
     """Request body for POST /domains/load — load a domain pack and register its sources.
 

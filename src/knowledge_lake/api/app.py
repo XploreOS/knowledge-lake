@@ -51,6 +51,7 @@ from knowledge_lake.api.schemas import (
     DiscoverResultItem,
     DomainLoadRequest,
     DomainLoadResponse,
+    DomainSourceEntry,
     EnrichRequest,
     EnrichResponse,
     ExportRequest,
@@ -1550,7 +1551,7 @@ def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
 
 @app.get(
     "/domains/{name}/sources",
-    response_model=list[dict],
+    response_model=list[DomainSourceEntry],
     tags=["domains"],
     summary="List sources.yaml entries for a domain pack",
     status_code=200,
@@ -1559,7 +1560,7 @@ def load_domain_endpoint(body: DomainLoadRequest) -> DomainLoadResponse:
         422: {"description": "Invalid domain name format"},
     },
 )
-def list_domain_sources_endpoint(name: str) -> list[dict]:
+def list_domain_sources_endpoint(name: str) -> list[DomainSourceEntry]:
     """Return the list of SourceEntry dicts from sources.yaml for the named domain pack (DOMAIN-01).
 
     No DB access — reads the domain pack's sources.yaml directly via DomainLoader.
