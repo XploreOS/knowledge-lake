@@ -154,6 +154,35 @@ class StorageBackend:
         resp = self._client.get_object(Bucket=self._bucket, Key=key)
         return resp["Body"].read()
 
+    def delete_object(self, key: str) -> None:
+        """Delete an object from the bucket.
+
+        Used for gold-zone cleanup (e.g. wiki pages removed during incremental
+        rebuild). Does NOT apply to the raw or bronze zones — those are
+        immutable (FOUND-04).
+
+        Parameters
+        ----------
+        key:
+            S3 object key to delete.
+
+        Raises
+        ------
+        ClientError
+            Propagated on any S3 error other than an already-absent key
+            (NoSuchKey / 404 are treated as success — idempotent delete).
+        """
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=key)
+            log.debug("delete_object", bucket=self._bucket, key=key)
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code in ("NoSuchKey", "404"):
+                # Object already absent — idempotent success
+                log.debug("delete_object no-op (already absent)", key=key)
+            else:
+                raise
+
     def exists(self, key: str) -> bool:
         """Return True if the key exists in the bucket, False otherwise.
 

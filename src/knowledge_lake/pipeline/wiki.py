@@ -385,6 +385,7 @@ def compile_wiki(
         - pages_created: int — new pages written
         - pages_updated: int — changed pages rewritten
         - pages_unchanged: int — pages skipped (content unchanged)
+        - pages_removed: int — stale S3 pages deleted (incremental cleanup)
         - concept_pages: int — number of concept pages in this build
         - manifest_uri: str — S3 URI of the updated manifest
         - archive_uri: str | None — S3 URI of the .tar.gz archive, or None
@@ -614,11 +615,13 @@ def compile_wiki(
             pages_created=pages_created,
             pages_updated=pages_updated,
             pages_unchanged=pages_unchanged_count,
+            pages_removed=len(removed_pages),
         )
         return {
             "pages_created": pages_created,
             "pages_updated": pages_updated,
             "pages_unchanged": pages_unchanged_count,
+            "pages_removed": len(removed_pages),
             "concept_pages": len(concept_slug_map),
             "manifest_uri": storage.object_uri(manifest_key),
             "archive_uri": None,
@@ -644,6 +647,18 @@ def compile_wiki(
                 "artifact_type": f"wiki_{page_type}",
             },
         )
+
+    # ── 9b. Delete removed pages from S3 ─────────────────────────────────────
+
+    for key in removed_pages:
+        try:
+            storage.delete_object(key)
+        except ClientError as exc:
+            log.warning(
+                "wiki.compile.delete_failed",
+                key=key,
+                error=str(exc),
+            )
 
     # ── 10. Write updated manifest ────────────────────────────────────────────
 
@@ -686,6 +701,7 @@ def compile_wiki(
         pages_created=pages_created,
         pages_updated=pages_updated,
         pages_unchanged=pages_unchanged_count,
+        pages_removed=len(removed_pages),
         concept_pages=len(concept_slug_map),
         manifest_uri=manifest_uri,
         archive_uri=archive_uri,
@@ -695,6 +711,7 @@ def compile_wiki(
         "pages_created": pages_created,
         "pages_updated": pages_updated,
         "pages_unchanged": pages_unchanged_count,
+        "pages_removed": len(removed_pages),
         "concept_pages": len(concept_slug_map),
         "manifest_uri": manifest_uri,
         "archive_uri": archive_uri,
