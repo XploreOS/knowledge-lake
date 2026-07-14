@@ -1092,6 +1092,8 @@ def cmd_export_wiki(
         klake export-wiki --domain healthcare --dry-run
         klake export-wiki --domain healthcare --archive
     """
+    from botocore.exceptions import ClientError as BotocoreClientError
+
     from knowledge_lake.pipeline.wiki import compile_wiki
 
     try:
@@ -1101,7 +1103,7 @@ def cmd_export_wiki(
             dry_run=dry_run,
             archive=archive,
         )
-    except (ValueError, LookupError) as exc:
+    except (ValueError, LookupError, BotocoreClientError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
