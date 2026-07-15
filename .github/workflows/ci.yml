@@ -99,10 +99,10 @@ jobs:
         # running any subcommand, `build` included — so a value must be
         # present even though the api image itself needs no secrets to build.
         run: |
-          cat > .env <<'EOF'
-          KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access
-          KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret
-          EOF
+          printf '%s\n' \
+            'KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access' \
+            'KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret' \
+            > .env
       - name: Build api image (no push)
         # This is the actual guard KL-08/the Dockerfile landmine needed: the
         # api service has a `build:` stanza but the integration job below
@@ -127,16 +127,15 @@ jobs:
         # (WR-09) — compose fails loudly without them. Secret must be >= 8
         # chars (MinIO's MINIO_ROOT_PASSWORD minimum).
         run: |
-          cat > .env <<'EOF'
-          KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access
-          KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret
-          EOF
+          printf '%s\n' \
+            'KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access' \
+            'KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret' \
+            > .env
       - name: Bring up service stack
         # Compose is the single source of truth for services (KL-03 finding):
         # the MinIO image needs `server /data`, which Actions `services:`
-        # blocks cannot express. Only bring up the services integration tests
-        # need — postgres, minio, qdrant — not litellm/dagster/api.
-        run: docker compose up -d postgres minio qdrant
+        # blocks cannot express. minio-init creates the bucket (one-shot).
+        run: docker compose up -d postgres minio qdrant minio-init
       - name: Wait for services healthy
         run: |
           for i in $(seq 1 30); do
@@ -144,20 +143,26 @@ jobs:
             if [ -z "$unhealthy" ]; then
               echo "All services healthy."
               docker compose ps postgres minio qdrant
-              exit 0
+              break
             fi
             echo "Waiting for services to become healthy (attempt $i/30)..."
             sleep 5
+            if [ "$i" -eq 30 ]; then
+              echo "Timed out waiting for services to become healthy."
+              docker compose ps postgres minio qdrant
+              exit 1
+            fi
           done
-          echo "Timed out waiting for services to become healthy."
-          docker compose ps postgres minio qdrant
-          exit 1
+          echo "Waiting for minio-init (bucket bootstrap)..."
+          docker compose wait minio-init
       - name: Install dependencies
         run: uv sync
       - name: Run integration tests
         env:
           KLAKE_STORAGE__ACCESS_KEY_ID: klake-ci-access
           KLAKE_STORAGE__SECRET_ACCESS_KEY: klake-ci-secret
+          KLAKE_STORAGE__ENDPOINT_URL: http://localhost:9000
+          KLAKE_STORAGE__BUCKET: klake-data
         run: uv run pytest tests/integration -m "not browser" -q
       - name: Dump compose logs on failure
         if: failure()
