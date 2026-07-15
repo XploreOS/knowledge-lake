@@ -244,49 +244,33 @@ def cmd_chunk(
     ),
     source_id: str = typer.Argument(..., help="Source ID that owns the parsed artifact."),
 ) -> None:
-    """Chunk a parsed_document artifact into token-aware chunk artifacts.
+    """Chunk a parsed_document artifact into token-aware, section-aware chunk artifacts.
 
-    Note: In production usage the full pipeline (parse → clean → chunk) is orchestrated
-    by Dagster assets which pass ParsedDoc in-memory across stages.  This CLI command
-    is a convenience wrapper for manual testing and debugging — it fetches the parsed
-    text from the silver zone and reconstructs a minimal ParsedDoc with no section
-    structure (full text as one section).
+    Rehydrates the ParsedDoc from the silver-zone sections sidecar parse() writes
+    (Task 8, KL-09 follow-up) — chunks carry real section_path for citations. For
+    artifacts parsed before this change (no sidecar exists), falls back to
+    re-parsing the raw document to recover sections; this is slower (Docling took
+    ~40s on a 19-page PDF in testing) but never crashes and never silently drops
+    section_path.
 
-    For structured, section-aware chunking use the Dagster pipeline or klake ingest-url.
     Prints chunk_count and first chunk_id on success.
     """
-    from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.chunk import chunk
-    from knowledge_lake.plugins.protocols import ParsedDoc
-    from knowledge_lake.registry import repo as registry_repo
-    from knowledge_lake.registry.db import get_session
-    from knowledge_lake.storage.s3 import StorageBackend
-
-    s = get_settings()
-    storage = StorageBackend(s.storage)
+    from knowledge_lake.pipeline.parse import load_parsed_doc, reparse_from_raw
 
     try:
-        # Fetch the parsed artifact metadata to get the storage URI
-        with get_session() as session:
-            parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
-            if parsed_artifact is None:
-                raise ValueError(f"Parsed artifact {parsed_artifact_id!r} not found in registry")
-            storage_uri = parsed_artifact.storage_uri
-            if not storage_uri:
-                raise ValueError(
-                    f"Parsed artifact {parsed_artifact_id!r} has no storage_uri"
-                )
-
-        # Extract S3 key from URI — use shared helper to raise a descriptive
-        # ValueError on malformed URIs instead of an unhandled IndexError.
-        from knowledge_lake.pipeline.utils import uri_to_key
-        key = uri_to_key(storage_uri)
-        raw_bytes = storage.get_object(key)
-        parsed_text = raw_bytes.decode("utf-8")
-
-        # Reconstruct a minimal ParsedDoc with no section structure
-        # Full text treated as one section — production Dagster pipeline passes ParsedDoc in-memory
-        doc = ParsedDoc(text=parsed_text, sections=[])
+        doc = load_parsed_doc(parsed_artifact_id)
+        if doc is not None:
+            typer.echo(
+                f"Using persisted sections sidecar ({len(doc.sections)} sections)."
+            )
+        else:
+            typer.echo(
+                "No sections sidecar found (artifact parsed before this feature) — "
+                "re-parsing raw document to recover sections..."
+            )
+            doc = reparse_from_raw(parsed_artifact_id, source_id)
+            typer.echo(f"  re-parsed: {len(doc.sections)} sections recovered.")
 
         result = chunk(parsed_artifact_id, source_id, doc)
         typer.echo("Chunked:")
@@ -311,75 +295,40 @@ def cmd_tree_index(
     only way to build a tree index was previously the Dagster
     `tree_index_document` asset. This command closes that gap.
 
-    Why this RE-PARSES instead of reusing the parsed artifact directly:
-    `parse()` persists only ``{quality_score, parser_used, title}`` into a
-    parsed_document artifact's ``metadata_`` — the section structure a real
-    tree needs is produced only in-memory during parse() and is never written
-    to the registry or silver zone. `klake chunk` works around this the same
-    way `cmd_chunk` does (a minimal section-less ParsedDoc), but that
-    shortcut does not transfer here: `_build_deterministic_tree()` builds the
-    tree FROM sections, so a section-less ParsedDoc would yield a single
-    degenerate root node instead of a real tree. This command therefore
-    resolves the parsed artifact's raw_document parent, reloads its bytes
-    from the raw zone, and re-parses via the same parser-fallback chain
-    `klake parse` uses to recover real sections before calling
-    pipeline.tree_index.tree_index(). Re-parsing a large PDF is not cheap
-    (Docling took ~40s on a 19-page PDF in testing) — there is no cheaper
-    path while parse() leaves sections unpersisted (tracked as a follow-up,
-    not fixed here — see E2E-GAP-ANALYSIS.md KL-09).
+    Section source (Task 8, KL-09 follow-up): tries the silver-zone sections
+    sidecar `parse()` writes first — no re-parse needed, and the tree is built
+    from the same real sections `klake parse` produced. Falls back to
+    re-parsing the raw document ONLY for parsed_document artifacts created
+    before this feature existed (no sidecar was ever written for them):
+    `_build_deterministic_tree()` builds the tree FROM sections, so a
+    section-less ParsedDoc would yield a single degenerate root node instead
+    of a real tree — re-parsing via the same parser-fallback chain `klake
+    parse` uses is the only way to recover real sections for those artifacts.
+    Re-parsing a large PDF is not cheap (Docling took ~40s on a 19-page PDF in
+    testing).
 
     Prints artifact_id, status, cached, cost_usd on success.
     """
     from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.pipeline.parse import load_parsed_doc, reparse_from_raw
     from knowledge_lake.pipeline.tree_index import tree_index
-    from knowledge_lake.pipeline.utils import uri_to_key
-    from knowledge_lake.plugins.resolver import parse_with_fallback
-    from knowledge_lake.registry import repo as registry_repo
-    from knowledge_lake.registry.db import get_session
-    from knowledge_lake.storage.s3 import StorageBackend
 
     s = get_settings()
-    storage = StorageBackend(s.storage)
 
     try:
-        with get_session() as session:
-            parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
-            if parsed_artifact is None:
-                raise ValueError(
-                    f"Parsed artifact {parsed_artifact_id!r} not found in registry"
-                )
-            raw_artifact_id = parsed_artifact.parent_artifact_id
-            if not raw_artifact_id:
-                raise ValueError(
-                    f"Parsed artifact {parsed_artifact_id!r} has no parent raw_document "
-                    "artifact — cannot re-parse to recover sections."
-                )
-            raw_artifact = registry_repo.get_artifact(session, raw_artifact_id)
-            if raw_artifact is None:
-                raise ValueError(f"Raw artifact {raw_artifact_id!r} not found in registry")
-            raw_storage_uri = raw_artifact.storage_uri
-            if not raw_storage_uri:
-                raise ValueError(f"Raw artifact {raw_artifact_id!r} has no storage_uri")
-            stored_mime = raw_artifact.mime_type
-            if stored_mime in (None, "application/octet-stream"):
-                from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
-                stored_mime = _detect_mime_from_uri(raw_storage_uri)
-            mime_type = stored_mime or "application/pdf"
-
-        raw_key = uri_to_key(raw_storage_uri)
-        raw_bytes = storage.get_object(raw_key)
-
-        typer.echo(
-            "Re-parsing raw document to recover sections "
-            "(no persisted section structure to reuse — may take a while)..."
-        )
-        parsed_doc, parser_used, quality_score = parse_with_fallback(
-            raw_bytes, mime_type, settings=s
-        )
-        typer.echo(
-            f"  re-parsed: {len(parsed_doc.sections)} sections via {parser_used!r} "
-            f"(quality={quality_score})"
-        )
+        parsed_doc = load_parsed_doc(parsed_artifact_id, settings=s)
+        if parsed_doc is not None:
+            typer.echo(
+                f"Using persisted sections sidecar ({len(parsed_doc.sections)} "
+                "sections) — no re-parse needed."
+            )
+        else:
+            typer.echo(
+                "No sections sidecar found (artifact parsed before this feature) — "
+                "re-parsing raw document to recover sections (may take a while)..."
+            )
+            parsed_doc = reparse_from_raw(parsed_artifact_id, source_id, settings=s)
+            typer.echo(f"  re-parsed: {len(parsed_doc.sections)} sections recovered.")
 
         result = tree_index(parsed_artifact_id, source_id, parsed_doc, settings=s)
         typer.echo("Tree-indexed:")

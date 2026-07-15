@@ -165,11 +165,18 @@ class TestParseSilverKeyDomain:
                 settings=settings,
             )
 
-        assert len(captured_keys) == 1, f"Expected 1 put_object call, got {len(captured_keys)}"
-        silver_key = captured_keys[0]
+        # Task 8: parse() now writes TWO objects per call — the markdown and its
+        # sections sidecar — both under the same domain-scoped silver key prefix.
+        assert len(captured_keys) == 2, f"Expected 2 put_object calls, got {len(captured_keys)}"
+        md_keys = [k for k in captured_keys if k.endswith(".md")]
+        sidecar_keys = [k for k in captured_keys if k.endswith(".sections.json")]
+        assert len(md_keys) == 1 and len(sidecar_keys) == 1
         # After Plan 09-04: key should be silver/healthcare/{source_id}/{hash}.md
-        assert "silver/healthcare/" in silver_key, (
-            f"Expected 'silver/healthcare/' in silver key, got: {silver_key!r}"
+        assert "silver/healthcare/" in md_keys[0], (
+            f"Expected 'silver/healthcare/' in silver key, got: {md_keys[0]!r}"
+        )
+        assert "silver/healthcare/" in sidecar_keys[0], (
+            f"Expected 'silver/healthcare/' in sections sidecar key, got: {sidecar_keys[0]!r}"
         )
 
     def test_none_domain_uses_unclassified_segment(self, session, source_no_domain, engine):
@@ -203,9 +210,16 @@ class TestParseSilverKeyDomain:
                 settings=settings,
             )
 
-        assert len(captured_keys) == 1, f"Expected 1 put_object call, got {len(captured_keys)}"
-        silver_key = captured_keys[0]
+        # Task 8: parse() now writes TWO objects per call — the markdown and its
+        # sections sidecar — both under the same domain-scoped silver key prefix.
+        assert len(captured_keys) == 2, f"Expected 2 put_object calls, got {len(captured_keys)}"
+        md_keys = [k for k in captured_keys if k.endswith(".md")]
+        sidecar_keys = [k for k in captured_keys if k.endswith(".sections.json")]
+        assert len(md_keys) == 1 and len(sidecar_keys) == 1
         # After Plan 09-04: key should contain _unclassified segment
-        assert "silver/_unclassified/" in silver_key, (
-            f"Expected 'silver/_unclassified/' in silver key, got: {silver_key!r}"
+        assert "silver/_unclassified/" in md_keys[0], (
+            f"Expected 'silver/_unclassified/' in silver key, got: {md_keys[0]!r}"
+        )
+        assert "silver/_unclassified/" in sidecar_keys[0], (
+            f"Expected 'silver/_unclassified/' in sections sidecar key, got: {sidecar_keys[0]!r}"
         )

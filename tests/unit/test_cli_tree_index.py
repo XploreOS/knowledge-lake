@@ -112,10 +112,18 @@ class TestCliTreeIndex:
         assert "not found in registry" in result.output
 
     def test_reparse_recovers_sections_and_calls_tree_index(self, session, seeded) -> None:
-        """klake tree-index re-parses the raw parent via the parser-fallback
-        chain and hands tree_index() a ParsedDoc WITH sections — the
+        """klake tree-index falls back to re-parsing the raw parent via the
+        parser-fallback chain when the parsed artifact has no sections sidecar
+        (Task 8: the `seeded` fixture creates a parsed_document with no
+        metadata_["sections_uri"], simulating an artifact parsed before that
+        feature existed). Hands tree_index() a ParsedDoc WITH sections — the
         cmd_chunk shortcut (section-less ParsedDoc) does not transfer here
-        because _build_deterministic_tree() builds the tree FROM sections."""
+        because _build_deterministic_tree() builds the tree FROM sections.
+
+        Patches pipeline.parse.StorageBackend / .parse_with_fallback (not the
+        defining modules) because reparse_from_raw() binds both names at
+        pipeline.parse's own module-import time (KL-19 lesson: patch the seam
+        actually consulted, not the seam that merely defines the symbol)."""
         assert _IMPORT_OK, "CliRunner or app import failed"
         assert runner is not None
 
@@ -141,9 +149,9 @@ class TestCliTreeIndex:
             return {"artifact_id": "idx_fake", "cached": False, "status": "tree_indexed"}
 
         with (
-            patch("knowledge_lake.storage.s3.StorageBackend", return_value=mock_storage),
+            patch("knowledge_lake.pipeline.parse.StorageBackend", return_value=mock_storage),
             patch(
-                "knowledge_lake.plugins.resolver.parse_with_fallback",
+                "knowledge_lake.pipeline.parse.parse_with_fallback",
                 return_value=(fake_parsed_doc, "docling", 0.9),
             ) as mock_parse,
             patch(
@@ -159,18 +167,76 @@ class TestCliTreeIndex:
         assert result.exit_code == 0, result.output
         assert mock_parse.call_count == 1, (
             "Must re-parse the raw parent via the same parser-fallback chain "
-            "klake parse uses (KL-09) — sections are never persisted by parse()"
+            "klake parse uses (KL-09) when no sections sidecar exists"
         )
         assert mock_tree_index.call_count == 1
         assert captured["parsed_artifact_id"] == seeded["parsed_artifact_id"]
         assert captured["source_id"] == seeded["source_id"]
         assert captured["parsed_doc"].sections, (
             "tree_index() must receive a ParsedDoc WITH sections — a "
-            "section-less ParsedDoc (cmd_chunk's shortcut) would yield a "
+            "section-less ParsedDoc (cmd_chunk's old shortcut) would yield a "
             "single degenerate root node instead of a real tree (KL-09)"
         )
         assert "tree_indexed" in result.output
         assert "idx_fake" in result.output
+
+    def test_sidecar_hit_skips_reparse(self, session, seeded) -> None:
+        """When the parsed artifact HAS a sections sidecar (Task 8), tree-index
+        rehydrates it instead of re-parsing the raw document."""
+        assert _IMPORT_OK, "CliRunner or app import failed"
+        assert runner is not None
+
+        from knowledge_lake.registry import repo as registry_repo
+
+        # Give the seeded parsed artifact a sections_uri, simulating a parse()
+        # call made after Task 8.
+        artifact = registry_repo.get_artifact(session, seeded["parsed_artifact_id"])
+        artifact.metadata_ = {
+            "quality_score": 0.9,
+            "parser_used": "docling",
+            "title": "Test",
+            "sections_uri": "s3://b/silver/abc123.sections.json",
+        }
+        session.commit()
+
+        import orjson
+
+        sidecar_bytes = orjson.dumps({
+            "text": "sidecar text",
+            "sections": [
+                {"heading": "Intro", "section_path": "§1", "page": 1, "text": "", "is_table": False},
+            ],
+            "metadata": {},
+        })
+        mock_storage = MagicMock()
+        mock_storage.get_object.return_value = sidecar_bytes
+
+        captured: dict = {}
+
+        def tree_index_stub(parsed_artifact_id, source_id, parsed_doc, **kwargs):
+            captured["parsed_doc"] = parsed_doc
+            return {"artifact_id": "idx_fake", "cached": False, "status": "tree_indexed"}
+
+        with (
+            patch("knowledge_lake.pipeline.parse.StorageBackend", return_value=mock_storage),
+            patch(
+                "knowledge_lake.pipeline.parse.parse_with_fallback",
+            ) as mock_parse,
+            patch(
+                "knowledge_lake.pipeline.tree_index.tree_index",
+                side_effect=tree_index_stub,
+            ) as mock_tree_index,
+        ):
+            result = runner.invoke(
+                app,
+                ["tree-index", seeded["parsed_artifact_id"], seeded["source_id"]],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert mock_parse.call_count == 0, "Must NOT re-parse when a sidecar exists"
+        assert mock_tree_index.call_count == 1
+        assert captured["parsed_doc"].sections
+        assert "no re-parse needed" in result.output
 
 
 class TestCliTreeSearchEmptyResultDiagnosis:
