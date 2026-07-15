@@ -918,15 +918,23 @@ def export_finetune_dataset(
     return result
 
 
-# ── Healthcare E2E Job (DOMAIN-04) ────────────────────────────────────────────
+# ── Core Pipeline E2E Job (DOMAIN-04) ─────────────────────────────────────────
 
 # Selects exactly the 7 core pipeline assets for the E2E validation job.
 # curate_document_asset and generate_dataset are NOT included — see Pitfall 6
 # (RESEARCH.md): including dataset-generation assets in the core E2E job
 # would require valid source_artifact_id config for those assets which is
 # separate from the ingest-to-index pipeline being validated. T-06-14 mitigation.
-healthcare_e2e_job = define_asset_job(
-    name="healthcare_e2e_job",
+#
+# KL-16: this job was previously named for one specific domain, even though
+# the asset selection is fully domain-generic (these 7 core assets run
+# identically for any domain pack) — a domain-specific name in framework
+# core was misleading, not accurate. The real gap this doesn't solve —
+# domain packs cannot contribute their own Dagster jobs without editing
+# framework source — is deliberately deferred to the roadmap (see
+# E2E-GAP-ANALYSIS.md KL-16).
+core_pipeline_e2e_job = define_asset_job(
+    name="core_pipeline_e2e_job",
     selection=AssetSelection.assets(
         ingest_raw_document,
         parsed_document,
@@ -937,7 +945,8 @@ healthcare_e2e_job = define_asset_job(
         index_chunks,
     ),
     description=(
-        "Full pipeline job for healthcare E2E validation (DOMAIN-04). "
-        "Materializes the core ingest-to-index chain over 5 healthcare sources."
+        "Full pipeline job for core E2E validation (DOMAIN-04). "
+        "Materializes the core ingest-to-index chain; domain-agnostic — the "
+        "asset selection is the same regardless of which domain pack is active."
     ),
 )

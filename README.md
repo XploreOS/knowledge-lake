@@ -463,12 +463,12 @@ uv run klake search "my query" --collection klake_chunks --domain mydomainname
 
 ## Dagster UI
 
-The Dagster webserver is available at `http://localhost:3000`. It shows all registered assets (ingest, parse, clean, chunk, enrich, curate, generate_dataset, index), run history, and retry state for `healthcare_e2e_job`.
+The Dagster webserver is available at `http://localhost:3000`. It shows all registered assets (ingest, parse, clean, chunk, enrich, curate, generate_dataset, index), run history, and retry state for `core_pipeline_e2e_job`.
 
 To trigger the full pipeline for a source via the Dagster CLI:
 
 ```bash
-uv run dagster job execute -j healthcare_e2e_job \
+uv run dagster job execute -j core_pipeline_e2e_job \
   -c '{"ops": {"ingest_asset": {"config": {"source_id": "<source_id>"}}}}'
 ```
 

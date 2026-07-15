@@ -37,6 +37,7 @@ from dagster import Definitions, EnvVar
 from knowledge_lake.dagster_defs.assets import (
     chunk_document,
     clean_document,
+    core_pipeline_e2e_job,
     curate_document_asset,
     embed_chunks,
     enrich_document,
@@ -44,7 +45,6 @@ from knowledge_lake.dagster_defs.assets import (
     export_pretrain_corpus,
     export_rag_corpus,
     generate_dataset,
-    healthcare_e2e_job,
     index_chunks,
     ingest_raw_document,
     parsed_document,
@@ -82,7 +82,7 @@ defs = Definitions(
         export_pretrain_corpus,
         export_finetune_dataset,
     ],
-    jobs=[healthcare_e2e_job, recrawl_source_job],
+    jobs=[core_pipeline_e2e_job, recrawl_source_job],
     sensors=[recrawl_sensor],
     resources={
         "postgres": PostgresResource(

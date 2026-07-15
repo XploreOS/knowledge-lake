@@ -246,17 +246,17 @@ The in-memory `ParsedDoc` is forwarded from `parsed_document` through `clean_doc
 
 | Asset | RetryPolicy | Notes |
 |-------|------------|-------|
-| `curate_document_asset` | `max_retries=2, exponential` | Parallel branch off `clean_document`; excluded from `healthcare_e2e_job` |
-| `generate_dataset` | `max_retries=2, exponential` | Requires separate `source_artifact_id` run config; excluded from `healthcare_e2e_job` |
+| `curate_document_asset` | `max_retries=2, exponential` | Parallel branch off `clean_document`; excluded from `core_pipeline_e2e_job` |
+| `generate_dataset` | `max_retries=2, exponential` | Requires separate `source_artifact_id` run config; excluded from `core_pipeline_e2e_job` |
 | `export_rag_corpus` | `max_retries=1, delay=2 (linear)` | Export group |
 | `export_pretrain_corpus` | `max_retries=1, delay=2 (linear)` | Export group |
 | `export_finetune_dataset` | `max_retries=1, delay=2 (linear)` | Export group; requires `dataset_name` run config |
 
 Export assets use linear delay with only 1 retry because `TrainEvalContaminationError` is a business-logic failure, not a transient error — exponential backoff would mask a persistent problem.
 
-### `healthcare_e2e_job`
+### `core_pipeline_e2e_job`
 
-Selects exactly the 7 core pipeline assets (ingest through index). `curate_document_asset` and `generate_dataset` are deliberately excluded — they require separate `source_artifact_id` run config that is not part of the ingest-to-index pipeline chain.
+Selects exactly the 7 core pipeline assets (ingest through index). `curate_document_asset` and `generate_dataset` are deliberately excluded — they require separate `source_artifact_id` run config that is not part of the ingest-to-index pipeline chain. (Renamed from `healthcare_e2e_job` — KL-16: the asset selection is domain-agnostic, so a domain-specific name in framework core was misleading.)
 
 ## Short-Circuit: `klake ingest-url`
 
