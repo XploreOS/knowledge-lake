@@ -32,13 +32,15 @@ Every domain resource ingested must be traceable from raw source through every t
 **Goal:** Stop garbage content from reaching the silver zone, chunking, tree index, and gold export — so the RAG corpus is trustworthy rather than merely populated.
 
 **Target features:**
-- Put cleaning on the load-bearing path (chunk/tree/enrich must consume cleaned text)
-- Crawler-level boilerplate stripping so nav/footers/cookie banners never enter the raw zone
-- Section-level boilerplate classification and a minimum-substance gate at chunk
+- Close the clean-stage bypass (both Dagster and `klake process` paths)
+- Section-level boilerplate classification with substance annotations
+- Minimum-substance gate at chunk (with domain-pack allowlists)
+- Quality predicate module (pure, deterministic, no I/O)
 - Index-time deduplication (one vector per unique text, lineage preserved per WR-05)
-- Quality gate on gold export
+- Quality gate on gold RAG export (chunk-level, not document-level)
+- Re-runnable quality audit harness + must-not-reject CI fixtures
 
-**Scope decisions:** full rework including crawler extraction · forward-only (no backfill of the existing corpus) · dedup at index time, not chunk time · research first. Full context: `.planning/MILESTONE-CONTEXT.md`. Phase numbering continues at **Phase 17**.
+**Scope decisions:** Crawler extraction DEFERRED (no-op today; section classifier covers superset) · forward-only CONFIRMED (test data wiped before production via `docker compose down -v`) · dedup at index time (after substance gate) · research complete. Full context: `.planning/MILESTONE-CONTEXT.md`, requirements: `.planning/REQUIREMENTS.md`. Phase numbering continues at **Phase 17**.
 
 ## Requirements
 

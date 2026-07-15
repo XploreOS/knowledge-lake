@@ -1,20 +1,19 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.5
-milestone_name: PageIndex Plugin Integration
-status: Awaiting next milestone
-stopped_at: Milestone v2.5 archived — awaiting /gsd-new-milestone
-last_updated: "2026-07-15T15:27:48.115Z"
+milestone: v2.6
+milestone_name: Data Quality & Enrichment
+status: Planning complete — ready for execution
+stopped_at: null
+last_updated: "2026-07-15T18:00:00.000Z"
 last_activity: 2026-07-15
-last_activity_desc: Milestone v2.5 completed and archived
+last_activity_desc: v2.6 requirements defined, roadmap created
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
-  percent: 100
-current_phase: 15
-current_phase_name: Query Router
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+current_phase: 17
+current_phase_name: Close the Bypass + Measurement
 ---
 
 # Project State
@@ -24,14 +23,14 @@ current_phase_name: Query Router
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Planning v2.6 — Data Quality & Enrichment (run `/gsd-new-milestone`; context in `.planning/MILESTONE-CONTEXT.md`)
+**Current focus:** v2.6 — Data Quality & Enrichment (Phases 17–21). Requirements: `.planning/REQUIREMENTS.md`. Ready for `/gsd-plan-phase 17`.
 
 ## Current Position
 
-Phase: Milestone v2.5 complete
+Phase: 17 — Close the Bypass + Measurement
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-15 — Milestone v2.5 completed and archived
+Status: Planning complete — ready for execution
+Last activity: 2026-07-15 — v2.6 requirements defined, roadmap created
 
 ## Performance Metrics
 
@@ -78,7 +77,13 @@ Last activity: 2026-07-15 — Milestone v2.5 completed and archived
 
 ### Decisions
 
-Decisions are logged in the PROJECT.md Key Decisions table — v2.5's decisions were audited into it at milestone close (2026-07-15). This section accumulates decisions for the **current** milestone only; it is empty until v2.6 planning begins.
+| ID | Decision | Rationale | Date |
+|----|----------|-----------|------|
+| D-1 | Crawler extraction DEFERRED | No-op today (bronze is dead-end, nothing reads it); section classifier covers superset; Crawl4AI bug #582 strips bolded drug names | 2026-07-15 |
+| D-2 | Forward-only CONFIRMED | Existing data is test data; fresh stack via `docker compose down -v` before production use | 2026-07-15 |
+| D-3 | Dedup at index time (after L3) | Dedup before substance gate makes BM25 worse (IDF inversion); most duplicates are boilerplate removed by L3 anyway | 2026-07-15 |
+| D-4 | No FilterPlugin seam | DataTrove called directly (precedent: `curate.py:119`); variability is by domain not tool — use domain-pack rail | 2026-07-15 |
+| D-5 | 30-char floor rejected | Wrong unit (token-based system), wrong target (kills ICD codes, dosage instructions); use composite predicate with domain allowlist | 2026-07-15 |
 
 ### Pending Todos
 
@@ -137,10 +142,11 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-15
-Stopped at: Milestone v2.5 archived — awaiting /gsd-new-milestone
-Resume file: .planning/MILESTONE-CONTEXT.md (v2.6 scope + root causes, gathered 2026-07-15)
+Last session: 2026-07-15T18:00:00.000Z
+Stopped at: —
+Resume file: .planning/REQUIREMENTS.md (v2.6 requirements, 20 reqs across 5 phases)
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Begin execution with `/gsd-plan-phase 17` (Close the Bypass + Measurement)
+- Phase 18 (Gate Decouple) is parallelizable with 17 if desired
