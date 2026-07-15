@@ -134,8 +134,8 @@ jobs:
       - name: Bring up service stack
         # Compose is the single source of truth for services (KL-03 finding):
         # the MinIO image needs `server /data`, which Actions `services:`
-        # blocks cannot express. minio-init creates the bucket (one-shot).
-        run: docker compose up -d postgres minio qdrant minio-init
+        # blocks cannot express.
+        run: docker compose up -d postgres minio qdrant
       - name: Wait for services healthy
         run: |
           for i in $(seq 1 30); do
@@ -153,8 +153,8 @@ jobs:
               exit 1
             fi
           done
-          echo "Waiting for minio-init (bucket bootstrap)..."
-          docker compose wait minio-init
+      - name: Create MinIO bucket
+        run: docker compose up minio-init
       - name: Install dependencies
         run: uv sync
       - name: Run integration tests
