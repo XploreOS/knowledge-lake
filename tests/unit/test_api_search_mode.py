@@ -134,7 +134,7 @@ class TestApiInvalidMode422:
             captured_kwargs.update({"query": query, **kwargs})
             return []
 
-        with patch("knowledge_lake.pipeline.search.search", side_effect=search_stub):
+        with patch("knowledge_lake.pipeline.route.search", side_effect=search_stub):
             resp = api_client.get("/search", params={"q": "test query"})
 
         # Without the mode param: current behavior is 200; after Plan 10-08 it's still 200

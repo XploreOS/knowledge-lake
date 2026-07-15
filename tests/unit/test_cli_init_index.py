@@ -5,6 +5,8 @@ Import uses a try/except guard so pytest can collect the file before the command
 
 from __future__ import annotations
 
+import re
+
 try:
     from typer.testing import CliRunner
     from knowledge_lake.cli.app import app
@@ -13,6 +15,11 @@ except ImportError:
     CliRunner = None  # type: ignore[assignment, misc]
     app = None  # type: ignore[assignment]
     _IMPORT_OK = False
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return re.sub(r'\x1b\[[^m]*m', '', text)
 
 runner = CliRunner() if CliRunner is not None else None
 
@@ -35,7 +42,7 @@ def test_init_command_help() -> None:
     assert result.exit_code == 0, (
         f"Expected exit 0 for 'init --help', got {result.exit_code}. Output: {result.output!r}"
     )
-    assert "--domain" in result.output, (
+    assert "--domain" in _strip_ansi(result.output), (
         f"'--domain' not found in 'init --help' output: {result.output!r}"
     )
 
@@ -48,6 +55,6 @@ def test_index_command_exists() -> None:
     assert result.exit_code == 0, (
         f"Expected exit 0 for 'index --help', got {result.exit_code}. Output: {result.output!r}"
     )
-    assert "--collection" in result.output, (
+    assert "--collection" in _strip_ansi(result.output), (
         f"'--collection' not found in 'index --help' output: {result.output!r}"
     )

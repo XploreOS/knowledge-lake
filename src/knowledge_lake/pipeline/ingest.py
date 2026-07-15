@@ -359,6 +359,7 @@ def ingest_url(
     mime_type: str | None = None,
     license_type: str = "unknown",
     robots_checked: bool = False,
+    domain: str | None = None,
     settings: Settings | None = None,
 ) -> dict:
     """Download a URL and ingest as a raw_document artifact.
@@ -426,6 +427,11 @@ def ingest_url(
     ext = _mime_to_ext(effective_mime)
     log.info("ingest_url.downloaded", url=url, size=len(data), mime_type=effective_mime)
 
+    # NF-01: Build config dict for domain dual-write (same pattern as register_source).
+    config_dict: dict | None = None
+    if domain:
+        config_dict = {"domain": domain}
+
     with get_session() as session:
         try:
             source = registry_repo.create_source(
@@ -436,6 +442,8 @@ def ingest_url(
                 normalized_url=norm_url,
                 license_type=license_type,
                 robots_checked=robots_checked,
+                config=config_dict,
+                domain=domain,
             )
             session.flush()
         except IntegrityError:
@@ -445,12 +453,13 @@ def ingest_url(
             source = registry_repo.get_source_by_normalized_url(session, norm_url)
             if source is None:
                 raise  # unexpected
-        domain = (source.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN
+        # NF-01: Prefer caller-supplied domain, then source config, then fallback.
+        effective_domain = domain or (source.config or {}).get("domain") or _UNCLASSIFIED_DOMAIN
         artifact = storage.put_raw(
             source.id, data, ext, session,
             mime_type=effective_mime,
-            domain=domain,
-            tags={"domain": domain, "source_name": source_name, "format": ext, "artifact_type": "raw_document"},
+            domain=effective_domain,
+            tags={"domain": effective_domain, "source_name": source_name, "format": ext, "artifact_type": "raw_document"},
         )
         session.flush()
         result = {

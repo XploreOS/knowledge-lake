@@ -554,14 +554,23 @@ def cmd_crawl(
             max_pages=max_pages,
             domain=effective_domain,
         ))
-        typer.echo("Crawl complete:")
+        pages_ok = result.get("pages_complete", 0)
+        pages_total = result.get("pages_total", 0)
+        all_failed = pages_total > 0 and pages_ok == 0
+
+        typer.echo("Crawl complete:" if not all_failed else "Crawl FAILED (0 pages succeeded):")
         typer.echo(f"  job_id:              {result['job_id']}")
         typer.echo(f"  source_id:           {result['source_id']}")
         typer.echo(f"  crawler:             {result['crawler']}")
-        typer.echo(f"  pages_complete:      {result['pages_complete']}")
+        typer.echo(f"  pages_complete:      {pages_ok}")
         typer.echo(f"  pages_robots_blocked: {result['pages_robots_blocked']}")
         typer.echo(f"  pages_failed:        {result['pages_failed']}")
-        typer.echo(f"  pages_total:         {result['pages_total']}")
+        typer.echo(f"  pages_total:         {pages_total}")
+
+        if all_failed:
+            raise typer.Exit(code=1)
+    except typer.Exit:
+        raise
     except ValueError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -1148,10 +1157,23 @@ def cmd_export(
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    row_count = result.get("row_count", 0)
+    if row_count == 0:
+        typer.echo("Export produced 0 rows (empty output):", err=True)
+        typer.echo(f"  dataset_id:  {result['dataset_id']}", err=True)
+        typer.echo(f"  storage_uri: {result['storage_uri']}", err=True)
+        if domain:
+            typer.echo(
+                f"  hint: no qualifying rows matched domain={domain!r}. "
+                "Check that source domain is set correctly.",
+                err=True,
+            )
+        raise typer.Exit(code=1)
+
     typer.echo("Export complete:")
     typer.echo(f"  dataset_id:  {result['dataset_id']}")
     typer.echo(f"  storage_uri: {result['storage_uri']}")
-    typer.echo(f"  row_count:   {result['row_count']}")
+    typer.echo(f"  row_count:   {row_count}")
     if result.get("skipped_dangling_lineage") is not None:
         typer.echo(f"  skipped_dangling_lineage: {result['skipped_dangling_lineage']}")
 

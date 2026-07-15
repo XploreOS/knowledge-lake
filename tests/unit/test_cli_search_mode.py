@@ -14,6 +14,7 @@ Mirrors tests/unit/test_cli_init_index.py: CliRunner + try/except ImportError gu
 
 from __future__ import annotations
 
+import re
 from unittest.mock import patch
 
 try:
@@ -25,6 +26,11 @@ except ImportError:
     CliRunner = None  # type: ignore[assignment, misc]
     app = None  # type: ignore[assignment]
     _IMPORT_OK = False
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return re.sub(r'\x1b\[[^m]*m', '', text)
 
 runner = CliRunner() if CliRunner is not None else None
 
@@ -95,6 +101,6 @@ class TestCliModeForwarding:
         assert result.exit_code == 0, (
             f"'search --help' exited with {result.exit_code}: {result.output!r}"
         )
-        assert "--mode" in result.output, (
+        assert "--mode" in _strip_ansi(result.output), (
             f"'--mode' option not found in 'search --help' output: {result.output!r}"
         )

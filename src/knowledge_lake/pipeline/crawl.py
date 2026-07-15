@@ -374,6 +374,7 @@ async def crawl_source(
         max_pages=effective_max_pages,
         settings=s,
         source_config=source_crawl_config,
+        domain=domain,
     )
 
     # Update job status
@@ -501,6 +502,7 @@ async def _crawl_loop(
     max_pages: int,
     settings: Settings,
     source_config: dict | None = None,
+    domain: str | None = None,
 ) -> dict[str, int]:
     """BFS crawl loop: fetch pages, extract links, expand queue up to max_pages.
 
@@ -564,6 +566,31 @@ async def _crawl_loop(
             backoff_extra=backoff_extra,
         )
         await limiter.wait(url, delay)
+
+        # NF-03: Document URLs (PDF, docx) cannot be rendered in a browser —
+        # short-circuit to ingest_url which downloads + stores them as raw artifacts.
+        url_path_lower = (urlparse(url).path or "").lower()
+        if any(url_path_lower.endswith(ext) for ext in LINKED_DOC_EXTENSIONS):
+            try:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None,
+                    functools.partial(
+                        ingest_url,
+                        url,
+                        source_name=_name_from_url(url),
+                        domain=domain,
+                        settings=settings,
+                    ),
+                )
+                _record_state(job_id, url, "complete")
+                pages_complete += 1
+                log.info("crawl.doc_url_ingested", url=url)
+            except Exception as exc:
+                log.warning("crawl.doc_url_ingest_failed", url=url, error=str(exc))
+                _record_state(job_id, url, "failed", error=str(exc))
+                pages_failed += 1
+            continue
 
         # Fetch via adapter
         try:
@@ -670,6 +697,7 @@ async def _crawl_loop(
                             ingest_url,
                             link_url,
                             source_name=_name_from_url(link_url),
+                            domain=domain,
                             settings=settings,
                         ),
                     )
@@ -959,21 +987,23 @@ async def crawl_all_sources(
     # Materialise (url, id) pairs from whatever the source list returns.
     # Production: Source ORM objects with .url and .id attributes.
     # Tests: plain dicts (patched mock return value) — handled via isinstance check.
-    source_pairs: list[tuple[Any, Any]] = []
+    # NF-01: Also carry domain so crawl_source can forward it to ingest_url for
+    # linked PDFs — prevents domain classification leak to _unclassified/.
+    source_pairs: list[tuple[Any, Any, Any]] = []
     for src in raw_sources:
         if isinstance(src, dict):
-            source_pairs.append((src["url"], src["id"]))
+            source_pairs.append((src["url"], src["id"], src.get("domain")))
         else:
-            source_pairs.append((src.url, src.id))
+            source_pairs.append((src.url, src.id, getattr(src, "domain", None)))
 
     total = len(source_pairs)
     succeeded = 0
     failed = 0
     results: list[dict[str, Any]] = []
 
-    for source_url, source_id_val in source_pairs:
+    for source_url, source_id_val, source_domain in source_pairs:
         try:
-            result = await crawl_source(source_url, settings=s)
+            result = await crawl_source(source_url, settings=s, domain=source_domain)
             # M-04 fix: spread result first, then explicitly override source_id and
             # status so the caller-supplied source_id_val wins over any 'source_id'
             # key that crawl_source() returns (which can differ when register_source
