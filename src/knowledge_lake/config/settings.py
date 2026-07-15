@@ -95,6 +95,12 @@ class ParseSettings(BaseModel):
     llm_spot_check: bool = True
     """Enable or disable the optional LLM quality spot-check in the gray zone."""
 
+    spot_check_model_alias: str = "cheap_model"
+    """LiteLLM task alias for the optional coherence spot-check call in
+    quality/scorer.py::maybe_llm_spot_check(). Mirrors EnrichSettings.model_alias
+    — configurable instead of hardcoded (KL-17c: the plan's "no hardcoded model
+    aliases outside settings" must-have applies here too, not just datasets.py)."""
+
     max_file_bytes: int = 104857600
     """Hard file-size limit (100 MiB) before parsing — DoS guard (T-03-02)."""
 
@@ -328,6 +334,14 @@ class DatasetSettings(BaseModel):
     """Bounds the cleaned-document excerpt sent for instruction-tuning generation —
     larger than EnrichSettings.excerpt_chars=4000 because instruction-tuning benefits
     from more source context (AI-SPEC Section 4)."""
+
+    qa_model_alias: str = "eval_model"
+    """LiteLLM task alias for QA-pair generation calls (DATA-01). Mirrors
+    EnrichSettings.model_alias — configurable instead of hardcoded (KL-17c)."""
+
+    instruction_model_alias: str = "strong_model"
+    """LiteLLM task alias for instruction-pair generation calls (DATA-02). Mirrors
+    EnrichSettings.model_alias — configurable instead of hardcoded (KL-17c)."""
 
 
 class ExportSettings(BaseModel):

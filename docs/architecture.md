@@ -1,6 +1,6 @@
 # Architecture
 
-Knowledge Lake is a domain-agnostic framework that orchestrates best-in-class open-source tools to turn public, private, and manually uploaded domain resources into AI-ready assets. It treats every external tool — parsers, crawlers, vector stores, LLM gateways — as a replaceable plugin. The single source of truth for metadata and lineage is a PostgreSQL registry; raw bytes live in S3-compatible object storage; and dense vectors live in Qdrant. For initial setup and running the stack, see [README.md](../README.md).
+Knowledge Lake is a domain-agnostic framework that orchestrates best-in-class open-source tools to turn public, private, and manually uploaded domain resources into AI-ready assets. It treats parsers, crawlers, embedders, vector stores, and source discovery as replaceable plugins (see [Plugin System](#plugin-system)). LLM access is a fixed constraint rather than a plugin: all model calls go through LiteLLM, which is already a 100+-provider gateway abstraction — provider swapping happens by editing `infra/litellm/config.yaml`, not by implementing a new plugin protocol (see "LLM Gateway" under [Key Architectural Constraints](#key-architectural-constraints) below). The single source of truth for metadata and lineage is a PostgreSQL registry; raw bytes live in S3-compatible object storage; and dense vectors live in Qdrant. For initial setup and running the stack, see [README.md](../README.md).
 
 ## Data Lake Zones
 
@@ -261,7 +261,7 @@ See [pipeline.md](pipeline.md) for the artifact types produced at each stage.
 
 These constraints are hard requirements, not guidelines:
 
-- **LLM Gateway**: All model calls go through LiteLLM only — no direct provider SDK calls in business logic.
+- **LLM Gateway**: All model calls go through LiteLLM only — no direct provider SDK calls in business logic. LiteLLM *is* the gateway abstraction (100+ providers behind one interface) — there is no separate `LLMGatewayPlugin` protocol alongside `ParserPlugin`/`CrawlerPlugin`/etc.; wrapping an abstraction in a second plugin layer would be redundant. Provider swapping is a config change in `infra/litellm/config.yaml`, not an entry-point registration.
 - **Task-based aliases**: Model identifiers in code are always task-based aliases (`cheap_model`, `strong_model`, `eval_model`, `embedding_model`) — never hardcoded provider model IDs. The mapping lives exclusively in `infra/litellm/config.yaml`.
 - **Storage**: S3-compatible (MinIO for dev, AWS S3 for production) — no local filesystem as a production store.
 - **Orchestration**: Dagster from day 1 — no ad-hoc script pipelines.

@@ -75,12 +75,14 @@ class TaxonomyManifest(BaseModel):
 
 @dataclass
 class ValidationResult:
-    """Result from HealthcareValidator.validate_document().
+    """Result from a domain pack's ``<Pascal>Validator.validate_document()``.
 
-    Also defined as a standalone dataclass in domains/healthcare/validators/validate.py
-    (no knowledge_lake imports allowed in that module per Pitfall 7 — self-contained
-    stdlib-only validator). This copy is exposed from the framework for type-checking
-    callers that import from knowledge_lake.domains.models.
+    Every domain pack ships its own validator (e.g. HealthcareValidator,
+    AviationValidator) with a standalone dataclass of this shape defined in
+    its own domains/<domain>/validators/validate.py (no knowledge_lake
+    imports allowed in that module per Pitfall 7 — self-contained stdlib-only
+    validator). This copy is exposed from the framework, domain-neutral, for
+    type-checking callers that import from knowledge_lake.domains.models.
     """
 
     passed: bool

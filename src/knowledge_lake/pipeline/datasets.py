@@ -172,9 +172,10 @@ def _call_llm_for_qa_generation(
 ) -> tuple[QAPairResult, object]:
     """Make a single LiteLLM completion call for QA pair generation (DATA-01).
 
-    Routes through the "eval_model" task alias — never a hardcoded provider ID
-    (CLAUDE.md constraint). Same retry policy as enrich.py: stop_after_attempt(3),
-    wait_exponential, retry on (RuntimeError, ValidationError).
+    Routes through settings.dataset.qa_model_alias (default "eval_model") —
+    never a hardcoded provider ID (CLAUDE.md constraint; KL-17c). Same retry
+    policy as enrich.py: stop_after_attempt(3), wait_exponential, retry on
+    (RuntimeError, ValidationError).
 
     ``attempt_costs`` is a caller-owned accumulator: every billable response has
     its cost appended immediately, even on attempts where JSON validation fails
@@ -185,8 +186,10 @@ def _call_llm_for_qa_generation(
     try:
         response = litellm.completion(
             # "openai/" declares the wire protocol the LiteLLM proxy speaks
-            # (OpenAI-compatible), NOT the actual model provider.
-            model="openai/eval_model",
+            # (OpenAI-compatible), NOT the actual model provider. The alias
+            # after it IS configurable (settings.dataset.qa_model_alias,
+            # default "eval_model") — never hardcode past this point (KL-17c).
+            model=f"openai/{settings.dataset.qa_model_alias}",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -217,14 +220,15 @@ def _call_llm_for_instruction_generation(
 ) -> tuple[InstructionPairResult, object]:
     """Make a single LiteLLM completion call for instruction pair generation (DATA-02).
 
-    Routes through the "strong_model" task alias — never a hardcoded provider ID.
-    Same retry/cost-accumulation discipline as _call_llm_for_qa_generation.
+    Routes through settings.dataset.instruction_model_alias (default
+    "strong_model") — never a hardcoded provider ID (KL-17c). Same
+    retry/cost-accumulation discipline as _call_llm_for_qa_generation.
     """
     import litellm  # noqa: PLC0415
 
     try:
         response = litellm.completion(
-            model="openai/strong_model",
+            model=f"openai/{settings.dataset.instruction_model_alias}",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

@@ -163,9 +163,10 @@ def maybe_llm_spot_check(
       1. settings.parse.llm_spot_check is True
       2. score falls inside settings.parse.quality_gray_zone
 
-    Makes a single LiteLLM call via settings.litellm_url using the cheap_model
-    task alias. Parses the JSON response for {score: float}. Returns the LLM
-    score if successful, otherwise returns the original heuristic score unchanged.
+    Makes a single LiteLLM call via settings.litellm_url using the
+    settings.parse.spot_check_model_alias task alias (default "cheap_model").
+    Parses the JSON response for {score: float}. Returns the LLM score if
+    successful, otherwise returns the original heuristic score unchanged.
 
     Args:
         parsed_doc: The parsed document (used to build the LLM prompt).
@@ -202,8 +203,10 @@ def maybe_llm_spot_check(
         response = litellm.completion(
             # "openai/" = wire protocol the LiteLLM proxy speaks, not the actual
             # model provider — see pipeline/enrich.py::_call_llm_for_enrichment
-            # for the full rationale (Phase 4 checkpoint finding).
-            model="openai/cheap_model",
+            # for the full rationale (Phase 4 checkpoint finding). The alias
+            # itself IS configurable (settings.parse.spot_check_model_alias,
+            # default "cheap_model") — never hardcode past this point (KL-17c).
+            model=f"openai/{settings.parse.spot_check_model_alias}",
             messages=[{"role": "user", "content": prompt}],
             api_base=settings.litellm_url,
             api_key=settings.litellm_api_key,
