@@ -826,6 +826,16 @@ def cmd_reindex(
             "on any preflight/parity abort (rollback)."
         ),
     ),
+    refresh_payload: bool = typer.Option(
+        False, "--refresh-payload",
+        help=(
+            "Re-derive each point's payload from the registry instead of copying it "
+            "verbatim (KL-06 repair path). Picks up a curated/enriched quality_score "
+            "that was not yet available when the point was originally indexed, "
+            "without a full re-ingest. Vectors are reused unchanged. Ignored when "
+            "--hybrid is also set. Default off — preserves today's copy behavior."
+        ),
+    ),
 ) -> None:
     """Reindex a Qdrant alias with zero search downtime (INDEX-02).
 
@@ -837,11 +847,15 @@ def cmd_reindex(
     existing points with dense+sparse named vectors.  The D-07 server preflight
     and D-06 parity gate run before any data is touched; on failure the alias
     continues to point at the old collection (safe rollback).
+
+    With --refresh-payload: re-derives payload fields (quality_score precedence,
+    domain, document_type, keywords, source metadata) from the registry per
+    point instead of copying verbatim (KL-06). Opt-in; default off.
     """
     from knowledge_lake.pipeline.index import reindex_collection
 
     try:
-        result = reindex_collection(collection, hybrid=hybrid)
+        result = reindex_collection(collection, hybrid=hybrid, refresh_payload=refresh_payload)
         typer.echo(f"Reindexed: {result['collection']}")
         typer.echo(f"  new_physical: {result['new_physical']}")
         typer.echo(f"  old_physical: {result.get('old_physical')}")
@@ -1178,16 +1192,30 @@ def cmd_index(
     collection: str = typer.Option(
         "klake_chunks", "--collection", "-c", help="Qdrant collection alias to reindex."
     ),
+    refresh_payload: bool = typer.Option(
+        False, "--refresh-payload",
+        help=(
+            "Re-derive each point's payload from the registry instead of copying it "
+            "verbatim (KL-06 repair path). Picks up a curated/enriched quality_score "
+            "that was not yet available when the point was originally indexed, "
+            "without a full re-ingest. Vectors are reused unchanged. "
+            "Default off — preserves today's copy behavior."
+        ),
+    ),
 ) -> None:
     """Reindex a Qdrant collection alias with zero-downtime alias swap.
 
     Wraps the 'reindex' command — 'index' is the canonical name per IFACE-01.
     'reindex' remains as a power-user alias.
+
+    With --refresh-payload: re-derives payload fields (quality_score
+    precedence, domain, document_type, keywords, source metadata) from the
+    registry per point instead of copying verbatim (KL-06). Opt-in; default off.
     """
     from knowledge_lake.pipeline.index import reindex_collection
 
     try:
-        result = reindex_collection(collection)
+        result = reindex_collection(collection, refresh_payload=refresh_payload)
         typer.echo(f"Reindexed: {result['collection']}")
         typer.echo(f"  new_physical: {result['new_physical']}")
         typer.echo(f"  old_physical: {result.get('old_physical')}")

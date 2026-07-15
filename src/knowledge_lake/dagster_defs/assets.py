@@ -7,21 +7,32 @@ re-implement logic (D-02). The Dagster layer adds:
   - Resource injection for connection config
 
 Pipeline stages wrapped as assets:
-  ingest_raw_document   — ingest_file/ingest_url → raw_document artifact
-  parsed_document       — parse()                → parsed_document artifact
-  clean_document        — clean()                → cleaned_document artifact
-  chunk_document        — chunk()                → chunk artifact IDs
-  enrich_document       — enrich_document()       → enriched_document artifact
-  embed_chunks          — embed()                → vectors + dim
-  index_chunks          — index()                → indexed chunk IDs in Qdrant
+  ingest_raw_document    — ingest_file/ingest_url    → raw_document artifact
+  parsed_document        — parse()                   → parsed_document artifact
+  clean_document         — clean()                   → cleaned_document artifact
+  enrich_document        — enrich_document()          → enriched_document artifact
+  curate_document_asset  — curate_document()          → curated_document artifact
+  chunk_document         — chunk()                   → chunk artifact IDs
+  embed_chunks           — embed()                   → vectors + dim
+  index_chunks           — index()                   → indexed chunk IDs in Qdrant
 
 Asset ordering (deps chain):
-  ingest_raw_document → parsed_document → clean_document → {chunk_document, enrich_document} → embed_chunks → index_chunks
+  ingest_raw_document → parsed_document → clean_document → enrich_document →
+  curate_document_asset → chunk_document → embed_chunks → index_chunks
 
-  clean_document fans out into two parallel branches — chunk_document and
-  enrich_document both depend on clean_document's output; neither blocks the
-  other (D-01). enrich_document calls pipeline.enrich.enrich_document — no
-  logic duplicated.
+  KL-04/05/06 (2026-07-15): D-01 originally made enrich_document and
+  curate_document_asset parallel branches off clean_document that "did not
+  block" chunk_document. That was false parallelism — curate reads the
+  enriched sibling for the 40% enrich term of its composite score and
+  silently substitutes a hardcoded 0.5 when enrichment hasn't run yet, and
+  index reads the enriched sibling at runtime for the payload. Whichever
+  branch Dagster happened to schedule first changed the composite score by
+  21% on the same document. The chain is now explicit and enforced via
+  non-data ``deps=[...]`` edges (curate depends on enrich; chunk depends on
+  curate) while keeping the existing DATA inputs unchanged — both
+  chunk_document and curate_document_asset still take clean_document as
+  their data input, preserving the in-memory ParsedDoc forwarding. Ordering
+  is added purely via deps=, not by re-plumbing data flow.
 
 NO IO managers for object bytes — each asset stores its output in the registry/S3/Qdrant
 and passes only the minimal metadata (artifact IDs, vectors) to the next stage via the
@@ -327,10 +338,13 @@ def clean_document(
 @asset(
     description=(
         "Split ParsedDoc into section-aware chunk artifacts. "
-        "Calls pipeline.chunk.chunk — no logic duplicated."
+        "Calls pipeline.chunk.chunk — no logic duplicated. "
+        "Ordered after curate_document_asset via a non-data deps= edge (KL-06) — "
+        "curate's composite score must be settled before chunks are produced."
     ),
     group_name="pipeline",
     retry_policy=_PIPELINE_RETRY,
+    deps=["curate_document_asset"],
 )
 def chunk_document(
     clean_document: dict[str, Any],
@@ -342,6 +356,13 @@ def chunk_document(
       chunks (list of chunk dicts), parsed_artifact_id, source_id, collection.
 
     Uses the in-memory ParsedDoc forwarded through clean_document to avoid re-parsing.
+
+    KL-06 (2026-07-15): ordered AFTER curate_document_asset via a non-data
+    ``deps=["curate_document_asset"]`` edge (a string name is used rather than
+    a direct function reference because curate_document_asset is defined
+    later in this module — Dagster resolves deps by AssetKey/name, not import
+    order). The DATA input stays clean_document, unchanged — only ordering
+    was added, not a new data dependency (locked design, see PLAN.md).
     """
     from knowledge_lake.config.settings import Settings
     from knowledge_lake.pipeline.chunk import chunk
@@ -374,8 +395,10 @@ def chunk_document(
 @asset(
     description=(
         "Enrich a cleaned document with LLM-judged metadata (summary, document_type, "
-        "organization, jurisdiction, keywords, entities, quality_score) — parallel "
-        "branch off clean_document, does not block chunk_document (D-01). Calls "
+        "organization, jurisdiction, keywords, entities, quality_score). Data input "
+        "is clean_document; curate_document_asset and (transitively) chunk_document "
+        "are now ordered AFTER this asset via non-data deps= edges (KL-06) so the "
+        "enrich quality_score is always settled before curate reads it. Calls "
         "pipeline.enrich.enrich_document — no logic duplicated."
     ),
     group_name="pipeline",
@@ -392,8 +415,15 @@ def enrich_document(
     Receives the clean_document output dict and returns the enrich_document()
     result dict (artifact_id, cached, status, quality_score, cost_usd).
 
-    Parallel branch off clean_document — same dependency as chunk_document,
-    neither blocks the other (D-01).
+    KL-06 (2026-07-15): data input is clean_document (unchanged), but this is
+    NO LONGER a parallel branch that "does not block" the rest of the chain —
+    curate_document_asset declares a non-data ``deps=["enrich_document"]``
+    edge, so Dagster now schedules enrich strictly before curate (and,
+    transitively, before chunk_document/embed_chunks/index_chunks). This
+    closes the scheduling race documented in KL-06: curate's composite score
+    read the enriched sibling's quality_score at runtime and silently
+    defaulted to 0.5 when enrichment hadn't run yet, producing a 21% swing in
+    the same document's composite score purely from scheduling order.
     """
     from knowledge_lake.config.settings import Settings, StorageSettings
     from knowledge_lake.pipeline.enrich import enrich_document as enrich_fn
@@ -457,8 +487,11 @@ def tree_index_document(
     Receives the clean_document output dict and returns the tree_index()
     result dict (artifact_id, cached, status).
 
-    Parallel fan-out branch off clean_document — same dependency as
-    chunk_document and enrich_document; neither blocks the other (TREE-05).
+    Parallel fan-out branch off clean_document (TREE-05) — this asset itself
+    has no deps= edge to enrich_document/curate_document_asset/chunk_document
+    and is not blocked by (or blocking) any of them. KL-06 (2026-07-15) only
+    reordered the enrich → curate → chunk chain; tree_index_document was not
+    part of that scheduling race and is unaffected.
     """
     from knowledge_lake.config.settings import Settings, StorageSettings
     from knowledge_lake.pipeline.tree_index import tree_index
@@ -691,10 +724,13 @@ def generate_dataset(
     description=(
         "Run DataTrove-style quality filters on a cleaned_document artifact and compute "
         "a composite quality score spanning parse + enrich + curation stages (CURATE-01..03). "
+        "Ordered after enrich_document via a non-data deps= edge (KL-06) so the enrich "
+        "term of the composite is always the real score, never the 0.5 default. "
         "Calls pipeline.curate.curate_document — no logic duplicated."
     ),
     group_name="pipeline",
     retry_policy=_PIPELINE_RETRY,
+    deps=["enrich_document"],
 )
 def curate_document_asset(
     clean_document: dict[str, Any],
@@ -707,8 +743,15 @@ def curate_document_asset(
     composite scoring, and returns the curate_document() result dict
     (artifact_id, cached, status, quality_score).
 
-    Parallel branch off clean_document — runs alongside enrich_document and
-    chunk_document (D-01), none blocks the others.
+    KL-06 (2026-07-15): data input is clean_document (unchanged — the DATA
+    dependency was never re-plumbed), but this is NO LONGER a parallel
+    branch off clean_document alongside enrich_document/chunk_document
+    (D-01's original claim). A non-data ``deps=["enrich_document"]`` edge
+    enforces that enrich runs first, so ``curate_fn``'s internal read of the
+    enriched sibling's quality_score (pipeline/curate.py) always sees the
+    real LLM-judged score rather than silently defaulting to 0.5. This asset
+    is, in turn, a hard dependency of chunk_document (see its deps=), which
+    makes index_chunks depend on curate transitively.
     """
     from knowledge_lake.config.settings import Settings, StorageSettings
     from knowledge_lake.pipeline.curate import curate_document as curate_fn

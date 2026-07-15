@@ -94,6 +94,11 @@ class DummyStore:
     ) -> tuple[int, int]:
         return 0, 0
 
+    def refresh_all_points_payload(
+        self, source: str, dest: str, payload_resolve_fn, batch_size: int = 256
+    ) -> int:
+        return 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: Protocols are runtime_checkable

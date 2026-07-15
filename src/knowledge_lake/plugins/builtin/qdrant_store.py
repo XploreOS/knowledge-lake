@@ -303,6 +303,54 @@ class QdrantVectorStore:
         log.info("qdrant_store.copy_all_points", source=source, dest=dest, count=total)
         return total
 
+    def refresh_all_points_payload(
+        self,
+        source: str,
+        dest: str,
+        payload_resolve_fn: Callable[[dict], dict],
+        batch_size: int = 256,
+    ) -> int:
+        """Scroll all points from ``source``, re-derive each payload via
+        ``payload_resolve_fn``, and upsert into ``dest`` with the vector
+        reused unchanged (KL-06 reindex repair path).
+
+        Mirrors copy_all_points' scroll/upsert loop but replaces the payload
+        instead of copying it verbatim — this is what lets a chunk indexed
+        before enrichment/curation ran pick up the real quality_score on
+        reindex, rather than requiring a full re-ingest.
+        """
+        total = 0
+        next_offset: Any = None
+        while True:
+            records, next_offset = self._client.scroll(
+                collection_name=source,
+                limit=batch_size,
+                offset=next_offset,
+                with_vectors=True,
+                with_payload=True,
+            )
+            if not records:
+                break
+
+            batch = [
+                self._PointStruct(
+                    id=r.id,
+                    vector=r.vector,
+                    payload=payload_resolve_fn(r.payload or {}),
+                )
+                for r in records
+            ]
+            self._client.upsert(collection_name=dest, points=batch)
+            total += len(batch)
+
+            # Explicit None sentinel — see copy_all_points for why a falsy
+            # check would be wrong once integer point IDs are supported.
+            if next_offset is None:
+                break
+
+        log.info("qdrant_store.refresh_all_points_payload", source=source, dest=dest, count=total)
+        return total
+
     def reindex(
         self,
         alias: str,

@@ -19,6 +19,7 @@ Functions:
     get_llm_spend                   — read accumulated LLM spend for a scope (ENRICH-05)
     record_llm_spend                — accumulate LLM spend for a scope (ENRICH-05)
     get_enriched_artifact_for_parsed — resolve parsed -> cleaned -> enriched (D-01)
+    get_curated_artifact_for_parsed — resolve parsed -> cleaned -> curated (KL-04/05/06)
     get_domain_for_source           — read domain from Source.config JSON
     get_source_crawl_config         — read crawl_config sub-dict from Source.config (CRAWL-01, D-01, D-05)
     list_sources_for_crawl_all      — list all sources, optionally filtered by domain (CRAWL-02)
@@ -856,6 +857,40 @@ def get_enriched_artifact_for_parsed(
         None,
     )
     return enriched
+
+
+def get_curated_artifact_for_parsed(
+    session: Session,
+    parsed_artifact_id: str,
+) -> Artifact | None:
+    """Resolve the curated_document artifact two hops below a parsed_document.
+
+    Walks parsed_document -> cleaned_document -> curated_document, mirroring
+    get_enriched_artifact_for_parsed (KL-04/05/06): curate parents off
+    cleaned_document per D-01, same as enrich. Returns None if no
+    cleaned_document child exists yet, or if the cleaned_document has no
+    curated_document child yet.
+    """
+    cleaned = next(
+        (
+            child
+            for child in list_children(session, parsed_artifact_id)
+            if child.artifact_type == "cleaned_document"
+        ),
+        None,
+    )
+    if cleaned is None:
+        return None
+
+    curated = next(
+        (
+            child
+            for child in list_children(session, cleaned.id)
+            if child.artifact_type == "curated_document"
+        ),
+        None,
+    )
+    return curated
 
 
 def get_domain_for_source(session: Session, source_id: str) -> str | None:

@@ -12,9 +12,22 @@ Plus the enrichment-derived filterable fields (D-07, INDEX-01):
   domain         — Source.config['domain'] (never a Source.domain/Artifact column, RESEARCH.md Pitfall 4)
   document_type  — from the sibling enriched_document artifact's metadata_, or None
   keywords       — from the sibling enriched_document artifact's metadata_, or []
-  quality_score  — from the sibling enriched_document artifact's real column, or None
-These four fields degrade gracefully to null/empty when no enrichment has run
-yet for the document — enrichment is never a hard blocker to indexing (D-01).
+  quality_score  — precedence: sibling curated_document's real column, falling back
+                   to the sibling enriched_document's real column, falling back to
+                   None (KL-04/05/06, 2026-07-15). Curate's DataTrove-style composite
+                   (parse*0.30 + enrich*0.40 + filters*0.30) is the deterministic,
+                   free quality gate — it now reaches search. The enriched
+                   quality_score (LLM-judged, Bedrock-gated, costs money) remains the
+                   fallback when curation hasn't run for a document. document_type/
+                   keywords/title still come from enrichment metadata only — curation
+                   does not carry those fields.
+These four fields degrade gracefully to null/empty when neither enrichment nor
+curation has run yet for the document — neither is a hard blocker to indexing (D-01).
+Dagster-orchestrated runs now schedule enrich_document -> curate_document_asset ->
+chunk_document via non-data deps= edges (KL-06, dagster_defs/assets.py) so the
+scheduling race that produced a 21% swing in the same document's composite score
+is closed for that execution path; this quality_score precedence resolution here
+is what makes the *result* deterministic regardless of orchestration order.
 
 Plus the source-metadata fields (PAYLOAD-01, D-01..D-04):
   source_id      — Artifact.source_id (foreign key to the source registry row)
@@ -48,6 +61,74 @@ from knowledge_lake.registry.db import get_session
 log = structlog.get_logger(__name__)
 
 
+def _resolve_document_payload_fields(session, parsed_artifact_id: str) -> dict:
+    """Resolve the per-document payload fields shared by every chunk of a document.
+
+    Joins domain (Source.config['domain']), the Source row's 7 metadata fields
+    (PAYLOAD-01), and the curated/enriched siblings once per document — not once
+    per chunk (INDEX-01, D-01, PAYLOAD-01) — so index() and the reindex payload
+    refresh (KL-06) share one join implementation instead of two.
+
+    quality_score precedence (KL-04/05/06): curated_document's real column,
+    falling back to enriched_document's real column, falling back to None.
+    document_type/keywords/title still come only from enrichment metadata —
+    curation carries no document_type/keywords/title.
+
+    Must be called with an open Session; all attribute access happens inside
+    this function to avoid DetachedInstanceError in callers.
+    """
+    parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
+    source_id_val = parsed_artifact.source_id if parsed_artifact is not None else None
+    domain = (
+        registry_repo.get_domain_for_source(session, source_id_val)
+        if source_id_val is not None
+        else None
+    )
+
+    # Fetch the Source row for the 7 new source-metadata payload fields (PAYLOAD-01, D-02).
+    source = (
+        registry_repo.get_source(session, source_id_val)
+        if source_id_val is not None
+        else None
+    )
+    _sc = (source.config or {}) if source is not None else {}
+    source_name = source.name if source is not None else None
+    source_url = source.url if source is not None else None
+    fmt = source.source_type if source is not None else None  # D-04: source_type IS the format label
+    tags = _sc.get("tags", [])
+    organization = _sc.get("organization")
+
+    enriched = registry_repo.get_enriched_artifact_for_parsed(session, parsed_artifact_id)
+    if enriched is not None:
+        enrichment_metadata = enriched.metadata_ or {}
+        enriched_quality_score = enriched.quality_score
+    else:
+        enrichment_metadata = {}
+        enriched_quality_score = None
+
+    curated = registry_repo.get_curated_artifact_for_parsed(session, parsed_artifact_id)
+    curated_quality_score = curated.quality_score if curated is not None else None
+
+    # KL-04/05/06 precedence: curated composite wins; enriched is the fallback.
+    quality_score = (
+        curated_quality_score if curated_quality_score is not None else enriched_quality_score
+    )
+
+    return {
+        "domain": domain,
+        "document_type": enrichment_metadata.get("document_type"),
+        "keywords": enrichment_metadata.get("keywords", []),
+        "quality_score": quality_score,
+        "source_id": source_id_val,
+        "source_name": source_name,
+        "source_url": source_url,
+        "format": fmt,
+        "tags": tags,
+        "title": enrichment_metadata.get("title"),
+        "organization": organization,
+    }
+
+
 def index(
     chunks: list[dict],
     vectors: list[list[float]],
@@ -61,7 +142,9 @@ def index(
 
     Bootstraps the alias-backed collection idempotently before upserting, and
     joins in domain/document_type/keywords/quality_score from the sibling
-    enrichment (when one exists) before building each chunk's payload.
+    curated/enriched artifacts (when they exist) before building each chunk's
+    payload — quality_score prefers the curated composite over the enriched
+    LLM score (KL-04/05/06); see module docstring for the full precedence.
 
     Args:
         chunks:              List of chunk dicts from the chunk stage.
@@ -101,43 +184,23 @@ def index(
             # to create "v2" on the next call instead of reusing "v1".
             session.commit()
 
-    # Resolve domain (Source.config['domain']), the sibling enrichment
-    # (parsed_document -> cleaned_document -> enriched_document), and the
-    # Source row (name/url/source_type/config) once per index() call —
-    # not once per chunk (INDEX-01, D-01, PAYLOAD-01).
+    # Resolve domain, source metadata, and curated/enriched quality_score
+    # precedence once per index() call — not once per chunk (INDEX-01, D-01,
+    # PAYLOAD-01) — via the shared helper (KL-04/05/06).
     with get_session() as session:
-        parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
-        source_id_val = parsed_artifact.source_id if parsed_artifact is not None else None
-        domain = (
-            registry_repo.get_domain_for_source(session, source_id_val)
-            if source_id_val is not None
-            else None
-        )
+        fields = _resolve_document_payload_fields(session, parsed_artifact_id)
 
-        # Fetch the Source row for the 7 new source-metadata payload fields (PAYLOAD-01, D-02).
-        # Extract scalar values inside the session block to avoid DetachedInstanceError.
-        source = (
-            registry_repo.get_source(session, source_id_val)
-            if source_id_val is not None
-            else None
-        )
-        _sc = (source.config or {}) if source is not None else {}
-        source_name = source.name if source is not None else None
-        source_url = source.url if source is not None else None
-        fmt = source.source_type if source is not None else None  # D-04: source_type IS the format label
-        tags = _sc.get("tags", [])
-        organization = _sc.get("organization")
-
-        enriched = registry_repo.get_enriched_artifact_for_parsed(session, parsed_artifact_id)
-        if enriched is not None:
-            enrichment_metadata = enriched.metadata_ or {}
-            quality_score = enriched.quality_score
-        else:
-            enrichment_metadata = {}
-            quality_score = None
-
-    # title comes from enrichment_metadata (resolved inside session, safe to access here).
-    title = enrichment_metadata.get("title")
+    domain = fields["domain"]
+    source_id_val = fields["source_id"]
+    source_name = fields["source_name"]
+    source_url = fields["source_url"]
+    fmt = fields["format"]
+    tags = fields["tags"]
+    organization = fields["organization"]
+    document_type = fields["document_type"]
+    keywords = fields["keywords"]
+    quality_score = fields["quality_score"]
+    title = fields["title"]
 
     # Build VectorPoints with citation + enrichment payload.
     # Qdrant requires point IDs to be unsigned integers or bare UUIDs —
@@ -156,8 +219,8 @@ def index(
             "qdrant_id": qdrant_point_id,    # bare UUID for Qdrant cross-ref
             "text": chunk.get("text", ""),
             "domain": domain,
-            "document_type": enrichment_metadata.get("document_type"),
-            "keywords": enrichment_metadata.get("keywords", []),
+            "document_type": document_type,
+            "keywords": keywords,
             "quality_score": quality_score,
             # PAYLOAD-01: 7 new source-metadata fields (D-01..D-04, D-13).
             # Populated only on chunks indexed after Phase 7; degrade to None/[].
@@ -186,10 +249,48 @@ def index(
     return indexed_ids
 
 
+def _build_payload_refresh_fn(settings: Settings | None = None):
+    """Build a ``payload_resolve_fn`` for refresh_all_points_payload (KL-06 repair path).
+
+    Re-derives domain/document_type/keywords/quality_score/source-metadata
+    fields per point from the registry via the point's existing
+    payload['document'] (the parsed_artifact_id), leaving citation fields
+    (document, section_path, page, chunk_id, qdrant_id, text) untouched.
+
+    Caches per-document field resolution across points — a reindex commonly
+    touches many chunks that share the same document, so this avoids an
+    N-queries-per-chunk join (mirrors index()'s once-per-document join,
+    INDEX-01).
+
+    Note: ``settings`` is accepted for interface symmetry with the other
+    reindex upsert_fn builders but is currently unused — get_session() reads
+    the process-global registry connection, same as index()/reindex_collection.
+    """
+    cache: dict[str, dict] = {}
+
+    def _resolve(old_payload: dict) -> dict:
+        parsed_artifact_id = old_payload.get("document")
+        if not parsed_artifact_id:
+            # No document reference on this point — cannot re-resolve;
+            # preserve it unchanged rather than dropping fields.
+            return old_payload
+        if parsed_artifact_id not in cache:
+            with get_session() as session:
+                cache[parsed_artifact_id] = _resolve_document_payload_fields(
+                    session, parsed_artifact_id
+                )
+        new_payload = dict(old_payload)
+        new_payload.update(cache[parsed_artifact_id])
+        return new_payload
+
+    return _resolve
+
+
 def reindex_collection(
     collection: str = "klake_chunks",
     *,
     hybrid: bool = False,
+    refresh_payload: bool = False,
     settings: Settings | None = None,
 ) -> dict:
     """Zero-downtime reindex of an alias-backed collection (INDEX-02, D-06).
@@ -198,9 +299,18 @@ def reindex_collection(
     repoints the alias, and registers the new alias->physical mapping in the
     registry. The prior physical collection is retained — never auto-dropped.
 
-    When ``hybrid=False`` (default):
+    When ``hybrid=False`` and ``refresh_payload=False`` (default):
         Copies every existing point via copy_all_points() — the existing
         behavior, unchanged for back-compatibility.
+
+    When ``refresh_payload=True`` (opt-in repair path, KL-06, default OFF):
+        Re-derives each point's payload from the registry (domain,
+        document_type, keywords, quality_score with the curated/enriched
+        precedence, and the 7 source-metadata fields) instead of copying it
+        verbatim, via vstore.refresh_all_points_payload(). Vectors are reused
+        unchanged — this is a payload repair, not a re-embedding. This is
+        what lets a chunk indexed before enrichment/curation ran pick up the
+        real quality_score without a full re-ingest.
 
     When ``hybrid=True`` (operator-triggered live re-embedding migration):
         1. Asserts the running Qdrant server is >= 1.10 (D-07 preflight) —
@@ -212,12 +322,19 @@ def reindex_collection(
            no duplication here (Plan 10-06 owns the safety contract).
         No new get_session block is needed for chunk text — text is read
         directly from the Qdrant scroll payload['text'] (research simplification).
+        ``refresh_payload`` is ignored when ``hybrid=True`` — the hybrid path
+        does not currently also refresh the payload; reindex twice (hybrid
+        first, refresh_payload second) if both are needed.
 
     Args:
-        collection: Qdrant alias name to reindex (default: 'klake_chunks').
-        hybrid:     When True, perform the re-embedding migration with the D-07
-                    server preflight and reembed_all_points upsert_fn.
-        settings:   Settings override.
+        collection:      Qdrant alias name to reindex (default: 'klake_chunks').
+        hybrid:          When True, perform the re-embedding migration with the
+                         D-07 server preflight and reembed_all_points upsert_fn.
+        refresh_payload: When True (and hybrid=False), re-derive each point's
+                         payload from the registry instead of copying it
+                         verbatim (KL-06). Default False preserves today's
+                         copy behavior.
+        settings:        Settings override.
 
     Returns:
         {"collection": ..., "new_physical": ..., "old_physical": ...}
@@ -239,13 +356,26 @@ def reindex_collection(
             return vstore.reembed_all_points(collection, new_physical, embed_sparse_doc)
 
         upsert_fn = _re_embed_fn
+    elif refresh_payload:
+        resolve_fn = _build_payload_refresh_fn(s)
+
+        def _refresh_fn(new_physical: str) -> int:
+            return vstore.refresh_all_points_payload(collection, new_physical, resolve_fn)
+
+        upsert_fn = _refresh_fn
     else:
         def _copy_fn(new_physical: str) -> None:
             vstore.copy_all_points(collection, new_physical)
 
         upsert_fn = _copy_fn
 
-    log.info("index.reindex.start", collection=collection, dim=dim, hybrid=hybrid)
+    log.info(
+        "index.reindex.start",
+        collection=collection,
+        dim=dim,
+        hybrid=hybrid,
+        refresh_payload=refresh_payload,
+    )
     result = vstore.reindex(collection, dim=dim, upsert_fn=upsert_fn)
 
     with get_session() as session:

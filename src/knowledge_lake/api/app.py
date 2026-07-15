@@ -371,6 +371,16 @@ def search_endpoint(
 )
 def reindex_endpoint(
     collection: str = Query(default="klake_chunks", description="Qdrant alias to reindex."),
+    refresh_payload: bool = Query(
+        default=False,
+        description=(
+            "Re-derive each point's payload from the registry instead of copying it "
+            "verbatim (KL-06 repair path). Picks up a curated/enriched quality_score "
+            "that was not yet available when the point was originally indexed, "
+            "without a full re-ingest. Vectors are reused unchanged. "
+            "Default off — preserves today's copy behavior."
+        ),
+    ),
 ) -> ReindexResponse:
     """Reindex a Qdrant alias with zero search downtime (INDEX-02).
 
@@ -378,6 +388,10 @@ def reindex_endpoint(
     into it via ``copy_all_points()``, then atomically repoints the alias.
     Calls ``pipeline.index.reindex_collection()`` — the same function the CLI
     uses (D-02). The prior physical collection is retained, never auto-dropped.
+
+    With ``refresh_payload=true``: re-derives payload fields (quality_score
+    precedence, domain, document_type, keywords, source metadata) from the
+    registry per point instead of copying verbatim (KL-06). Opt-in; default off.
 
     Security (ASVS V5):
         - collection is validated against the same format guard as /search (WR-04).
@@ -387,10 +401,10 @@ def reindex_endpoint(
     if not _COLLECTION_NAME_RE.fullmatch(collection):
         raise HTTPException(status_code=422, detail="Invalid collection name format.")
 
-    logger.info("api.reindex", collection=collection)
+    logger.info("api.reindex", collection=collection, refresh_payload=refresh_payload)
 
     try:
-        result = reindex_collection(collection)
+        result = reindex_collection(collection, refresh_payload=refresh_payload)
     except ValueError as exc:
         logger.warning("api.reindex.error", error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc

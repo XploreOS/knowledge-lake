@@ -218,6 +218,7 @@ class VectorStorePlugin(Protocol):
                                                           collection behind an alias (D-06, INDEX-02)
       reindex(alias, dim, upsert_fn, distance)        — zero-downtime reindex via atomic alias swap
       copy_all_points(source, dest, batch_size)       — scroll+upsert all points between collections
+      refresh_all_points_payload(source, dest, fn)    — scroll+re-derive payload (no re-embed) (KL-06)
       get_collection_dim(alias)                       — read back a collection's configured vector size
       upsert(collection, points)                      — batch-upsert VectorPoint records
       search(collection, query, top_k, query_filter)  — ANN search returning Hits with citation payload
@@ -403,6 +404,36 @@ class VectorStorePlugin(Protocol):
             Tuple of (total_upserted, total_skipped). Points whose dense vector
             is absent are skipped with a warning (WR-04); the caller (reindex)
             uses total_skipped to adjust the D-06 count-parity gate.
+        """
+        ...
+
+    def refresh_all_points_payload(
+        self,
+        source: str,
+        dest: str,
+        payload_resolve_fn: Callable[[dict], dict],
+        batch_size: int = 256,
+    ) -> int:
+        """Scroll all points from ``source`` and re-derive their payload before
+        upserting into ``dest``, reusing the existing vector unchanged (KL-06).
+
+        This is the reindex repair-path helper: unlike copy_all_points (verbatim
+        copy) it lets the caller re-resolve each point's payload from the
+        registry — e.g. picking up a curated/enriched quality_score that was
+        never present at the time the point was originally indexed — without
+        re-embedding.
+
+        Args:
+            source:              Physical collection name to scroll from.
+            dest:                Physical collection name to upsert into.
+            payload_resolve_fn:  Callable(old_payload: dict) -> new_payload: dict.
+                                  Caller-injected (mirrors reembed_all_points'
+                                  sparse_doc_fn seam, D-01) so the store stays
+                                  generic and imports no registry code.
+            batch_size:          Number of points to scroll/upsert per batch.
+
+        Returns:
+            Total count of points refreshed (0 for an empty source collection).
         """
         ...
 

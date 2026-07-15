@@ -2791,7 +2791,7 @@
     },
     "/reindex": {
       "post": {
-        "description": "Reindex a Qdrant alias with zero search downtime (INDEX-02).\n\nCreates the next versioned physical collection, copies all existing points\ninto it via ``copy_all_points()``, then atomically repoints the alias.\nCalls ``pipeline.index.reindex_collection()`` \u2014 the same function the CLI\nuses (D-02). The prior physical collection is retained, never auto-dropped.\n\nSecurity (ASVS V5):\n    - collection is validated against the same format guard as /search (WR-04).",
+        "description": "Reindex a Qdrant alias with zero search downtime (INDEX-02).\n\nCreates the next versioned physical collection, copies all existing points\ninto it via ``copy_all_points()``, then atomically repoints the alias.\nCalls ``pipeline.index.reindex_collection()`` \u2014 the same function the CLI\nuses (D-02). The prior physical collection is retained, never auto-dropped.\n\nWith ``refresh_payload=true``: re-derives payload fields (quality_score\nprecedence, domain, document_type, keywords, source metadata) from the\nregistry per point instead of copying verbatim (KL-06). Opt-in; default off.\n\nSecurity (ASVS V5):\n    - collection is validated against the same format guard as /search (WR-04).",
         "operationId": "reindex_endpoint_reindex_post",
         "parameters": [
           {
@@ -2804,6 +2804,18 @@
               "description": "Qdrant alias to reindex.",
               "title": "Collection",
               "type": "string"
+            }
+          },
+          {
+            "description": "Re-derive each point's payload from the registry instead of copying it verbatim (KL-06 repair path). Picks up a curated/enriched quality_score that was not yet available when the point was originally indexed, without a full re-ingest. Vectors are reused unchanged. Default off \u2014 preserves today's copy behavior.",
+            "in": "query",
+            "name": "refresh_payload",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Re-derive each point's payload from the registry instead of copying it verbatim (KL-06 repair path). Picks up a curated/enriched quality_score that was not yet available when the point was originally indexed, without a full re-ingest. Vectors are reused unchanged. Default off \u2014 preserves today's copy behavior.",
+              "title": "Refresh Payload",
+              "type": "boolean"
             }
           }
         ],
