@@ -225,7 +225,7 @@ Requires `AWS_BEDROCK_API_KEY`.
 uv run klake enrich <cleaned_artifact_id> <source_id>
 ```
 
-Calls LiteLLM (`strong_model` alias → Bedrock) to extract summary, `document_type`, organization, jurisdiction, keywords, entities, and `quality_score`. Prints `status`, `artifact_id`, `quality_score`, `cached`.
+Calls LiteLLM (`cheap_model` alias → Bedrock by default; override with `KLAKE_ENRICH__MODEL_ALIAS=strong_model` for domain prompts that need more output capacity or higher accuracy) to extract summary, `document_type`, organization, jurisdiction, keywords, entities, and `quality_score`. Prints `status`, `artifact_id`, `quality_score`, `cached`.
 
 ### Curate a cleaned artifact
 
