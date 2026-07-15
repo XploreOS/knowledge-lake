@@ -246,7 +246,7 @@ def export_rag_corpus(
     domain: str | None = None,
     settings: Settings | None = None,
 ) -> dict:
-    """Export all chunk artifacts as a Parquet file to the gold zone (EXPORT-01).
+    """Export chunk artifacts as a Parquet file to the gold zone (EXPORT-01).
 
     Fails closed with TrainEvalContaminationError if any undocumented train/eval
     overlap exists (05-AI-SPEC Section 6/7 hard gate — checked FIRST).
@@ -257,6 +257,15 @@ def export_rag_corpus(
 
     Every export row is built strictly from _RAG_CORPUS_FIELDS — never a raw
     metadata_ dump (T-05-08, ASVS V5 information-disclosure mitigation).
+
+    ``domain`` both FILTERS rows and selects the gold-zone path/tag:
+    - ``domain="X"``: only chunks whose source resolves to domain == "X" are
+      included (strict equality; chunks with no domain classification are
+      excluded). Written to gold/X/rag_corpus/.
+    - ``domain=None``: no filtering — every chunk is included, matching the
+      pre-existing default. Written to gold/_unclassified/rag_corpus/ (this
+      path segment describes an all-domain export in this case — see KL-01
+      SUMMARY for the known wart, intentionally out of scope here).
 
     All bytes go through an in-memory io.BytesIO buffer → StorageBackend.put_object()
     — never a local filesystem write (PROJECT.md constraint).
@@ -277,10 +286,17 @@ def export_rag_corpus(
         chunks = registry_repo.list_artifacts_by_type(session, "chunk")
 
         rows: list[dict] = []
+        filtered_out = 0
         for chunk in chunks:
             # Resolve per-row domain for row data enrichment — same pattern as pipeline/index.py
             # Note: use row_domain (not domain) to avoid shadowing the function's domain kwarg
             row_domain = registry_repo.get_domain_for_source(session, chunk.source_id)
+
+            # KL-01: domain kwarg FILTERS rows when provided (strict equality;
+            # unclassified rows are excluded from a domain-scoped export).
+            if domain is not None and row_domain != domain:
+                filtered_out += 1
+                continue
 
             parsed_id = chunk.parent_artifact_id  # chunk -> parsed
             enriched = (
@@ -317,7 +333,13 @@ def export_rag_corpus(
             }
             rows.append(row)
 
-        log.info("export.rag_corpus.building", row_count=len(rows))
+        log.info(
+            "export.rag_corpus.building",
+            domain=domain,
+            total=len(chunks),
+            kept=len(rows),
+            filtered_out=filtered_out,
+        )
 
         if not rows:
             # Write an empty Parquet file with the schema so DuckDB can read it
@@ -378,6 +400,13 @@ def export_pretrain_corpus(
     Only documents whose composite_quality_score >= ExportSettings.min_quality_score_for_pretrain
     are included — quality gate applied at export time only (curation stays annotate-only).
 
+    ``domain`` both FILTERS rows and selects the gold-zone path/tag:
+    - ``domain="X"``: only curated documents whose source resolves to domain == "X"
+      are included (strict equality; documents with no domain classification are
+      excluded). Written to gold/X/pretrain/.
+    - ``domain=None``: no filtering — matches the pre-existing default. Written to
+      gold/_unclassified/pretrain/.
+
     Returns
     -------
     dict with keys: dataset_id, storage_uri, row_count
@@ -391,12 +420,29 @@ def export_pretrain_corpus(
 
     with get_session() as session:
         all_curated = registry_repo.list_artifacts_by_type(session, "curated_document")
-        qualifying = [
+        quality_qualifying = [
             a for a in all_curated
             if (a.quality_score or 0.0) >= min_q
         ]
 
-        log.info("export.pretrain.qualifying", total=len(all_curated), qualifying=len(qualifying))
+        # KL-01: domain kwarg FILTERS rows when provided (strict equality;
+        # unclassified documents are excluded from a domain-scoped export).
+        if domain is not None:
+            qualifying = [
+                a for a in quality_qualifying
+                if registry_repo.get_domain_for_source(session, a.source_id) == domain
+            ]
+        else:
+            qualifying = quality_qualifying
+
+        log.info(
+            "export.pretrain.qualifying",
+            domain=domain,
+            total=len(all_curated),
+            quality_qualifying=len(quality_qualifying),
+            qualifying=len(qualifying),
+            filtered_out=len(quality_qualifying) - len(qualifying),
+        )
 
         rows: list[dict] = []
         for curated in qualifying:
@@ -477,6 +523,14 @@ def export_finetune_dataset(
         Instruction-shaped (instruction/output): user content = instruction + optional
             "\n\n" + input; assistant content = output.
 
+    ``domain`` both FILTERS rows and selects the gold-zone path/tag:
+    - ``domain="X"``: only examples whose source artifact resolves to domain == "X"
+      are included (strict equality; examples with no domain classification are
+      excluded — counted separately from skipped_dangling_lineage). Written to
+      gold/X/finetune/.
+    - ``domain=None``: no filtering — matches the pre-existing default. Written to
+      gold/_unclassified/finetune/.
+
     Returns
     -------
     dict with keys: dataset_id, storage_uri, row_count, skipped_dangling_lineage
@@ -496,6 +550,7 @@ def export_finetune_dataset(
 
         surviving_rows: list[dict] = []
         skipped_dangling = 0
+        filtered_out = 0
 
         for ex in examples:
             # DATA-03 lineage-integrity safeguard: skip examples with dangling source
@@ -517,6 +572,14 @@ def export_finetune_dataset(
                     source_artifact_id=ex.source_artifact_id,
                 )
                 continue
+
+            # KL-01: domain kwarg FILTERS rows when provided (strict equality;
+            # unclassified examples are excluded from a domain-scoped export).
+            if domain is not None:
+                row_domain = registry_repo.get_domain_for_source(session, artifact.source_id)
+                if row_domain != domain:
+                    filtered_out += 1
+                    continue
 
             payload = ex.payload or {}
 
@@ -541,9 +604,11 @@ def export_finetune_dataset(
 
         log.info(
             "export.finetune.building",
+            domain=domain,
             total=len(examples),
             surviving=len(surviving_rows),
             skipped_dangling=skipped_dangling,
+            filtered_out=filtered_out,
         )
 
         # Write JSONL — one object per line
