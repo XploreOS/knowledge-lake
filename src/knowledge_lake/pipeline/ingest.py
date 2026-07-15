@@ -47,7 +47,12 @@ FETCH_TIMEOUT_SECONDS = 30.0
 # Maximum number of redirects to follow manually (SSRF redirect-hop cap)
 _MAX_REDIRECTS = 10
 
-# Private/reserved IP ranges blocked for SSRF prevention (T-01-11)
+# Notable private/reserved IP ranges blocked for SSRF prevention (T-01-11).
+# Documentation only — the actual guard uses `not addr.is_global` (KL-07) so
+# it also rejects the ranges a hand-rolled list tends to miss: 0.0.0.0/8
+# ("this host", reaches localhost on Linux), 100.64.0.0/10 (CGNAT),
+# 198.18.0.0/15 (benchmark), 192.0.0.0/24 (IETF protocol assignments),
+# 240.0.0.0/4 (reserved), and IPv6 :: (unspecified).
 _PRIVATE_NETS = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
@@ -94,22 +99,32 @@ def normalize_url(url: str) -> str:
 
 
 def validate_public_url(url: str) -> None:
-    """Raise ValueError if the URL scheme is not https or resolves to a private IP.
+    """Raise ValueError if the URL scheme is not https or resolves to a non-global IP.
 
     This is the shared SSRF guard consumed by every crawler and discovery plan
     (02-02..02-06). Renamed from _validate_url_scheme to be module-public.
 
     Blocks:
       - Non-https schemes (http URLs rejected by design — conservative SSRF posture)
-      - RFC-1918 private IP ranges (10.x, 172.16-31.x, 192.168.x)
-      - Link-local/cloud IMDS (169.254.x — AWS/GCP/Azure metadata service)
-      - Loopback (127.x, ::1)
-      - IPv6 ULA (fc00::/7)
-      - IPv4-mapped IPv6 addresses (::ffff:10.x.x.x etc.)
+      - Every non-globally-routable address, via `not addr.is_global` (KL-07).
+        This covers RFC-1918 private ranges, link-local/cloud IMDS (169.254.x),
+        loopback (127.x, ::1), IPv6 ULA (fc00::/7), and reserved ranges a
+        hand-rolled blocklist tends to miss: 0.0.0.0/8 ("this host", reaches
+        localhost on Linux), 100.64.0.0/10 (CGNAT), 198.18.0.0/15 (benchmark),
+        192.0.0.0/24 (IETF protocol assignments), 240.0.0.0/4 (reserved), and
+        the IPv6 unspecified address ::.
+      - IPv4-mapped IPv6 addresses (::ffff:10.x.x.x etc.) — unwrapped before
+        the is_global check so the IPv4 semantics apply.
 
     Uses getaddrinfo() rather than gethostbyname() to check ALL resolved addresses
     (both IPv4 and IPv6) — gethostbyname() only returns a single IPv4 address and
     does not detect IPv6-only hostnames or OS-dependent IPv6 behaviour (T-01-11).
+
+    Known limitation, deliberately left alone (KL-07): this resolves the
+    hostname once here; the HTTP client resolves it again on connect. A
+    DNS-rebinding TOCTOU exists between the two resolutions. Pinning the
+    validated IP (connect-by-IP with a Host header) would close it but is a
+    separate change.
     """
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -135,12 +150,15 @@ def validate_public_url(url: str) -> None:
         # IPv4 private-range check below catches it (CR-01).
         if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
             addr = addr.ipv4_mapped
-        for net in _PRIVATE_NETS:
-            if addr in net:
-                raise ValueError(
-                    f"URL {url!r} resolves to private/link-local address {addr} — "
-                    "SSRF prevention blocks requests to private networks (T-01-11)."
-                )
+        # `is_global` is stdlib's authoritative classification of globally
+        # routable addresses — it rejects every reserved/private/link-local
+        # range, including ones a hand-rolled list misses (KL-07). See
+        # _PRIVATE_NETS above for the documented notable ranges this covers.
+        if not addr.is_global:
+            raise ValueError(
+                f"URL {url!r} resolves to private/reserved address {addr} — "
+                "SSRF prevention blocks requests to non-global networks (T-01-11, KL-07)."
+            )
 
 
 # Keep backward compat alias for any existing internal callers
