@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 15 — Query Router
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-15 — Completed quick task 260715-bgt: KL-18, KL-08, KL-09 (13/19 audit findings closed; every high and medium now resolved; all GET routes 5xx-free; live container fresh)
+Last activity: 2026-07-15 — Completed quick task 260715-chy: final low findings + Dockerfile CI guard + parse section persistence. **E2E audit CLOSED — all 19 findings resolved.** Suite 971 passed, 0 failed.
 
 Progress: [██████████] 100%
 
@@ -124,11 +124,12 @@ None yet.
 - [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
 - [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
-- [Audit 2026-07-15]: E2E gap analysis — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **13 of 19 findings resolved** (17 original + 2 found during remediation). **Every high and medium is closed.** 6 open, all LOW: KL-12, KL-13, KL-14, KL-15, KL-17, KL-19.
+- [Audit 2026-07-15]: E2E gap analysis **CLOSED** — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **All 19 findings resolved** (17 original + 2 found during remediation). Also fixed beyond the findings: the Dockerfile landmine (CI now builds the api image) and parse section persistence. Suite: 971 passed, 0 xpassed, 0 failed, 0 errors.
 - [KL-18 resolved 2026-07-15]: `/documents`, `/datasets` AND `/curated-documents` returned 500 (`DetachedInstanceError` — responses built after `get_session()` committed and expired the instances). Fixed at the three call sites. Probing every route found the third endpoint, which had no test at all. All GET routes now 5xx-free.
 - **[Dockerfile landmine, fixed 2026-07-15]**: the base image had been bumped to `python:3.14-slim`, which **cannot build** (greenlet has no CPython 3.14 support), and `COPY` omitted `LICENSE`/`NOTICE`. The api image was therefore un-rebuildable, and `docker compose up -d` silently kept a 13-day-old image alive — that is the real reason KL-08 happened, and why KL-18 stayed invisible. Base is back to `python:3.12-slim`; `./src` is now bind-mounted and `/health` reports the running version. Keep the base pinned to `.python-version`.
-- [Follow-up, open]: parse persists only `{quality_score, parser_used, title}` — **sections are not persisted**. `klake tree-index` works around it by re-parsing the raw parent, but the same gap makes `klake chunk` emit chunks with no `section_path`, weakening CLI-path citations. Persisting sections would fix both.
-- [KL-19 — LOW, OPEN]: 4 mode-forwarding tests patch `pipeline.search.search`, but `route.py` binds that name at import time, so the patch never applies and the tests can never pass. Test bug, not a production gap.
+- [Parse sidecar, added 2026-07-15]: `parse()` writes a JSON sections sidecar to the **silver** zone (S3, never Postgres — `Section` carries `text`, so sections are the whole document body). `chunk`/`tree-index` read it and fall back to re-parsing for pre-sidecar artifacts. This fixed a worse bug than recorded: the old section-less path collapsed **38 sections into 1 chunk**; now 51 real per-section chunks, ~30x faster (43s -> 1.4s).
+- [Follow-ups, open — all minor]: (1) the domain path-traversal regex still has 3 independent copies (`domains/loader.py`, `api/app.py`, `pipeline/domains.py`) — if one drifts the guards diverge; (2) `st_embedder.py` uses a module constant `_LITELLM_ALIAS` rather than settings — an alias not a provider ID, so the constraint holds, but it's the one alias that isn't configurable; (3) `sources.config["domain"]` is still dual-written alongside the new column — remove the dual-write next release; (4) domain packs still cannot contribute Dagster jobs (KL-16's deferred gap).
+- [Testing gotcha, learned 2026-07-15]: `pipeline/route.py` binds `search` at import time (`from ... import search`), so patching `pipeline.search.search` never affects `routed_search` — patch `pipeline.route.search` instead. This silently neutered 4 tests (KL-19).
 - [KL-16 deferred]: domain packs still cannot contribute Dagster jobs without editing framework source — roadmap item. Only the misleading `healthcare_e2e_job` name was fixed.
 - [KL-01 decision, 2026-07-15]: `domain=` on exports **filters rows**, it does not merely label the output path. `domain=None` remains "no filter, all domains, `_unclassified` path" — pinned by regression test. Known deferred wart: `_unclassified` still labels an all-domain export.
 - [Testing, 2026-07-15]: `xfail_strict = true` is now active. Any test that passes while marked xfail fails the build. Do not add an xfail marker to make a red test go away — a stale marker is exactly what hid KL-18 (two API endpoints returning 500) for months.
@@ -142,6 +143,7 @@ None yet.
 | 260715-51d | Fix KL-01 domain filtering in exports and KL-02 LLM pricing | 2026-07-15 | 6ea82c2 | [260715-51d-fix-kl-01-domain-filtering-in-exports-an](./quick/260715-51d-fix-kl-01-domain-filtering-in-exports-an/) |
 | 260715-5pb | Fix KL-07, KL-04/05/06, KL-11, KL-16, KL-10 | 2026-07-15 | bf8b6ac | [260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10](./quick/260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10/) |
 | 260715-bgt | Fix KL-18 detached-session 500s, KL-08 stale container, KL-09 tree-index CLI | 2026-07-15 | b974337 | [260715-bgt-fix-kl-18-detached-session-500s-kl-08-st](./quick/260715-bgt-fix-kl-18-detached-session-500s-kl-08-st/) |
+| 260715-chy | Fix remaining low findings, CI image build guard, parse section persistence | 2026-07-15 | 1c0159f | [260715-chy-fix-remaining-low-findings-ci-image-buil](./quick/260715-chy-fix-remaining-low-findings-ci-image-buil/) |
 
 ## Deferred Items
 

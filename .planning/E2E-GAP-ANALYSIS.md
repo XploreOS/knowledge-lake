@@ -3,8 +3,86 @@ scope: cross-cutting
 name: E2E Test & Codebase Gap Analysis
 audited: 2026-07-15T02:48:00Z
 audited_against: 49c77f4
-status: findings_open
+status: all_findings_resolved
+closed: 2026-07-15
 resolved:
+  - id: KL-12
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [2940463]
+    fix: >
+      README corrected to say enrich defaults to cheap_model, with the
+      KLAKE_ENRICH__MODEL_ALIAS=strong_model override documented. The CODE was
+      right; the README was wrong. The default was deliberately NOT changed —
+      switching to strong_model would silently raise costs ~9x (KL-02).
+  - id: KL-13
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [6ae70a2]
+    fix: >
+      The bug was rendering, not the source: Rich parsed `[a-zA-Z]` as style tags
+      and stripped it. Brackets escaped for the help string; `klake domain new
+      --help` now shows the literal ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$. Regex
+      de-duplicated: scaffold.py exports DOMAIN_NAME_PATTERN, cli/app.py imports it.
+    still_open: >
+      The finding named 2 duplicate sites; there are actually 5. Three independent
+      copies remain (domains/loader.py:33, api/app.py:124, pipeline/domains.py:15),
+      each compiling the same path-traversal guard. Arguably defense-in-depth, but
+      if one drifts the guards diverge. Follow-up.
+  - id: KL-14
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [d81c9f7]
+    fix: >
+      create_dataset() gained an optional id param; the export functions now pass
+      the same export_id used for the S3 key, so one export mints one dst_ ID.
+      get_or_create_dataset() unchanged. Verified on a real export: dataset_id ==
+      the ID inside storage_uri.
+  - id: KL-15
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [50e9e1d]
+    fix: >
+      Alembic migration 0010 adds an indexed, nullable `sources.domain` column
+      backfilled from config->>'domain', with a working downgrade (the migration
+      round-trip test passes). get_domain_for_source() reads the column with a
+      config-blob fallback; both write sites dual-write. Verified on the real
+      registry: backfill reproduced the exact pre-migration breakdown
+      (30 functional-medicine / 24 healthcare / 14 null / 3 aviation) with ZERO
+      column-vs-blob mismatches across all 71 rows, and KL-01's domain-scoped
+      export still yields 51 aviation-only rows.
+    deprecation: >
+      config["domain"] is still dual-written for one release so anything reading
+      the blob directly keeps working. Remove the dual-write later.
+  - id: KL-17
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [9a10aec, 0c52c87]
+    fix: >
+      (a) put_raw docstring corrected to the real raw/{domain}/{source_id}/... key.
+      (b) LLM-gateway-as-plugin claim removed from docs/architecture.md — decision
+      was to fix the doc, not build an LLMGatewayPlugin: LiteLLM already IS the
+      gateway abstraction and provider swapping happens in infra/litellm/config.yaml.
+      (c) Dataset aliases moved into settings (DatasetSettings.qa_model_alias /
+      instruction_model_alias); the plan's own grep criterion surfaced a FIFTH
+      hardcoded alias in quality/scorer.py, also moved to settings
+      (ParseSettings.spot_check_model_alias). Defaults unchanged.
+      (d) domains/models.py ValidationResult docstring made domain-neutral.
+    still_open: >
+      plugins/builtin/st_embedder.py still uses a module constant
+      _LITELLM_ALIAS = "embedding_model" rather than settings. It is an ALIAS, not
+      a provider model ID, so the CLAUDE.md constraint holds — but it is the one
+      alias that is not operator-configurable. Minor follow-up.
+  - id: KL-19
+    resolved: 2026-07-15
+    quick_task: 260715-chy
+    commits: [1580f97]
+    fix: >
+      Tests now patch knowledge_lake.pipeline.route.search — route.py binds the
+      name at import time, so patching pipeline.search.search never applied. All 4
+      pass and their xfail markers were removed (xfail_strict made that mandatory,
+      not optional).
+
   - id: KL-18
     resolved: 2026-07-15
     quick_task: 260715-bgt
@@ -219,12 +297,44 @@ counts:
   low: 8
   total: 17
   discovered_during_remediation: 2   # KL-18, KL-19 — see `discovered` below
-  open: 6
-  resolved: 13
+  open: 0
+  resolved: 19
   high_open: 0
   medium_open: 0
-  open_note: "All remaining open items are LOW severity: KL-12, KL-13, KL-14, KL-15, KL-17, KL-19."
+  low_open: 0
+  open_note: "All 19 findings resolved 2026-07-15 (17 from the audit + 2 found during remediation)."
   verified_working: 7
+also_fixed:
+  - id: DOCKERFILE-LANDMINE
+    quick_task: 260715-chy
+    commits: [72b9413]
+    what: >
+      The base image had been bumped to python:3.14-slim, which cannot build
+      (greenlet has no CPython 3.14 support) — fixed in 260715-bgt. But nothing
+      would have CAUGHT it: CI's integration job only runs
+      `docker compose up -d postgres minio qdrant`, all pre-built public images.
+      The api image's build: stanza was never exercised, so the Dockerfile rotted
+      unbuildable for 13 days behind a green badge — the same shape as KL-03
+      (tests that never ran). Added a `docker-build` CI job that asserts the base
+      matches .python-version and runs `docker compose build api`. Verified the
+      build succeeds locally (8m24s).
+  - id: PARSE-SECTION-PERSISTENCE
+    quick_task: 260715-chy
+    commits: [1c0159f]
+    what: >
+      Root cause behind KL-09's re-parse workaround. parse persisted only
+      {quality_score, parser_used, title} and the silver zone held markdown only,
+      so sections were lost. parse() now writes a JSON sections sidecar to the
+      SILVER zone (S3, not Postgres — Section carries `text`, so the sections list
+      is the whole document body and would have duplicated every document into the
+      registry). Raw zone untouched. chunk/tree-index read the sidecar and fall
+      back to re-parsing for pre-existing artifacts.
+    impact: >
+      Bigger than the report described. The old section-less reconstruction did not
+      merely "degrade citations" — it collapsed 38 real sections into ONE monolithic
+      chunk. With the sidecar the same document yields 51 real per-section chunks,
+      all carrying section_path (verified: 0 of 51 empty), and chunk/tree-index went
+      from ~43s (re-parse) to ~1.4s — a ~30x speedup with identical output.
 discovered:
   - id: KL-18
     severity: high
@@ -243,7 +353,8 @@ discovered:
     found: 2026-07-15
     found_by: "KL-10 remediation"
     title: "4 mode-forwarding tests patch the wrong target and can never pass"
-    status: open
+    status: resolved
+    resolved_by: 260715-chy
 tests:
   at_audit_time:
     combined: 828 passed
@@ -855,11 +966,22 @@ truncated output.
 
 ### KL-12 — README documents the wrong model alias for `enrich`
 
+> **RESOLVED 2026-07-15** — `260715-chy` (`2940463`). README corrected; the code
+> default (`cheap_model`) was deliberately left alone — switching to `strong_model`
+> would silently raise costs ~9× (KL-02).
+
+
 README:208 says enrich "Calls LiteLLM (`strong_model` alias → Bedrock)".
 `settings.py:160` defaults `model_alias = "cheap_model"`, and the run log confirms
 `model=cheap_model`. A cost-relevant discrepancy.
 
 ### KL-13 — Rich markup eats the regex in CLI help
+
+> **RESOLVED 2026-07-15** — `260715-chy` (`6ae70a2`). `--help` now renders the literal
+> `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`. Regex de-duplicated (scaffold.py owns it).
+> *Note:* the finding named 2 duplicate sites; there are 5 — three independent copies
+> remain in `loader.py`, `api/app.py`, `pipeline/domains.py`. Follow-up.
+
 
 `klake domain new --help` renders *"must match `^{0,63}$`"*. The pattern is
 correct in source (`^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`) — Rich parses the character
@@ -869,6 +991,10 @@ that string. The same regex is also duplicated across `cli/app.py:1138` and
 
 ### KL-14 — Two `dst_` IDs per export
 
+> **RESOLVED 2026-07-15** — `260715-chy` (`d81c9f7`). One export now mints one `dst_`
+> ID; verified on a real export that `dataset_id` equals the ID in `storage_uri`.
+
+
 Each export mints `new_id("dataset")` for the *filename*, then `create_dataset()`
 mints another for the *row* — so `dataset_id=dst_…87d8` points at
 `…87ce.parquet`. Traceability survives (the `name` and `storage_uri` both carry
@@ -876,6 +1002,12 @@ the file's ID), so this is confusion rather than breakage — but "which dst_ is
 this?" is a question a lineage-first framework shouldn't provoke.
 
 ### KL-15 — Domain is untyped JSON on `sources.config`
+
+> **RESOLVED 2026-07-15** — `260715-chy` (`50e9e1d`). Migration `0010` adds an indexed
+> `sources.domain` column, backfilled from the blob, with a working downgrade.
+> Verified on the real registry: **0 mismatches across all 71 rows**, breakdown
+> preserved exactly, and KL-01's domain-scoped export still yields 51 aviation-only rows.
+
 
 `sources` has no `domain` column; domain lives inside the `config` JSON blob and
 is duplicated into the Qdrant payload. It's a first-class concept in the CLI
@@ -901,6 +1033,13 @@ extension point: there's no way for `aviation` to contribute an `aviation_e2e_jo
 without editing framework source.
 
 ### KL-17 — Assorted drift
+
+> **RESOLVED 2026-07-15** — `260715-chy` (`9a10aec`, `0c52c87`). Docstring corrected;
+> the LLM-gateway-as-plugin claim removed from the docs (decision: LiteLLM already *is*
+> the gateway abstraction — don't wrap an abstraction in a plugin protocol); dataset
+> aliases moved to settings — which surfaced a **fifth** hardcoded alias in
+> `quality/scorer.py`, also fixed; `ValidationResult` docstring made domain-neutral.
+
 
 - `put_raw()`'s docstring documents `raw/{source_id}/{sha256}.{ext}`; actual keys
   are `raw/{domain}/{source_id}/…` — the same `domain` kwarg that broke the mocks
@@ -957,7 +1096,12 @@ serves only 2 of 29 routes, so nobody hits these endpoints locally either.
 `expunge`/eager-load before exit). Then delete the xfail markers — the tests
 already assert the right thing.
 
-### KL-19 — 4 mode-forwarding tests patch a target that is never consulted · **LOW · open**
+### KL-19 — 4 mode-forwarding tests patch a target that is never consulted · **LOW · RESOLVED**
+
+> **RESOLVED 2026-07-15** — `260715-chy` (`1580f97`). Tests now patch
+> `pipeline.route.search` (route.py binds the name at import, so the old target was
+> never consulted). All 4 pass; markers removed — `xfail_strict` made that mandatory.
+
 
 **What.** `test_api_mode_forwarded_{hybrid,dense}` and
 `test_cli_mode_forwarded_{hybrid,dense}` patch
@@ -1018,30 +1162,48 @@ exports to every other domain's state is the same missing dimension as KL-01.
 8. ~~**KL-08 / KL-09** — the two remaining mediums.~~ **Done 2026-07-15**
    (`260715-bgt`). KL-08 was *why* KL-18 hid locally — and its own root cause was
    deeper than this report diagnosed (the image was unbuildable).
-9. **KL-19**, then KL-12..KL-15, KL-17 as hygiene. All low.
+9. ~~**KL-19**, then KL-12..KL-15, KL-17 as hygiene.~~ **Done 2026-07-15** (`260715-chy`).
 
-### Status
+### Status — closed
 
 | | Count |
 |---|---|
-| Original findings | 17 — **12 resolved**, 5 open (all low: KL-12..KL-15, KL-17) |
-| Discovered during remediation | 2 — KL-18 (high, **resolved**), KL-19 (low, open) |
-| **Open total** | **6 — all LOW severity** |
+| Original findings | 17 — **all resolved** |
+| Discovered during remediation | 2 — KL-18 (high), KL-19 (low) — **both resolved** |
+| **Open** | **0** |
 
-**Every high and medium finding is closed.**
+Also fixed beyond the findings: the **Dockerfile landmine** (CI now builds the api
+image, so an unbuildable Dockerfile fails the build) and **parse section
+persistence** (the root cause behind KL-09's re-parse workaround).
 
-Suite: **956 passed, 0 xpassed, 0 failed, 0 errors, 10 xfailed**, `xfail_strict = true`.
+Suite: **971 passed, 0 xpassed, 0 failed, 0 errors, 6 xfailed**, `xfail_strict = true`.
 All GET routes: **no 5xx**. Live container serves **27 paths** (was 1).
 
-### Two corrections this remediation forced on the report itself
+### What remediation taught that the audit didn't
 
-1. **KL-08's root cause was wrong.** Not "`up -d` doesn't rebuild" but "the image
-   could not be rebuilt at all" (`python:3.14-slim` + greenlet). The recommended
-   fix would have failed.
+Four times, fixing a finding proved the finding itself incomplete or wrong. Every
+correction came from exercising reality, never from re-reading the analysis:
+
+1. **KL-08's root cause was wrong.** Not "`up -d` doesn't rebuild" but *the image
+   could not be rebuilt at all* (`python:3.14-slim` + greenlet). This report's own
+   recommended fix would have failed. And nothing in CI built the image, so it
+   rotted for 13 days behind a green badge — the same shape as KL-03.
 2. **KL-18's scope was too small.** It named two endpoints; probing every route
-   found three. The third had no test at all — worse than a lying test.
+   found three. The third, `/curated-documents`, had *no test at all* — worse than
+   a lying one.
+3. **KL-06's fix didn't hold where it mattered.** The `deps=` edges were correct in
+   the abstract graph but the main E2E job excluded curate, so Dagster dropped the
+   edge and the race survived in the job people actually run. Its first guard was
+   vacuous too.
+4. **Parse persistence was worse than described.** "Degrades citations" undersold
+   it: the section-less path collapsed **38 sections into 1 chunk**. The sidecar
+   restores 51 real per-section chunks — and made chunk/tree-index ~30× faster.
 
-Both were found by exercising reality rather than re-reading the analysis.
+The through-line of this whole audit: **a label asserting something the data
+doesn't satisfy, with nothing failing.** A domain tag on a foreign corpus, a
+budget cap 9× looser than written, a green badge over tests that never ran, an
+xfail hiding a 500, a healthcheck vouching for a stale container. The fixes that
+mattered most were the ones that made those claims either true or loud.
 
 ---
 
