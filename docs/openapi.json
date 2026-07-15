@@ -2673,7 +2673,7 @@
     },
     "/health": {
       "get": {
-        "description": "Return the service health status.\n\nReturns:\n    {\"status\": \"ok\"} when the service is ready to accept requests.",
+        "description": "Return the service health status.\n\nReturns:\n    ``{\"status\": \"ok\", \"version\": \"<pkg_version>+<git_sha>\"}`` when the\n    service is ready to accept requests. ``status`` is unchanged from\n    before (README-documented, asserted by the compose healthcheck) \u2014\n    ``version`` is added so a stale running container is visible in one\n    curl instead of hidden behind a green healthcheck (KL-08).",
         "operationId": "health_health_get",
         "responses": {
           "200": {
