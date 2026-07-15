@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 15 — Query Router
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-15 — Completed quick task 260715-5pb: KL-07, KL-04/05/06, KL-11, KL-16, KL-10 (10/17 audit findings closed; xfail_strict on; surfaced KL-18 — two API endpoints returning 500)
+Last activity: 2026-07-15 — Completed quick task 260715-bgt: KL-18, KL-08, KL-09 (13/19 audit findings closed; every high and medium now resolved; all GET routes 5xx-free; live container fresh)
 
 Progress: [██████████] 100%
 
@@ -124,8 +124,10 @@ None yet.
 - [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
 - [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
-- [Audit 2026-07-15]: E2E gap analysis — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **10 of 17 original findings resolved**, including all 3 high-severity. 7 original still open (0 high; 2 medium — KL-08, KL-09; 5 low).
-- **[KL-18 — HIGH, OPEN, highest priority]**: `GET /documents` and `GET /datasets` return **500** — responses are built outside the `get_session()` scope, so lazy ORM access raises `DetachedInstanceError`. Confirmed against the real app + real data. Found 2026-07-15 while removing stale xfail markers that were hiding it (their reason claimed the endpoints were "not yet added"; they exist and are broken). Compounded by KL-08 — the stale container serves only 2 of 29 routes, so nobody hits them locally either. Small fix; the tests already exist.
+- [Audit 2026-07-15]: E2E gap analysis — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **13 of 19 findings resolved** (17 original + 2 found during remediation). **Every high and medium is closed.** 6 open, all LOW: KL-12, KL-13, KL-14, KL-15, KL-17, KL-19.
+- [KL-18 resolved 2026-07-15]: `/documents`, `/datasets` AND `/curated-documents` returned 500 (`DetachedInstanceError` — responses built after `get_session()` committed and expired the instances). Fixed at the three call sites. Probing every route found the third endpoint, which had no test at all. All GET routes now 5xx-free.
+- **[Dockerfile landmine, fixed 2026-07-15]**: the base image had been bumped to `python:3.14-slim`, which **cannot build** (greenlet has no CPython 3.14 support), and `COPY` omitted `LICENSE`/`NOTICE`. The api image was therefore un-rebuildable, and `docker compose up -d` silently kept a 13-day-old image alive — that is the real reason KL-08 happened, and why KL-18 stayed invisible. Base is back to `python:3.12-slim`; `./src` is now bind-mounted and `/health` reports the running version. Keep the base pinned to `.python-version`.
+- [Follow-up, open]: parse persists only `{quality_score, parser_used, title}` — **sections are not persisted**. `klake tree-index` works around it by re-parsing the raw parent, but the same gap makes `klake chunk` emit chunks with no `section_path`, weakening CLI-path citations. Persisting sections would fix both.
 - [KL-19 — LOW, OPEN]: 4 mode-forwarding tests patch `pipeline.search.search`, but `route.py` binds that name at import time, so the patch never applies and the tests can never pass. Test bug, not a production gap.
 - [KL-16 deferred]: domain packs still cannot contribute Dagster jobs without editing framework source — roadmap item. Only the misleading `healthcare_e2e_job` name was fixed.
 - [KL-01 decision, 2026-07-15]: `domain=` on exports **filters rows**, it does not merely label the output path. `domain=None` remains "no filter, all domains, `_unclassified` path" — pinned by regression test. Known deferred wart: `_unclassified` still labels an all-domain export.
@@ -139,6 +141,7 @@ None yet.
 | 260715-4b9 | Fix CI integration tests (KL-03) and add aviation reference pack | 2026-07-15 | ea14046 | [260715-4b9-fix-ci-integration-tests-kl-03-and-add-a](./quick/260715-4b9-fix-ci-integration-tests-kl-03-and-add-a/) |
 | 260715-51d | Fix KL-01 domain filtering in exports and KL-02 LLM pricing | 2026-07-15 | 6ea82c2 | [260715-51d-fix-kl-01-domain-filtering-in-exports-an](./quick/260715-51d-fix-kl-01-domain-filtering-in-exports-an/) |
 | 260715-5pb | Fix KL-07, KL-04/05/06, KL-11, KL-16, KL-10 | 2026-07-15 | bf8b6ac | [260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10](./quick/260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10/) |
+| 260715-bgt | Fix KL-18 detached-session 500s, KL-08 stale container, KL-09 tree-index CLI | 2026-07-15 | b974337 | [260715-bgt-fix-kl-18-detached-session-500s-kl-08-st](./quick/260715-bgt-fix-kl-18-detached-session-500s-kl-08-st/) |
 
 ## Deferred Items
 

@@ -5,6 +5,64 @@ audited: 2026-07-15T02:48:00Z
 audited_against: 49c77f4
 status: findings_open
 resolved:
+  - id: KL-18
+    resolved: 2026-07-15
+    quick_task: 260715-bgt
+    commits: [fa7d8df]
+    fix: >
+      Root cause: registry/db.py:82 opens Session() with the default
+      expire_on_commit=True and get_session() commits on clean exit, expiring
+      every attribute — while three list endpoints built their response objects
+      AFTER the `with` block closed, so the first attribute read on a
+      detached+expired instance raised DetachedInstanceError -> 500.
+      Fixed at the three call sites (response construction moved inside the
+      session scope); expire_on_commit deliberately NOT disabled globally.
+      Probing every GET route found a THIRD broken endpoint the original finding
+      missed — /curated-documents, which had no test at all, so nothing was even
+      pretending to cover it. Now: /documents, /datasets, /curated-documents all
+      500 -> 200 against the real registry; BROKEN ROUTES: none. The two false
+      xfail markers were removed (xfail_strict made that mandatory).
+  - id: KL-08
+    resolved: 2026-07-15
+    quick_task: 260715-bgt
+    commits: [b5d584e]
+    fix: >
+      Mounted ./src into api/dagster-webserver/dagster-daemon (editable-install
+      assumption verified first: the .pth resolves to /app/src), so the
+      containers cannot silently serve stale code. /health now reports
+      pipeline_version() so any remaining drift is visible in one curl instead of
+      hidden behind a green healthcheck. README documents `up -d --build`.
+      Live container went from 1 path served to 27.
+    root_cause_correction: >
+      The audit blamed `docker compose up -d` not rebuilding. True but incomplete
+      — the image could not be rebuilt AT ALL. Someone had bumped the Dockerfile
+      base from python:3.12-slim to python:3.14-slim (git history confirms), which
+      fails to build (greenlet has no CPython 3.14 support), and COPY omitted
+      LICENSE/NOTICE which pyproject's license-files requires. So the container
+      was stale because rebuilding was IMPOSSIBLE, and `up -d` silently kept the
+      last good 3.12 image running. The report's own "just run up -d --build"
+      advice would have failed. Base reverted to python:3.12-slim (matching
+      .python-version and requires-python).
+  - id: KL-09
+    resolved: 2026-07-15
+    quick_task: 260715-bgt
+    commits: [7a5c30f]
+    fix: >
+      Added `klake tree-index <parsed_artifact_id> <source_id>`. It re-parses the
+      raw parent through the parser-fallback chain to recover real sections —
+      necessary because parse persists only {quality_score, parser_used, title}
+      and the silver zone holds markdown only, so sections cannot be
+      reconstructed from the registry. cmd_chunk's section-less minimal ParsedDoc
+      precedent does NOT transfer: the tree IS the section hierarchy, so a
+      section-less ParsedDoc yields a degenerate tree. Also added
+      tree_index_coverage() so tree-search distinguishes "no tree index built"
+      from "no matches". Verified: registry went 0 -> 1 tree_index artifacts;
+      `tree-search "energy management"` returned nothing in the audit and now
+      returns real section-aware hits; the pre-index message names the fix.
+    followup: >
+      parse not persisting sections also degrades `klake chunk` — CLI-path chunks
+      carry no section_path, weakening citations. Persisting sections would fix
+      both properly. Recorded, not fixed.
   - id: KL-07
     resolved: 2026-07-15
     quick_task: 260715-5pb
@@ -161,9 +219,11 @@ counts:
   low: 8
   total: 17
   discovered_during_remediation: 2   # KL-18, KL-19 — see `discovered` below
-  open: 9
-  resolved: 10
+  open: 6
+  resolved: 13
   high_open: 0
+  medium_open: 0
+  open_note: "All remaining open items are LOW severity: KL-12, KL-13, KL-14, KL-15, KL-17, KL-19."
   verified_working: 7
 discovered:
   - id: KL-18
@@ -172,8 +232,10 @@ discovered:
     reproduced: true
     found: 2026-07-15
     found_by: "KL-10 remediation — a stale xfail marker was hiding it"
-    title: "GET /documents and GET /datasets return 500 (DetachedInstanceError)"
-    status: open
+    title: "GET /documents, /datasets and /curated-documents return 500 (DetachedInstanceError)"
+    status: resolved
+    resolved_by: 260715-bgt
+    note: "Scope grew: probing every GET route found /curated-documents broken too — it had no test at all."
   - id: KL-19
     severity: low
     area: tests
@@ -683,6 +745,21 @@ shows stdlib already classifies every missed range correctly. Keep
 
 ### KL-08 — The API container serves 2 of 29 routes, and reports healthy
 
+> **RESOLVED 2026-07-15** — `260715-bgt` (`b5d584e`). `./src` is now mounted into the
+> api and dagster containers (editable-install assumption verified first), and
+> `/health` reports the running `pipeline_version()`. The live container went from
+> **1 path served to 27**.
+>
+> **This finding's root cause was wrong.** It blamed `docker compose up -d` not
+> rebuilding. True, but incomplete: **the image could not be rebuilt at all.** The
+> Dockerfile base had been bumped `python:3.12-slim` → `python:3.14-slim` (git
+> history confirms), which fails to build — greenlet has no CPython 3.14 support —
+> and `COPY` omitted the `LICENSE`/`NOTICE` that `pyproject`'s `license-files`
+> requires. So the container was stale because rebuilding was **impossible**, and
+> `up -d` silently kept the last good 3.12 image alive. The fix this report
+> recommended — "document `up -d --build`" — **would have failed**. Base reverted to
+> `python:3.12-slim`, matching `.python-version` and `requires-python`.
+
 **What.**
 
 ```
@@ -711,6 +788,21 @@ version/route-count fingerprint that a stale image cannot satisfy. Document
 ---
 
 ### KL-09 — `tree-search` is unreachable from the CLI
+
+> **RESOLVED 2026-07-15** — `260715-bgt` (`7a5c30f`). `klake tree-index` added.
+> It re-parses the raw parent through the parser-fallback chain to recover real
+> sections — necessary because parse persists only
+> `{quality_score, parser_used, title}` and the silver zone holds markdown only.
+> `cmd_chunk`'s "minimal section-less ParsedDoc" precedent does **not** transfer:
+> the tree *is* the section hierarchy, so a section-less ParsedDoc yields a
+> degenerate tree. Registry went **0 → 1** tree_index artifacts and
+> `tree-search "energy management"` now returns real section-aware hits (it
+> returned nothing in the audit). The empty state now reads *"No tree index has
+> been built yet… Run `klake tree-index <parsed_artifact_id> <source_id>`"*.
+>
+> *Follow-up recorded:* parse not persisting sections also degrades `klake chunk`
+> — CLI-path chunks carry no `section_path`, weakening citations. Persisting
+> sections would fix both properly.
 
 **What.** The CLI ships the consumer (`klake tree-search`) but not the producer.
 Building a tree index is only possible through the `tree_index_document` Dagster
@@ -830,7 +922,15 @@ These were not in the original audit. Both were **hidden behind stale xfail
 markers** and surfaced the moment KL-10 removed the lies — which is the clearest
 possible argument for why KL-10 mattered.
 
-### KL-18 — `GET /documents` and `GET /datasets` return 500 · **HIGH · open**
+### KL-18 — Three list endpoints return 500 · **HIGH · RESOLVED**
+
+> **RESOLVED 2026-07-15** — `260715-bgt` (`fa7d8df`). Response construction moved
+> inside the session scope at all three call sites (`expire_on_commit` deliberately
+> not disabled globally). Probing *every* GET route found a **third** broken
+> endpoint this finding originally missed — `/curated-documents`, which had **no
+> test at all**, so nothing was even pretending to cover it. All three now 200
+> against the real registry; **BROKEN ROUTES: none**. The two false xfail markers
+> were removed — `xfail_strict` made that mandatory rather than optional.
 
 **What.** `list_documents_endpoint` (`api/app.py:1405`) and
 `list_datasets_endpoint` (`:1496`) build their response objects **outside** the
@@ -913,23 +1013,35 @@ exports to every other domain's state is the same missing dimension as KL-01.
    **Done 2026-07-15** (`260715-5pb`). Decided: make the real chain explicit.
 6. ~~**KL-10** — remove the stale markers, *then* enable `xfail_strict`.~~
    **Done 2026-07-15** (`260715-5pb`). Order held; it surfaced KL-18 and KL-19.
-7. **KL-18 — now the highest-priority open item.** Two API endpoints return 500.
-   Small fix (session scoping), real user impact, and its tests already exist.
-8. **KL-08 / KL-09** — the two remaining mediums from the original audit; not yet
-   selected for remediation. Note KL-08 (container serves 2 of 29 routes,
-   reports healthy) is *why* KL-18 went unnoticed locally: nobody can hit those
-   endpoints on a stale container.
-9. **KL-19**, then KL-12..KL-15, KL-17 as hygiene.
+7. ~~**KL-18** — two API endpoints return 500.~~ **Done 2026-07-15** (`260715-bgt`).
+   It was three, not two.
+8. ~~**KL-08 / KL-09** — the two remaining mediums.~~ **Done 2026-07-15**
+   (`260715-bgt`). KL-08 was *why* KL-18 hid locally — and its own root cause was
+   deeper than this report diagnosed (the image was unbuildable).
+9. **KL-19**, then KL-12..KL-15, KL-17 as hygiene. All low.
 
 ### Status
 
 | | Count |
 |---|---|
-| Original findings | 17 — **10 resolved**, 7 open (0 high, 2 medium, 5 low) |
-| Discovered during remediation | 2 — KL-18 (high), KL-19 (low), both open |
-| **Open total** | **9** |
+| Original findings | 17 — **12 resolved**, 5 open (all low: KL-12..KL-15, KL-17) |
+| Discovered during remediation | 2 — KL-18 (high, **resolved**), KL-19 (low, open) |
+| **Open total** | **6 — all LOW severity** |
 
-Suite: **943 passed, 0 xpassed, 0 failed, 0 errors, 12 xfailed**, `xfail_strict = true`.
+**Every high and medium finding is closed.**
+
+Suite: **956 passed, 0 xpassed, 0 failed, 0 errors, 10 xfailed**, `xfail_strict = true`.
+All GET routes: **no 5xx**. Live container serves **27 paths** (was 1).
+
+### Two corrections this remediation forced on the report itself
+
+1. **KL-08's root cause was wrong.** Not "`up -d` doesn't rebuild" but "the image
+   could not be rebuilt at all" (`python:3.14-slim` + greenlet). The recommended
+   fix would have failed.
+2. **KL-18's scope was too small.** It named two endpoints; probing every route
+   found three. The third had no test at all — worse than a lying test.
+
+Both were found by exercising reality rather than re-reading the analysis.
 
 ---
 
