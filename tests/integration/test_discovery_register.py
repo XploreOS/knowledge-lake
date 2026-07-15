@@ -8,9 +8,15 @@ Tests:
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return re.sub(r'\x1b\[[^m]*m', '', text)
 
 from knowledge_lake.plugins.protocols import DiscoveryResult
 
@@ -165,7 +171,7 @@ class TestDiscoverCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["discover", "--help"])
         assert result.exit_code == 0
-        assert "--limit" in result.output
+        assert "--limit" in _strip_ansi(result.output)
 
     def test_discover_runs_with_mock(self, mock_discovery_plugin, db_session):
         """klake discover with mocked pipeline produces output."""
