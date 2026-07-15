@@ -1102,15 +1102,15 @@ def list_curated_documents_endpoint(
         stmt = stmt.order_by(Artifact.quality_score.desc())
         artifacts = list(session.execute(stmt).scalars())
 
-    return [
-        CuratedDocumentOut(
-            artifact_id=a.id,
-            quality_score=a.quality_score,
-            dedup_status=(a.metadata_ or {}).get("dedup_status"),
-            created_at=a.created_at.isoformat() if a.created_at else "",
-        )
-        for a in artifacts
-    ]
+        return [
+            CuratedDocumentOut(
+                artifact_id=a.id,
+                quality_score=a.quality_score,
+                dedup_status=(a.metadata_ or {}).get("dedup_status"),
+                created_at=a.created_at.isoformat() if a.created_at else "",
+            )
+            for a in artifacts
+        ]
 
 
 @app.get(
@@ -1442,19 +1442,19 @@ def list_documents_endpoint(
         stmt = stmt.limit(limit).offset(offset)
         artifacts = list(session.execute(stmt).scalars())
 
-    return [
-        ArtifactOut(
-            id=a.id,
-            artifact_type=a.artifact_type,
-            source_id=a.source_id,
-            parent_artifact_id=a.parent_artifact_id,
-            content_hash=a.content_hash,
-            created_at=a.created_at.isoformat() if a.created_at else "",
-            storage_uri=a.storage_uri,
-            mime_type=a.mime_type,
-        )
-        for a in artifacts
-    ]
+        return [
+            ArtifactOut(
+                id=a.id,
+                artifact_type=a.artifact_type,
+                source_id=a.source_id,
+                parent_artifact_id=a.parent_artifact_id,
+                content_hash=a.content_hash,
+                created_at=a.created_at.isoformat() if a.created_at else "",
+                storage_uri=a.storage_uri,
+                mime_type=a.mime_type,
+            )
+            for a in artifacts
+        ]
 
 
 @app.get(
@@ -1524,15 +1524,15 @@ def list_datasets_endpoint(
         )
         datasets = list(session.execute(stmt).scalars())
 
-    return [
-        DatasetOut(
-            dataset_id=ds.id,
-            name=ds.name,
-            created_at=ds.created_at.isoformat() if ds.created_at else "",
-            row_count=ds.example_count or 0,
-        )
-        for ds in datasets
-    ]
+        return [
+            DatasetOut(
+                dataset_id=ds.id,
+                name=ds.name,
+                created_at=ds.created_at.isoformat() if ds.created_at else "",
+                row_count=ds.example_count or 0,
+            )
+            for ds in datasets
+        ]
 
 
 @app.get(
