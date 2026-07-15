@@ -8,11 +8,11 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.5 — Phase 16 complete 2026-07-14)
+## Current State (v2.5 shipped 2026-07-15)
 
-- **Shipped:** v2.0 — Agent-Ready Lake (Phases 7–12); v2.5 Phases 13–16 complete (Tree Index, Tree Retrieval, Query Router, OpenKB Export)
-- **Source lines:** ~22,000 Python
-- **Tests:** 651 unit passing (+35 xpass, 5 xfail) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export)
+- **Source lines:** ~26,000 Python (src) + ~24,300 (tests)
+- **Tests:** 971 passing, 0 failed, 0 xpassed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
 - **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
 - **Retrieval:** hybrid BM25 + dense (RRF), mode-switchable (`hybrid|dense|sparse`); two-stage tree retrieval; query router dispatching between chunk and tree paths (`chunk|tree|two_stage|auto`)
@@ -23,19 +23,22 @@ Every domain resource ingested must be traceable from raw source through every t
 - **CLI:** `klake` Typer app extended with `crawl-all`, `set-schedule`, `mcp`, `openapi`, `search --mode --route`, `reindex --hybrid`, `export-wiki`
 - **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search, `/export-wiki`
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
-- **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; code review phase 16: 2 criticals (orphan S3 page deletion, slug disambiguation) flagged for fix
-- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results; `mode` param dual semantics on tree path; wiki orphan page deletion (CR-01); wiki slug second-collision overwrite (CR-02); Dagster container rebuild / code-location reload for new sensors
+- **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; v2.5 milestone audit PASSED (19/19 requirements, 5/5 E2E flows); E2E gap analysis closed — all 19 findings resolved
+- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets
+- **Known data quality gap (drives v2.6):** ~28% of chunks are garbage and 33% of the gold RAG corpus is unusable. Root cause: the clean stage is architecturally bypassed — `clean_document` forwards the *uncleaned* `parsed_doc` to chunk/tree/enrich, so boilerplate removal reaches only the pretrain path
 
-## Current Milestone: v2.5 PageIndex Plugin Integration
+## Next Milestone: v2.6 Data Quality & Enrichment
 
-**Goal:** Add tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, with a two-stage hybrid routing architecture and comprehensive system documentation.
+**Goal:** Stop garbage content from reaching the silver zone, chunking, tree index, and gold export — so the RAG corpus is trustworthy rather than merely populated.
 
 **Target features:**
-- PageIndex tree index generation as a new artifact type (silver zone JSON, parallel to chunking)
-- Two-stage retrieval: Qdrant doc-level selection → PageIndex tree search for precision
-- OpenKB-style compiled knowledge base export (interlinked wiki from ingested documents)
-- Query router to dispatch between chunk-search and tree-search paths
-- Comprehensive architectural documentation of the full system
+- Put cleaning on the load-bearing path (chunk/tree/enrich must consume cleaned text)
+- Crawler-level boilerplate stripping so nav/footers/cookie banners never enter the raw zone
+- Section-level boilerplate classification and a minimum-substance gate at chunk
+- Index-time deduplication (one vector per unique text, lineage preserved per WR-05)
+- Quality gate on gold export
+
+**Scope decisions:** full rework including crawler extraction · forward-only (no backfill of the existing corpus) · dedup at index time, not chunk time · research first. Full context: `.planning/MILESTONE-CONTEXT.md`. Phase numbering continues at **Phase 17**.
 
 ## Requirements
 
@@ -100,17 +103,51 @@ Every domain resource ingested must be traceable from raw source through every t
 - [x] RETR-01: Hybrid BM25 + dense search (Qdrant sparse vectors + RRF fusion) — Phase 10
 - [x] RETR-03: Configurable search mode (hybrid | dense | sparse) — Phase 10
 
-**PageIndex / Tree Retrieval (v2.5, Phases 13–15)**
-- [x] TREE-01..05: Hierarchical tree index from parsed documents (silver zone JSON artifact) — Phase 13
-- [x] RETR-04..08: Two-stage tree retrieval (Qdrant shortlist → per-document tree traversal) — Phase 14
+### Validated (v2.5 — PageIndex Plugin Integration, milestone complete 2026-07-15)
+
+**Tree Indexing**
+- [x] TREE-01: Hierarchical tree index (JSON) from any parsed document's sections, silver-zone artifact with full lineage — Phase 13
+- [x] TREE-02: Tree index skipped on content-hash match (no redundant LLM calls) — Phase 13
+- [x] TREE-03: Each node carries title, summary, page range, children; deterministic mode uses heading text — Phase 13
+- [x] TREE-04: LLM-generated node summaries as opt-in mode, gated by LlmSpend budget cap — Phase 13
+- [x] TREE-05: Tree index runs as a Dagster asset parallel to chunking (fan-out from clean_document) — Phase 13
+
+**Tree Retrieval**
+- [x] RETR-04: Two-stage search — Qdrant document shortlist (stage 1) + per-document tree traversal (stage 2) — Phase 14
+- [x] RETR-05: Heuristic tree traversal (keyword matching + DFS) with no LLM calls — Phase 14
+- [x] RETR-06: LLM-guided tree navigation over node summaries (opt-in mode) — Phase 14
+- [x] RETR-07: Candidate trees loaded in parallel (asyncio) with configurable concurrency limit — Phase 14
+- [x] RETR-08: Hits carry page-level citations and a `citation_source: tree` discriminator — Phase 14
+
+**Query Routing**
 - [x] ROUTE-01: `routed_search()` dispatcher with per-call override → settings.router.default_route fallthrough — Phase 15
 - [x] ROUTE-02: `classify_route()` heuristic classifier (section_page_ref, comparison_multihop, structural_breadth) — Phase 15
 - [x] ROUTE-03: chunk/tree/two_stage/auto dispatch with D-05 auto-fallback semantics — Phase 15
 - [x] ROUTE-04: route param wired to REST (`?route=`), CLI (`--route`), MCP, and OpenAPI spec — Phase 15
 
-### Deferred to v2.1
+**OpenKB Export**
+- [x] KB-01: Interlinked wiki of Markdown pages with `[[wikilinks]]` in the gold zone — Phase 16
+- [x] KB-02: Per-document summary pages, cross-document concept pages, and a root index — Phase 16
+- [x] KB-03: Entity cross-linking on IDF-filtered enrichment entities (only specific terms link) — Phase 16
+- [x] KB-04: Incremental wiki compilation — manifest diff rebuilds only affected pages — Phase 16
+- [x] KB-05: Wiki export via CLI (`klake export-wiki`) and API (`POST /export-wiki`) — Phase 16
 
-- EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-05/06 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-02 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy), QUALITY-01 (quality-score search propagation)
+### Active (v2.6 — Data Quality & Enrichment)
+
+Requirements are defined by `/gsd-new-milestone` (research → requirements → roadmap). Target areas:
+
+- [ ] Cleaned text consumed by chunk/tree/enrich (close the clean-stage bypass)
+- [ ] Crawler-level boilerplate stripping (forward-only; raw zone immutability preserved)
+- [ ] Section-level boilerplate classification (deterministic-first)
+- [ ] Minimum-substance gate at chunk (no floor exists today — `ChunkSettings` has only max/overlap/tokenizer)
+- [ ] Index-time dedup preserving per-document chunk lineage (WR-05)
+- [ ] Quality gate on gold RAG corpus export
+
+### Deferred to a future milestone
+
+- EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-05/06 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-02 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy)
+- Deferred at v2.5: ROUTE-05/06 (LLM-based routing for ambiguous queries; routing telemetry + feedback loop), KB-06/07/08 (watch mode; wiki lint for contradictions/orphans/staleness; multi-turn chat grounded in wiki), TREE-06/07 (tree schema versioning + migration; PageIndex File System meta-tree over the corpus)
+- **QUALITY-01** (quality-score search propagation) — deferred since v2.0; overlaps v2.6 scope and should be reconsidered during v2.6 requirements rather than carried forward blindly
 
 ### Out of Scope
 
@@ -129,6 +166,9 @@ Every domain resource ingested must be traceable from raw source through every t
 - Using AWS Bedrock models through LiteLLM proxy
 - Healthcare domain is deeply familiar (HL7 FHIR, CMS, HIPAA, ONC, etc.)
 - v1.0 shipped 2026-07-02 → 2026-07-07 (5 days, 259 commits, 303 files changed)
+- v2.0 shipped 2026-07-12 (6 phases, 38 plans, 252 commits)
+- v2.5 shipped 2026-07-15 (4 phases, 14 plans, 190 commits, 243 files changed, +32,060/−2,377)
+- First end-to-end run on real healthcare data (34 sources, 4,499 chunks) proved the pipeline works mechanically but produces ~28% garbage content — mechanical correctness and data quality are separate problems, and only the former was being tested
 - Plugin architecture: every external tool is replaceable without breaking core registries or lineage
 - Closest analogues: DataTrove (pretraining corpus), RAGFlow (RAG), Dagster (orchestration), Docling (parsing)
 
@@ -171,6 +211,16 @@ Every domain resource ingested must be traceable from raw source through every t
 | `routed_search()` as plain function dispatch (not QueryRouter class) | Function-over-class convention; simpler, no class-based alias complexity | ✓ Validated (Phase 15) — 25 unit tests, all surfaces wired |
 | Query router default `auto` (classifier-driven) not `chunk` | Auto routing ships silently; ops can pin to `chunk` via KLAKE_ROUTER__DEFAULT_ROUTE=chunk without code change | ✓ Validated (Phase 15) — cheap rollback lever confirmed |
 | No `both`/`merge` route — only single-path dispatch | Avoids merged-result complexity; tree and chunk are mutually exclusive per query | ✓ Validated (Phase 15) — D-09 prohibition verified in code review |
+| Tree index as a new artifact type behind `IndexerPlugin`, not a chunker replacement | Trees and chunks are complementary; plugin seam keeps PageIndex swappable like every other external tool | ✓ Validated (v2.5) — entry-point group + Dagster fan-out, chunking untouched |
+| Deterministic tree building first, LLM summaries opt-in | Project "deterministic first" constraint; heading text is a serviceable summary at zero cost | ✓ Validated (v2.5) — same pattern held for traversal (heuristic DFS default, LLM-nav opt-in) |
+| Heuristic hits always computed before LLM-nav, never replaced by it | LLM navigation must never be able to produce a worse result than the deterministic path | ✓ Validated (Phase 14) — invalid node_ids discarded, unmentioned hits retained; LLM-nav cannot raise |
+| Two-stage retrieval reuses chunk `search()` unchanged for stage 1 | Avoids forking retrieval logic; the shortlist is exactly the existing search | ✓ Validated (Phase 14) — no changes to `search()` |
+| PageIndex pinned to pre-release `0.3.0.dev3` | No stable release available; vendoring fallback planned | ⚠ Revisit — pre-release API may change; vendoring fallback still untested |
+| Wiki cross-links gated by IDF, not raw entity match | Linking on common terms produces a hairball; IDF keeps links meaningful | ✓ Validated (Phase 16) — threshold still needs empirical tuning for link density |
+| `xfail_strict = true` enabled repo-wide | A stale xfail marker hid two API endpoints returning 500s for months | ✓ Validated (2026-07-15) — a test that passes while marked xfail now fails the build |
+| Docker base pinned to `.python-version` (`python:3.12-slim`) | An unbuildable `python:3.14-slim` base silently kept a 13-day-old container alive, masking real bugs | ✓ Validated (2026-07-15) — CI now builds the api image; `/health` reports running version |
+| Chunk dedup key includes parent (`{parsed_artifact_id}:{text}`) — WR-05 | Prevents lineage corruption when identical text appears in different documents | ⚠ Revisit — directly causes 653 duplicate embeddings (14% of corpus); v2.6 resolves via index-time dedup rather than overturning this |
+| Clean stage writes `cleaned_document` but chunk/tree/enrich read `parsed_doc` | Not a decision — an unintended bypass found 2026-07-15 | ✗ Defect — boilerplate removal reaches only the pretrain path; primary driver of v2.6 |
 
 ## Evolution
 
@@ -179,4 +229,4 @@ Every domain resource ingested must be traceable from raw source through every t
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-14 after v2.5 Phase 16 (OpenKB Export) complete — all v2.5 phases shipped, milestone complete*
+*Last updated: 2026-07-15 after v2.5 milestone (PageIndex Plugin Integration) shipped and archived*

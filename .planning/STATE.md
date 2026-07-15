@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: PageIndex Plugin Integration
-current_phase: 15
-current_phase_name: Query Router
-status: executing
+status: Awaiting next milestone
 stopped_at: Phase 16 context gathered
-last_updated: "2026-07-14T13:09:26.984Z"
-last_activity: 2026-07-14
-last_activity_desc: Phase 14 complete, transitioned to Phase 15
+last_updated: "2026-07-15T15:27:48.115Z"
+last_activity: 2026-07-15
+last_activity_desc: Milestone v2.5 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
   total_plans: 14
   completed_plans: 14
   percent: 100
+current_phase: 15
+current_phase_name: Query Router
 ---
 
 # Project State
@@ -28,12 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 15 — Query Router
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-15 — Completed quick task 260715-chy: final low findings + Dockerfile CI guard + parse section persistence. **E2E audit CLOSED — all 19 findings resolved.** Suite 971 passed, 0 failed.
-
-Progress: [██████████] 100%
+Phase: Milestone v2.5 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-15 — Milestone v2.5 completed and archived
 
 ## Performance Metrics
 
@@ -164,3 +162,7 @@ Items acknowledged and carried forward:
 Last session: 2026-07-14T07:11:17.707Z
 Stopped at: Phase 16 context gathered
 Resume file: .planning/phases/16-openkb-export/16-CONTEXT.md
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

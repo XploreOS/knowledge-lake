@@ -1,5 +1,25 @@
 # Milestones
 
+## v2.5 PageIndex Plugin Integration (Shipped: 2026-07-15)
+
+**Phases completed:** 4 phases, 14 plans, 22 tasks
+
+**Delivered:** Tree-based reasoning retrieval (PageIndex) and compiled knowledge bases (OpenKB) alongside the existing vector RAG pipeline, joined by a heuristic query router.
+
+**Key accomplishments:**
+
+- **Tree Index Foundation (P13 · TREE-01..05):** A hierarchical tree index as a new silver-zone artifact type, built by a deterministic stack-based builder over `ParsedDoc.sections` with content-hash no-op dedup and an opt-in, budget-capped LLM summary mode. Shipped as the `PageIndexIndexer` builtin behind a new `IndexerPlugin` Protocol + `knowledge_lake.indexers` entry-point group, and wired as a `tree_index_document` Dagster asset fanning out from `clean_document` parallel to chunking — tool-agnostic seam preserved, full lineage back to source.
+- **Tree Retrieval (P14 · RETR-04..08):** Two-stage retrieval — the existing chunk `search()` reused *unchanged* for a Qdrant document shortlist, then Semaphore-bounded concurrent async loading and traversal of candidate trees. Deterministic keyword+DFS traversal by default with an opt-in, budget-capped LLM-guided navigation mode that never raises (heuristic hits are always computed first as fallback). Results carry page-level citations via an additive `citation_source: tree` discriminator on `Hit`, behind a `RetrieverPlugin` Protocol mirroring the indexer seam.
+- **Query Router (P15 · ROUTE-01..04):** `classify_route()` heuristic classifier (section/page refs, comparison, structural-breadth triggers) plus a `routed_search()` dispatcher over `chunk|tree|two_stage|auto`, with auto-fallback to chunk on empty tree results. Wired to all four surfaces — REST, CLI, MCP, OpenAPI. Ships defaulting to `auto` with `KLAKE_ROUTER__DEFAULT_ROUTE=chunk` as a zero-code-change rollback lever.
+- **OpenKB Export (P16 · KB-01..05):** `compile_wiki()` compiles enrichment metadata into an interlinked Markdown knowledge base in the gold zone — per-document summary pages, cross-document concept pages, and a root index, cross-linked on IDF-filtered entities so only specific terms generate links. Manifest-based content-hash diffing rebuilds only affected pages; exposed via `klake export-wiki` and `POST /export-wiki`, with archive export for Obsidian vault import.
+- **E2E Hardening (post-phase, 2026-07-15):** A full end-to-end gap analysis found and closed **19 findings**. The most consequential were structural rather than cosmetic: a `python:3.14-slim` base image that could not build (greenlet has no CPython 3.14 support) had silently left a 13-day-old API container running — which is why two endpoint families returning 500s (`DetachedInstanceError` from responses built after session expiry) stayed invisible; and a section-less parse path that was collapsing 38 sections into 1 chunk, fixed by a silver-zone sections sidecar (51 real per-section chunks, ~30x faster: 43s → 1.4s). `xfail_strict = true` is now active — a stale xfail marker is exactly what hid the 500s.
+
+**Quality gates:** all 4 phases verified `passed` (19/19 requirements), threat-secured, and Nyquist-compliant. Milestone audit: PASSED (19/19 requirements · 4/4 phases · 5/5 E2E flows observable). Full suite: 971 passed, 0 failed, 0 xpassed.
+
+**Known deferred:** ROUTE-05/06 (LLM routing, telemetry), KB-06/07/08 (watch mode, wiki lint, grounded chat), TREE-06/07 (schema versioning, meta-tree). Open tech debt carried into v2.6: MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual-semantics on the tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs still cannot contribute Dagster jobs.
+
+---
+
 ## v2.0 Agent-Ready Lake (Shipped: 2026-07-12)
 
 **Phases completed:** 6 phases, 38 plans, 60 tasks
