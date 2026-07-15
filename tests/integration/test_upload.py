@@ -68,7 +68,7 @@ class TestUpload:
             patch("knowledge_lake.pipeline.ingest.get_session", mock_session),
             patch("knowledge_lake.pipeline.ingest.StorageBackend") as MockStorage,
         ):
-            def mock_put_raw(source_id, data, ext, session, mime_type=None):
+            def mock_put_raw(source_id, data, ext, session, mime_type=None, domain=None, tags=None):
                 content_hash = hashlib.sha256(data).hexdigest()
                 existing = registry_repo.get_artifact_by_hash(
                     session, content_hash, "raw_document"
@@ -123,7 +123,7 @@ class TestUpload:
             patch("knowledge_lake.pipeline.ingest.get_session", mock_session),
             patch("knowledge_lake.pipeline.ingest.StorageBackend") as MockStorage,
         ):
-            def mock_put_raw(source_id, data, ext, session, mime_type=None):
+            def mock_put_raw(source_id, data, ext, session, mime_type=None, domain=None, tags=None):
                 content_hash = hashlib.sha256(data).hexdigest()
                 existing = registry_repo.get_artifact_by_hash(
                     session, content_hash, "raw_document"
