@@ -108,6 +108,59 @@ def slugify(title: str) -> str:
     return slugged or "untitled"
 
 
+_SENTENCE_END_PUNCT = (".", "!", "?")
+
+
+def truncate_lead(summary: str, max_chars: int) -> str:
+    """Truncate a summary to at most max_chars without cutting mid-word (KL-11).
+
+    Prefers the last sentence boundary within the window (a run of text ending
+    in ``.``, ``!`` or ``?``); falls back to the last word boundary (space) if
+    no sentence end is found; falls back to a hard cut only if the window has
+    no whitespace at all. An ellipsis is appended whenever truncation occurs.
+    If the summary already fits within max_chars, it is returned unchanged
+    with no ellipsis.
+
+    Parameters
+    ----------
+    summary:
+        Raw summary text (possibly empty or None-coerced to "" by the caller).
+    max_chars:
+        Maximum character length before truncation kicks in
+        (``wiki_cfg.summary_excerpt_chars``, default 500 — unchanged by this fix).
+
+    Returns
+    -------
+    str
+        The summary, truncated on a boundary with a trailing "..." if it was
+        cut; unchanged otherwise.
+    """
+    text = summary or ""
+    if len(text) <= max_chars:
+        return text
+    window = text[:max_chars]
+
+    # Prefer the last sentence-ending punctuation within the window.
+    boundary = -1
+    if window and window[-1] in _SENTENCE_END_PUNCT:
+        boundary = len(window)
+    else:
+        for punct in _SENTENCE_END_PUNCT:
+            idx = window.rfind(punct + " ")
+            if idx != -1:
+                boundary = max(boundary, idx + len(punct))
+
+    if boundary != -1:
+        truncated = window[:boundary].rstrip()
+    else:
+        # No sentence boundary — fall back to the last word boundary so we
+        # never cut mid-word.
+        word_boundary = window.rfind(" ")
+        truncated = window[:word_boundary].rstrip() if word_boundary != -1 else window.rstrip()
+
+    return truncated + "..."
+
+
 def disambiguate_slug(slug: str, content_hash: str) -> str:
     """Append the first 8 hex characters of content_hash to resolve slug collisions (D-02).
 
@@ -535,7 +588,7 @@ def compile_wiki(
                 concept_slug, _ = concept_slug_map[entity]
                 entities_with_slugs.append((entity, concept_slug))
 
-        lead = (doc["summary"] or "")[:wiki_cfg.summary_excerpt_chars]
+        lead = truncate_lead(doc["summary"] or "", wiki_cfg.summary_excerpt_chars)
 
         content = _render_doc_page(
             title=doc["title"] or doc_slug,
