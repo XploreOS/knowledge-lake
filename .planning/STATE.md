@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 15 — Query Router
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-15 — Completed quick task 260715-51d: KL-01 domain filtering + KL-02 LLM pricing (all high-severity audit findings now closed)
+Last activity: 2026-07-15 — Completed quick task 260715-5pb: KL-07, KL-04/05/06, KL-11, KL-16, KL-10 (10/17 audit findings closed; xfail_strict on; surfaced KL-18 — two API endpoints returning 500)
 
 Progress: [██████████] 100%
 
@@ -124,9 +124,12 @@ None yet.
 - [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
 - [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
-- [Audit 2026-07-15]: E2E gap analysis found 17 findings — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **All 3 high-severity resolved** (KL-01, KL-02, KL-03). 14 open: 6 medium, 8 low. Next highest-value: KL-07 (SSRF blocklist misses 0.0.0.0/CGNAT/reserved — one-line `is_global` fix), then KL-04/05/06 as a single design decision on what payload `quality_score` means.
+- [Audit 2026-07-15]: E2E gap analysis — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). **10 of 17 original findings resolved**, including all 3 high-severity. 7 original still open (0 high; 2 medium — KL-08, KL-09; 5 low).
+- **[KL-18 — HIGH, OPEN, highest priority]**: `GET /documents` and `GET /datasets` return **500** — responses are built outside the `get_session()` scope, so lazy ORM access raises `DetachedInstanceError`. Confirmed against the real app + real data. Found 2026-07-15 while removing stale xfail markers that were hiding it (their reason claimed the endpoints were "not yet added"; they exist and are broken). Compounded by KL-08 — the stale container serves only 2 of 29 routes, so nobody hits them locally either. Small fix; the tests already exist.
+- [KL-19 — LOW, OPEN]: 4 mode-forwarding tests patch `pipeline.search.search`, but `route.py` binds that name at import time, so the patch never applies and the tests can never pass. Test bug, not a production gap.
+- [KL-16 deferred]: domain packs still cannot contribute Dagster jobs without editing framework source — roadmap item. Only the misleading `healthcare_e2e_job` name was fixed.
 - [KL-01 decision, 2026-07-15]: `domain=` on exports **filters rows**, it does not merely label the output path. `domain=None` remains "no filter, all domains, `_unclassified` path" — pinned by regression test. Known deferred wart: `_unclassified` still labels an all-domain export.
-- [KL-10]: `xfail_strict` cannot be enabled until the 42 stale "Wave 0 stub" xfail markers are removed — flipping it first turns 42 xpassing tests red. Ordering constraint, not optional.
+- [Testing, 2026-07-15]: `xfail_strict = true` is now active. Any test that passes while marked xfail fails the build. Do not add an xfail marker to make a red test go away — a stale marker is exactly what hid KL-18 (two API endpoints returning 500) for months.
 
 ### Quick Tasks Completed
 
@@ -135,6 +138,7 @@ None yet.
 | 260715-3w5 | Write E2E gap analysis report | 2026-07-15 | 9d1666e | [260715-3w5-write-e2e-gap-analysis-report](./quick/260715-3w5-write-e2e-gap-analysis-report/) |
 | 260715-4b9 | Fix CI integration tests (KL-03) and add aviation reference pack | 2026-07-15 | ea14046 | [260715-4b9-fix-ci-integration-tests-kl-03-and-add-a](./quick/260715-4b9-fix-ci-integration-tests-kl-03-and-add-a/) |
 | 260715-51d | Fix KL-01 domain filtering in exports and KL-02 LLM pricing | 2026-07-15 | 6ea82c2 | [260715-51d-fix-kl-01-domain-filtering-in-exports-an](./quick/260715-51d-fix-kl-01-domain-filtering-in-exports-an/) |
+| 260715-5pb | Fix KL-07, KL-04/05/06, KL-11, KL-16, KL-10 | 2026-07-15 | bf8b6ac | [260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10](./quick/260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10/) |
 
 ## Deferred Items
 

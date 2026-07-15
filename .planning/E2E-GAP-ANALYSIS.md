@@ -5,6 +5,97 @@ audited: 2026-07-15T02:48:00Z
 audited_against: 49c77f4
 status: findings_open
 resolved:
+  - id: KL-07
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [5b5bcd7]
+    fix: >
+      Replaced the hand-rolled _PRIVATE_NETS membership test with
+      `not addr.is_global`, keeping the list as documentation. Verified through
+      the real validate_public_url() in BOTH directions: 0.0.0.0, 100.64.0.1,
+      198.18.0.1, 192.0.0.1, 240.0.0.1 and :: now blocked; controls (10.0.0.1,
+      169.254.169.254, 127.0.0.1) still blocked; public IPv4/IPv6 and a live
+      www.faa.gov resolution still ALLOWED — no over-blocking, crawling intact.
+      DNS-rebinding TOCTOU remains open by design (separate change).
+  - id: KL-04
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [6a1e9b4, 8b9e27b, 76963c2]
+    fix: "See KL-06 — KL-04/05/06 were one problem and one fix."
+  - id: KL-05
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [6a1e9b4, 8b9e27b, 76963c2]
+    fix: "See KL-06 — KL-04/05/06 were one problem and one fix."
+  - id: KL-06
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [6a1e9b4, 8b9e27b, 76963c2]
+    decision: "Make the real chain explicit; payload quality_score = curated ?? enriched ?? None (user decision)"
+    fix: >
+      D-01's "parallel branches that do not block" was false parallelism:
+      curate reads the enriched sibling for the 40% enrich term of its composite
+      (defaulting to 0.5 when absent) and index reads it for the payload.
+      Measured on the real aviation doc: the SAME document scored 0.797 when
+      curate ran before enrich vs 0.965 after — a 21% swing from scheduling
+      order alone. Added non-data deps edges (curate deps=[enrich],
+      chunk deps=[curate]) making the order clean → enrich → curate → chunk →
+      embed → index; data inputs unchanged. Added
+      get_curated_artifact_for_parsed and payload precedence curated ??
+      enriched ?? None. Added opt-in `klake index --refresh-payload` to repair
+      already-indexed chunks (reindex previously copied points verbatim, so
+      pre-enrichment payloads were unrepairable without full re-ingest).
+      Live proof: 5 aviation chunks went from quality_score None → 0.797, and
+      `search --min-quality-score 0.5` now returns hits for that document — the
+      exact query KL-04 documented returning nothing.
+    followup_caught: >
+      The first attempt left core_pipeline_e2e_job's selection excluding
+      curate_document_asset. Dagster drops a deps= edge whose target is outside
+      the selection, so the race was still live in the main E2E job. Fixed in
+      76963c2, plus a vacuous-guard fix: job.asset_layer.asset_graph IS
+      job-scoped (8 keys vs global 13) but contains curate as a NON-EXECUTABLE
+      node, so a pure ancestry assertion passed while the job never ran curate.
+      The test now intersects ancestry with executable_asset_keys.
+      Mutation-verified: removing curate from the selection fails 2 tests.
+  - id: KL-11
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [8ee9082]
+    fix: >
+      Added truncate_lead(): prefers the last sentence-ending punctuation within
+      the limit, falls back to the last word boundary, appends an ellipsis only
+      when truncation occurred. summary_excerpt_chars (500) unchanged — the
+      limit was fine, the slicing wasn't. Short summaries pass through
+      byte-identical with no ellipsis.
+  - id: KL-16
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [dbd8abd]
+    decision: "Rename only; defer the pack-contributed-jobs extension point to the roadmap (user decision)"
+    fix: >
+      Renamed healthcare_e2e_job → core_pipeline_e2e_job (symbol + Dagster
+      name=), dropped "healthcare" from the description, updated
+      definitions.py and the two doc references. The asset selection was always
+      generic. No domain name remains in framework core.
+    still_open: >
+      The real gap — domain packs cannot contribute Dagster jobs without editing
+      framework source — is DEFERRED to the roadmap, not fixed. Packs remain
+      data+prompts only.
+  - id: KL-10
+    resolved: 2026-07-15
+    quick_task: 260715-5pb
+    commits: [9d3f98b, bf8b6ac]
+    fix: >
+      Removed 42 stale xfail markers from tests that now XPASS (re-measured
+      after the other fixes, per the ordering constraint — not reused from the
+      audit). Left all 12 genuine XFAIL markers in place; xfail_strict only
+      fails on XPASS. Then set xfail_strict = true. Mutation-verified: marking a
+      passing test xfail now fails the run with XPASS(strict).
+      Final: 943 passed, 0 xpassed, 0 failed, 0 errors, 12 xfailed.
+    value: >
+      The markers were hiding real bugs. Removing them surfaced KL-18 (two API
+      endpoints returning 500) and KL-19 (4 tests that can never pass). This is
+      precisely what a lying xfail marker costs.
   - id: KL-01
     resolved: 2026-07-15
     quick_task: 260715-51d
@@ -69,10 +160,28 @@ counts:
   medium: 6
   low: 8
   total: 17
-  open: 14
-  resolved: 3
+  discovered_during_remediation: 2   # KL-18, KL-19 — see `discovered` below
+  open: 9
+  resolved: 10
   high_open: 0
   verified_working: 7
+discovered:
+  - id: KL-18
+    severity: high
+    area: api
+    reproduced: true
+    found: 2026-07-15
+    found_by: "KL-10 remediation — a stale xfail marker was hiding it"
+    title: "GET /documents and GET /datasets return 500 (DetachedInstanceError)"
+    status: open
+  - id: KL-19
+    severity: low
+    area: tests
+    reproduced: true
+    found: 2026-07-15
+    found_by: "KL-10 remediation"
+    title: "4 mode-forwarding tests patch the wrong target and can never pass"
+    status: open
 tests:
   at_audit_time:
     combined: 828 passed
@@ -436,6 +545,11 @@ precondition.
 
 ### KL-04 — The quality filter silently returns nothing for the documented happy path
 
+> **RESOLVED 2026-07-15** — `260715-5pb` (`6a1e9b4`, `8b9e27b`, `76963c2`). Fixed as one
+> change with KL-05/KL-06 — see KL-06's resolution. `search --min-quality-score 0.5`
+> now returns hits for the aviation document that previously returned nothing.
+
+
 **What.** The README presents `ingest-url` as the "full pipeline shortcut" and,
 thirty lines later, documents `search --min-quality-score 0.5`. Run both and you
 get zero results, with no warning.
@@ -462,6 +576,11 @@ payload key that is null across the collection. At minimum, correct the README.
 
 ### KL-05 — `curate`'s composite score never reaches search
 
+> **RESOLVED 2026-07-15** — `260715-5pb`. Payload precedence is now
+> `curated ?? enriched ?? None`, so curate's composite reaches search. Live proof:
+> 5 aviation chunks went from `quality_score: None` to `0.797`.
+
+
 **What.** `curated_document` and `enriched_document` are siblings — both parent
 off `cleaned_document` (D-01). But `index()` resolves only the enriched one via
 `get_enriched_artifact_for_parsed()`. The DataTrove-style composite score that
@@ -484,6 +603,13 @@ two different measurements into one ambiguous field.
 ---
 
 ### KL-06 — Payload enrichment is a scheduling race, with no repair path
+
+> **RESOLVED 2026-07-15** — `260715-5pb` (`6a1e9b4`, `8b9e27b`, `76963c2`).
+> D-01's "parallel, doesn't block" was false parallelism — measured at a **21% swing**
+> on the same document from scheduling order alone. The chain is now enforced, and
+> `klake index --refresh-payload` repairs already-indexed chunks. See frontmatter
+> `resolved` for the follow-up that caught the job-selection gap.
+
 
 **What.** `index_chunks` reads the enriched sibling *at runtime*. But D-01
 deliberately makes `enrich_document` a parallel branch that, in its own
@@ -513,6 +639,11 @@ registry rather than copying.
 ---
 
 ### KL-07 — SSRF guard misses several reserved ranges, including `0.0.0.0`
+
+> **RESOLVED 2026-07-15** — `260715-5pb` (`5b5bcd7`). Now `not addr.is_global`.
+> Verified both directions: all 6 reserved ranges blocked, 3 controls still blocked,
+> public IPv4/IPv6 + live `faa.gov` still allowed (no over-blocking).
+
 
 **What.** `validate_public_url()` is otherwise well built — https-only,
 `getaddrinfo()` across all A/AAAA records, IPv4-mapped-IPv6 unwrapping, and
@@ -599,6 +730,11 @@ reviewer notices.
 
 ### KL-10 — 42 xpassed tests with `xfail_strict` unset
 
+> **RESOLVED 2026-07-15** — `260715-5pb` (`9d3f98b`, `bf8b6ac`). 42 stale markers
+> removed, 12 genuine xfails kept, `xfail_strict = true`, mutation-verified.
+> **It was hiding real bugs — see KL-18 and KL-19.**
+
+
 Markers like *"Wave 0 stub — implementation pending"* sit on features that now
 work (`test_domain_loader`, `test_cli_init_index`, `test_api_search_mode`…). With
 `xfail_strict` unset these can never fail the build: if the feature regressed, CI
@@ -606,6 +742,10 @@ would record a tidy `xfail` and stay green. Forty-two tests that look like
 coverage and function as none.
 
 ### KL-11 — Wiki summaries are cut mid-sentence
+
+> **RESOLVED 2026-07-15** — `260715-5pb` (`8ee9082`). Sentence/word-boundary
+> truncation with an ellipsis; short summaries unchanged.
+
 
 `wiki.py:538` — `lead = (doc["summary"] or "")[:500]`. A hard character slice: no
 word boundary, no ellipsis. The stored summary is fine; the published page is
@@ -652,6 +792,11 @@ it's unindexed, unvalidated, and unconstrained in the registry.
 
 ### KL-16 — Domain packs cannot contribute pipeline behavior
 
+> **PARTIALLY RESOLVED 2026-07-15** — `260715-5pb` (`dbd8abd`). Renamed to
+> `core_pipeline_e2e_job`; no domain name left in framework core. The real gap —
+> packs cannot contribute Dagster jobs — is **deferred to the roadmap** by decision.
+
+
 A pack may ship `domain.yaml`, `sources.yaml`, `taxonomy.yaml`, `prompts/` and a
 validator — data and text, no behavior. Meanwhile `healthcare_e2e_job` lives in
 framework core (`dagster_defs/assets.py:928`) and is registered in
@@ -676,6 +821,57 @@ without editing framework source.
   place and not the other.
 - `domains/models.py:78` — a framework-core dataclass documented as *"Result from
   HealthcareValidator"*.
+
+---
+
+## Discovered during remediation (2026-07-15)
+
+These were not in the original audit. Both were **hidden behind stale xfail
+markers** and surfaced the moment KL-10 removed the lies — which is the clearest
+possible argument for why KL-10 mattered.
+
+### KL-18 — `GET /documents` and `GET /datasets` return 500 · **HIGH · open**
+
+**What.** `list_documents_endpoint` (`api/app.py:1405`) and
+`list_datasets_endpoint` (`:1496`) build their response objects **outside** the
+`with get_session()` block. The ORM instances are detached by then, so the first
+lazy attribute access raises `sqlalchemy.orm.exc.DetachedInstanceError` → 500.
+
+**Evidence** — real app, real registry data:
+
+```
+GET /documents   -> 500  >>> BROKEN (5xx)
+GET /datasets    -> 500  >>> BROKEN (5xx)
+GET /sources     -> 200  OK
+GET /health      -> 200  OK
+```
+
+**Why it hid for so long.** Two tests covered these endpoints
+(`test_get_documents_returns_200`, `test_get_datasets_returns_200`) but carried
+`xfail(reason="Wave 0 stub — GET /documents not yet added")`. The reason was
+false — the endpoints exist; they're broken. The marker converted a real 500 into
+a tidy green `xfail`. Compounding it, KL-08 means the running API container
+serves only 2 of 29 routes, so nobody hits these endpoints locally either.
+
+**Fix.** Build the response objects inside the session scope (or
+`expunge`/eager-load before exit). Then delete the xfail markers — the tests
+already assert the right thing.
+
+### KL-19 — 4 mode-forwarding tests patch a target that is never consulted · **LOW · open**
+
+**What.** `test_api_mode_forwarded_{hybrid,dense}` and
+`test_cli_mode_forwarded_{hybrid,dense}` patch
+`knowledge_lake.pipeline.search.search`. But `pipeline/route.py:18` does
+`from knowledge_lake.pipeline.search import search` at import time, binding its
+own module-level name — `routed_search` calls `route.search`, so the patch never
+takes effect and the tests can never pass.
+
+**This is a test bug, not a production gap.** `?mode=` and `--mode` are fully
+wired and do forward into `routed_search(mode=...)`. Their xfail reasons claimed
+the feature was "not yet added", which is false and was actively misleading.
+
+**Fix.** Patch `knowledge_lake.pipeline.route.search` instead, then remove the
+markers. Reasons have been corrected in the interim so the markers no longer lie.
 
 ---
 
@@ -712,16 +908,28 @@ exports to every other domain's state is the same missing dimension as KL-01.
 3. ~~**KL-01** — decide whether `domain` filters or merely labels, then make the
    code and the S3 tag agree.~~ **Done 2026-07-15** (`260715-51d`). Decided:
    it filters.
-4. **KL-07** — a one-line `is_global` change; closes the reserved-range gap.
-   *Next up: cheapest remaining fix with real security value.*
-5. **KL-04 / KL-05 / KL-06** — these are one decision: settle what
-   `quality_score` in the payload actually means, who writes it, and when.
-   Worth doing as a single design pass, not three patches.
-6. **KL-10** — remove the 42 stale "Wave 0 stub" xfail markers, *then* enable
-   `xfail_strict`. Order matters: flipping the flag first turns them all red.
-7. The rest as hygiene.
+4. ~~**KL-07** — a one-line `is_global` change.~~ **Done 2026-07-15** (`260715-5pb`).
+5. ~~**KL-04 / KL-05 / KL-06** — one decision, not three patches.~~
+   **Done 2026-07-15** (`260715-5pb`). Decided: make the real chain explicit.
+6. ~~**KL-10** — remove the stale markers, *then* enable `xfail_strict`.~~
+   **Done 2026-07-15** (`260715-5pb`). Order held; it surfaced KL-18 and KL-19.
+7. **KL-18 — now the highest-priority open item.** Two API endpoints return 500.
+   Small fix (session scoping), real user impact, and its tests already exist.
+8. **KL-08 / KL-09** — the two remaining mediums from the original audit; not yet
+   selected for remediation. Note KL-08 (container serves 2 of 29 routes,
+   reports healthy) is *why* KL-18 went unnoticed locally: nobody can hit those
+   endpoints on a stale container.
+9. **KL-19**, then KL-12..KL-15, KL-17 as hygiene.
 
-**All three high-severity findings are now closed.** Remaining: 6 medium, 8 low.
+### Status
+
+| | Count |
+|---|---|
+| Original findings | 17 — **10 resolved**, 7 open (0 high, 2 medium, 5 low) |
+| Discovered during remediation | 2 — KL-18 (high), KL-19 (low), both open |
+| **Open total** | **9** |
+
+Suite: **943 passed, 0 xpassed, 0 failed, 0 errors, 12 xfailed**, `xfail_strict = true`.
 
 ---
 
