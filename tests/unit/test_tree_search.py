@@ -475,3 +475,59 @@ class TestTwoStageSearch:
             "bounded by settings.tree_search.concurrency (RETR-07)"
         )
         mock_semaphore.assert_any_call(settings.tree_search.concurrency)
+
+
+# ── TestTreeIndexCoverage ─────────────────────────────────────────────────────
+# KL-09: distinguishes "no tree index has been built" from "no matches" so
+# the CLI's empty-tree-search message can be honest instead of ambiguous.
+
+
+class TestTreeIndexCoverage:
+    """tree_index_coverage() diagnostic (KL-09)."""
+
+    def test_empty_query_returns_zero_shortlist(self) -> None:
+        result = tree_search_module.tree_index_coverage("   ")
+        assert result == {"shortlisted": 0, "has_any_index": False}
+
+    def test_no_shortlist_when_search_returns_nothing(self) -> None:
+        with patch.object(tree_search_module, "search", return_value=[]):
+            result = tree_search_module.tree_index_coverage("no matches anywhere")
+
+        assert result == {"shortlisted": 0, "has_any_index": False}
+
+    def test_shortlisted_but_no_tree_index(self, session, seeded) -> None:
+        """Documents matched at stage 1, but none have a tree_index artifact yet
+        (the exact condition the CLI must report as "no tree index has been
+        built", not "No results")."""
+        doc_a = seeded["parsed_artifact_id"]
+        chunk_hits = [Hit(id="c1", score=0.9, payload={"document": doc_a})]
+
+        with (
+            patch.object(tree_search_module, "search", return_value=chunk_hits),
+            patch(
+                "knowledge_lake.registry.repo.get_child_artifact_by_type",
+                return_value=None,
+            ),
+        ):
+            result = tree_search_module.tree_index_coverage("energy management")
+
+        assert result == {"shortlisted": 1, "has_any_index": False}
+
+    def test_shortlisted_with_tree_index(self, session, seeded) -> None:
+        """At least one shortlisted document has a tree_index artifact -> the
+        CLI must fall back to the plain "No results" message, since a real
+        tree index exists and genuinely found nothing."""
+        doc_a = seeded["parsed_artifact_id"]
+        chunk_hits = [Hit(id="c1", score=0.9, payload={"document": doc_a})]
+        fake_artifact = MagicMock()
+
+        with (
+            patch.object(tree_search_module, "search", return_value=chunk_hits),
+            patch(
+                "knowledge_lake.registry.repo.get_child_artifact_by_type",
+                return_value=fake_artifact,
+            ),
+        ):
+            result = tree_search_module.tree_index_coverage("energy management")
+
+        assert result == {"shortlisted": 1, "has_any_index": True}

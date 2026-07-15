@@ -9,7 +9,9 @@ Commands:
   clean       — clean a parsed_document artifact (boilerplate removal, dedup)
   chunk       — chunk a parsed_document artifact into chunk artifacts
   enrich      — enrich a cleaned_document artifact with LLM-judged metadata
+  tree-index  — build a hierarchical tree index for a parsed_document artifact
   search      — embed a query and return cited, filterable search results
+  tree-search — two-stage tree retrieval over previously built tree indexes
   reindex     — zero-downtime reindex of a Qdrant alias (INDEX-02)
   lineage     — print ancestry tree (or JSON) for a given artifact ID
   demo        — run the full spike end-to-end (ingest → search → lineage)
@@ -290,6 +292,100 @@ def cmd_chunk(
         typer.echo(f"  chunk_count:  {len(result)}")
         if result:
             typer.echo(f"  first_chunk:  {result[0]['artifact_id']}")
+    except (ValueError, LookupError) as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command(name="tree-index")
+def cmd_tree_index(
+    parsed_artifact_id: str = typer.Argument(
+        ..., help="ID of the parsed_document artifact to build a tree index for."
+    ),
+    source_id: str = typer.Argument(..., help="Source ID that owns the parsed artifact."),
+) -> None:
+    """Build a hierarchical tree index for a parsed_document artifact (KL-09, TREE-01..04).
+
+    `klake tree-search` is a consumer with no producer on the CLI path — the
+    only way to build a tree index was previously the Dagster
+    `tree_index_document` asset. This command closes that gap.
+
+    Why this RE-PARSES instead of reusing the parsed artifact directly:
+    `parse()` persists only ``{quality_score, parser_used, title}`` into a
+    parsed_document artifact's ``metadata_`` — the section structure a real
+    tree needs is produced only in-memory during parse() and is never written
+    to the registry or silver zone. `klake chunk` works around this the same
+    way `cmd_chunk` does (a minimal section-less ParsedDoc), but that
+    shortcut does not transfer here: `_build_deterministic_tree()` builds the
+    tree FROM sections, so a section-less ParsedDoc would yield a single
+    degenerate root node instead of a real tree. This command therefore
+    resolves the parsed artifact's raw_document parent, reloads its bytes
+    from the raw zone, and re-parses via the same parser-fallback chain
+    `klake parse` uses to recover real sections before calling
+    pipeline.tree_index.tree_index(). Re-parsing a large PDF is not cheap
+    (Docling took ~40s on a 19-page PDF in testing) — there is no cheaper
+    path while parse() leaves sections unpersisted (tracked as a follow-up,
+    not fixed here — see E2E-GAP-ANALYSIS.md KL-09).
+
+    Prints artifact_id, status, cached, cost_usd on success.
+    """
+    from knowledge_lake.config.settings import get_settings
+    from knowledge_lake.pipeline.tree_index import tree_index
+    from knowledge_lake.pipeline.utils import uri_to_key
+    from knowledge_lake.plugins.resolver import parse_with_fallback
+    from knowledge_lake.registry import repo as registry_repo
+    from knowledge_lake.registry.db import get_session
+    from knowledge_lake.storage.s3 import StorageBackend
+
+    s = get_settings()
+    storage = StorageBackend(s.storage)
+
+    try:
+        with get_session() as session:
+            parsed_artifact = registry_repo.get_artifact(session, parsed_artifact_id)
+            if parsed_artifact is None:
+                raise ValueError(
+                    f"Parsed artifact {parsed_artifact_id!r} not found in registry"
+                )
+            raw_artifact_id = parsed_artifact.parent_artifact_id
+            if not raw_artifact_id:
+                raise ValueError(
+                    f"Parsed artifact {parsed_artifact_id!r} has no parent raw_document "
+                    "artifact — cannot re-parse to recover sections."
+                )
+            raw_artifact = registry_repo.get_artifact(session, raw_artifact_id)
+            if raw_artifact is None:
+                raise ValueError(f"Raw artifact {raw_artifact_id!r} not found in registry")
+            raw_storage_uri = raw_artifact.storage_uri
+            if not raw_storage_uri:
+                raise ValueError(f"Raw artifact {raw_artifact_id!r} has no storage_uri")
+            stored_mime = raw_artifact.mime_type
+            if stored_mime in (None, "application/octet-stream"):
+                from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
+                stored_mime = _detect_mime_from_uri(raw_storage_uri)
+            mime_type = stored_mime or "application/pdf"
+
+        raw_key = uri_to_key(raw_storage_uri)
+        raw_bytes = storage.get_object(raw_key)
+
+        typer.echo(
+            "Re-parsing raw document to recover sections "
+            "(no persisted section structure to reuse — may take a while)..."
+        )
+        parsed_doc, parser_used, quality_score = parse_with_fallback(
+            raw_bytes, mime_type, settings=s
+        )
+        typer.echo(
+            f"  re-parsed: {len(parsed_doc.sections)} sections via {parser_used!r} "
+            f"(quality={quality_score})"
+        )
+
+        result = tree_index(parsed_artifact_id, source_id, parsed_doc, settings=s)
+        typer.echo("Tree-indexed:")
+        typer.echo(f"  status:        {result['status']}")
+        typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
+        typer.echo(f"  cached:        {result.get('cached', False)}")
+        typer.echo(f"  cost_usd:      {result.get('cost_usd', 0.0)}")
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -781,7 +877,12 @@ def cmd_tree_search(
     """Two-stage tree retrieval: Qdrant shortlist -> per-document tree search (RETR-04).
 
     Thin shim over pipeline.tree_search.tree_search() — validates args and
-    delegates; no orchestration logic lives here (D-13).
+    delegates; no orchestration logic lives here (D-13). The one exception is
+    the empty-result diagnosis below (KL-09): an empty hit list is ambiguous
+    between "no tree index has been built yet" and "the search genuinely
+    found nothing", so this calls the diagnostic
+    pipeline.tree_search.tree_index_coverage() helper — itself a thin
+    reuse of the same stage-1 shortlist logic — rather than guessing.
     """
     VALID_MODES = {"heuristic", "llm"}
     if mode is not None and mode not in VALID_MODES:
@@ -791,12 +892,22 @@ def cmd_tree_search(
         )
         raise typer.Exit(code=1)
 
-    from knowledge_lake.pipeline.tree_search import tree_search
+    from knowledge_lake.pipeline.tree_search import tree_index_coverage, tree_search
 
     hits = tree_search(query, top_k=top_k, mode=mode)
 
     if not hits:
-        typer.echo(f"No results for query: {query!r}")
+        coverage = tree_index_coverage(query)
+        if coverage["shortlisted"] > 0 and not coverage["has_any_index"]:
+            typer.echo(
+                f"No tree index has been built yet for query: {query!r}\n"
+                f"  {coverage['shortlisted']} document(s) matched but none have a "
+                "tree_index artifact.\n"
+                "  Run `klake tree-index <parsed_artifact_id> <source_id>` for the "
+                "matching document(s), then re-run tree-search."
+            )
+        else:
+            typer.echo(f"No results for query: {query!r}")
         return
 
     typer.echo(f"Results for: {query!r}")

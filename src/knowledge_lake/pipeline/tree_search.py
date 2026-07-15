@@ -126,6 +126,46 @@ async def _load_all(
     return await asyncio.gather(*(_load_one(key) for key in keys))
 
 
+# ── Stage-1 shortlist (shared by tree_search() and tree_index_coverage()) ────
+
+
+def _shortlist_documents(
+    query: str,
+    *,
+    collection: str,
+    max_docs: int,
+    s: Settings,
+) -> list[str]:
+    """Stage-1 (D-08): chunk shortlist via search() UNCHANGED, grouped by
+    payload["document"] (max score per document), truncated to *max_docs*.
+
+    Factored out of tree_search() so tree_index_coverage() (KL-09) can run
+    the exact same candidate-selection logic when diagnosing an empty
+    tree_search() result, without duplicating the grouping/sort behavior.
+    """
+    chunk_hits = search(
+        query,
+        collection=collection,
+        top_k=s.tree_search.shortlist_k,
+        settings=s,
+    )
+
+    doc_scores: dict[str, float] = {}
+    for hit in chunk_hits:
+        doc_id = hit.payload.get("document")
+        if not doc_id:
+            continue
+        if doc_id not in doc_scores or hit.score > doc_scores[doc_id]:
+            doc_scores[doc_id] = hit.score
+
+    return [
+        doc_id
+        for doc_id, _score in sorted(
+            doc_scores.items(), key=lambda item: (-item[1], item[0])
+        )[:max_docs]
+    ]
+
+
 # ── Two-stage orchestrator (RETR-04) ─────────────────────────────────────────
 
 
@@ -168,27 +208,9 @@ def tree_search(
         return []
 
     # ── Stage 1 (D-08): chunk shortlist via search() UNCHANGED ────────────────
-    chunk_hits = search(
-        query,
-        collection=collection,
-        top_k=s.tree_search.shortlist_k,
-        settings=s,
+    top_docs = _shortlist_documents(
+        query, collection=collection, max_docs=effective_max_docs, s=s
     )
-
-    doc_scores: dict[str, float] = {}
-    for hit in chunk_hits:
-        doc_id = hit.payload.get("document")
-        if not doc_id:
-            continue
-        if doc_id not in doc_scores or hit.score > doc_scores[doc_id]:
-            doc_scores[doc_id] = hit.score
-
-    top_docs = [
-        doc_id
-        for doc_id, _score in sorted(
-            doc_scores.items(), key=lambda item: (-item[1], item[0])
-        )[:effective_max_docs]
-    ]
 
     if not top_docs:
         log.info("tree_search.no_shortlist", query=query[:80])
@@ -273,3 +295,57 @@ def tree_search(
         )
     )
     return results[:effective_top_k]
+
+
+# ── Empty-result diagnosis (KL-09) ───────────────────────────────────────────
+
+
+def tree_index_coverage(
+    query: str,
+    *,
+    collection: str = "klake_chunks",
+    max_docs: int | None = None,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Diagnose why tree_search(query) might have returned no hits (KL-09).
+
+    Runs the identical stage-1 shortlist tree_search() uses (via the shared
+    ``_shortlist_documents`` helper) and reports whether any shortlisted
+    document already has a tree_index artifact. Callers (the CLI) use this
+    to tell "no tree index has been built yet for these documents" apart
+    from "the tree search genuinely found nothing" — previously both cases
+    printed the same ambiguous "No results for query" message.
+
+    Never raises — mirrors tree_search()'s D-09 fail-open posture, since this
+    is purely diagnostic and must not itself become a new failure mode.
+
+    Returns:
+        dict with keys:
+          shortlisted   — number of documents in the stage-1 shortlist (0 if
+                          the query matched no chunks at all)
+          has_any_index — True if at least one shortlisted document has a
+                          tree_index artifact
+    """
+    s = settings or get_settings()
+    effective_max_docs = max_docs if max_docs is not None else s.tree_search.max_docs
+
+    if not query.strip():
+        return {"shortlisted": 0, "has_any_index": False}
+
+    top_docs = _shortlist_documents(
+        query, collection=collection, max_docs=effective_max_docs, s=s
+    )
+    if not top_docs:
+        return {"shortlisted": 0, "has_any_index": False}
+
+    has_any_index = False
+    with get_session() as session:
+        for parsed_id in top_docs:
+            artifact = registry_repo.get_child_artifact_by_type(
+                session, parsed_id, "tree_index"
+            )
+            if artifact is not None:
+                has_any_index = True
+                break
+
+    return {"shortlisted": len(top_docs), "has_any_index": has_any_index}
