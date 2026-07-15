@@ -63,7 +63,13 @@ class TestHealthStillWorks:
         client, _ = api_client
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        body = resp.json()
+        # KL-08: `version` was added so a stale running container is visible
+        # in one curl. Assert on `status` plus presence of `version` rather
+        # than exact dict equality, so the response can grow without breaking
+        # this test.
+        assert body["status"] == "ok"
+        assert "version" in body and body["version"], f"Missing/empty version: {body}"
 
 
 class TestSearchEndpoint:

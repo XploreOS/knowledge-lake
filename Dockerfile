@@ -1,7 +1,14 @@
 # Knowledge Lake API Dockerfile
 # Builds the FastAPI service container
 
-FROM python:3.14-slim
+FROM python:3.12-slim
+# Pinned to 3.12 to match .python-version / pyproject.toml (requires-python
+# ">=3.12"). A prior drift bump to 3.14-slim (88116e7) left the image
+# unbuildable: greenlet 3.1.1 (transitive via SQLAlchemy) uses CPython
+# internals (`_PyInterpreterFrame` layout, `c_recursion_remaining`) that
+# changed in 3.14, so its C extension fails to compile — not a missing-wheel
+# problem, a genuine incompatibility. Reverted while fixing KL-08, which
+# required a successful rebuild to verify the new bind mount.
 
 # Install system utilities needed for healthchecks and operations
 RUN apt-get update -qq && \
@@ -14,7 +21,10 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy project metadata
-COPY pyproject.toml uv.lock README.md ./
+# LICENSE + NOTICE must be present at build time: pyproject.toml declares
+# license-files = ["LICENSE", "NOTICE"] and `uv sync` fails the build
+# ("license-files glob ... did not match any files") without them.
+COPY pyproject.toml uv.lock README.md LICENSE NOTICE ./
 
 # Copy source code before installing (needed for editable install)
 COPY src/ ./src/

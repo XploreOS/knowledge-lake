@@ -87,7 +87,27 @@ Verify the API is up:
 
 ```bash
 curl http://localhost:8000/health
-# Expected: {"status":"ok"}
+# Expected: {"status":"ok","version":"0.1.0+<git_sha>"}
+```
+
+`version` reflects the code actually running inside the container (`0.0.0` if
+git metadata isn't available), so a stale container is visible in one curl
+instead of hiding behind a green healthcheck.
+
+**Picking up code changes:** `docker compose up -d` alone does **not** rebuild
+an existing image — the `api`, `dagster-webserver`, and `dagster-daemon`
+services bind-mount `./src` into the container (read-only) so most source
+edits are picked up with just a restart:
+
+```bash
+docker compose restart api dagster-webserver dagster-daemon
+```
+
+If you change `pyproject.toml`/`uv.lock` (new dependencies) or the
+`Dockerfile` itself, the mount can't help — rebuild explicitly:
+
+```bash
+docker compose up -d --build
 ```
 
 ### 3. Install Python dependencies

@@ -163,6 +163,12 @@ services:
     volumes:
       - dagster-home:/dagster-home
       - ./infra/dagster/dagster.yaml:/dagster-home/dagster.yaml:ro
+      # KL-08: mount the working tree so a code-location reload / restart picks up
+      # source edits without a rebuild. `uv sync` installs the project editable,
+      # and its .pth resolves to /app/src (verified: `uv pip show knowledge-lake`
+      # reports "Editable project location: /app" with the .pth pointing at
+      # /app/src) — this mount overlays the exact path Python imports from.
+      - ./src:/app/src:ro
     command: ["/app/.venv/bin/dagster-webserver", "-h", "0.0.0.0", "-p", "3000"]
     ports:
       - "${DAGSTER_PORT:-3000}:3000"
@@ -189,6 +195,8 @@ services:
     volumes:
       - dagster-home:/dagster-home
       - ./infra/dagster/dagster.yaml:/dagster-home/dagster.yaml:ro
+      # KL-08: see dagster-webserver above — same staleness fix.
+      - ./src:/app/src:ro
     command: ["/app/.venv/bin/dagster-daemon", "run"]
     restart: unless-stopped
 
@@ -204,6 +212,14 @@ services:
         condition: service_started
     environment:
       <<: *common-env
+    volumes:
+      # KL-08: bind-mount the working tree over the baked-in image copy so
+      # `docker compose up -d` (no --build) can never silently serve stale
+      # code again — `docker compose restart api` alone picks up src/ edits.
+      # `uv sync` installs the project editable with its .pth resolving to
+      # /app/src (confirmed via `uv pip show knowledge-lake` inside the
+      # container), so this mount overlays the exact import path.
+      - ./src:/app/src:ro
     ports:
       - "${API_PORT:-8000}:8000"
     healthcheck:

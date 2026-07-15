@@ -4,7 +4,7 @@ Knowledge Lake FastAPI application.
 Entry point: uvicorn knowledge_lake.api.app:app
 
 Endpoints:
-  GET /health                    → {"status": "ok"}
+  GET /health                    → {"status": "ok", "version": "<pkg_version>+<git_sha>"}
   GET /search?q=...&top_k=...   → list[SearchHit] — calls pipeline.search() (D-02),
                                     filterable by domain/document_type/min_quality_score (INDEX-03)
   POST /reindex?collection=...   → ReindexResponse — zero-downtime alias reindex (INDEX-02)
@@ -156,9 +156,15 @@ async def health() -> dict[str, str]:
     """Return the service health status.
 
     Returns:
-        {"status": "ok"} when the service is ready to accept requests.
+        ``{"status": "ok", "version": "<pkg_version>+<git_sha>"}`` when the
+        service is ready to accept requests. ``status`` is unchanged from
+        before (README-documented, asserted by the compose healthcheck) —
+        ``version`` is added so a stale running container is visible in one
+        curl instead of hidden behind a green healthcheck (KL-08).
     """
-    return {"status": "ok"}
+    from knowledge_lake.version import pipeline_version
+
+    return {"status": "ok", "version": pipeline_version()}
 
 
 @app.get(

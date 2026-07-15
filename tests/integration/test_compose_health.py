@@ -116,7 +116,10 @@ class TestComposeHealth:
         r = httpx.get(url, timeout=10.0)
         assert r.status_code == 200, f"Expected 200, got {r.status_code}"
         body = r.json()
-        assert body == {"status": "ok"}, f"Unexpected body: {body}"
+        # KL-08: `version` was added to surface stale-container drift; assert
+        # `status` plus presence of `version` rather than exact dict equality.
+        assert body.get("status") == "ok", f"Unexpected body: {body}"
+        assert body.get("version"), f"Missing/empty version: {body}"
 
     def test_all_http_services_reachable(self) -> None:
         """Quick combined check that all HTTP-checkable services respond."""
