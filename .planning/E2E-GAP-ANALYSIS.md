@@ -4,6 +4,23 @@ name: E2E Test & Codebase Gap Analysis
 audited: 2026-07-15T02:48:00Z
 audited_against: 49c77f4
 status: findings_open
+resolved:
+  - id: KL-03
+    resolved: 2026-07-15
+    quick_task: 260715-4b9
+    commits: [c75468e, 9827c61, 4ab0744, 92ae035, ea14046]
+    fix: >
+      Root cause was infra/postgres/init.sql never creating the klake_test
+      database the tests expect — so the documented local fallback
+      (`make up && make test-integration`) was broken too, not just CI.
+      Added klake_test to init.sql; repaired the 6 stale mock_put_raw
+      signatures (added domain/tags to match production); replaced the
+      "intentionally not run" comment block in ci.yml with a real integration
+      job that brings up the project's own compose stack. Verified:
+      `pytest tests/integration -m "not browser"` → 193 passed, 0 failed,
+      0 errors (was 6 failed / 13 errors). Full suite → 859 passed, 0 failed.
+      xfail_strict deliberately NOT flipped — that is KL-10 and requires
+      removing the 42 stale markers first.
 method: >
   Live end-to-end run against the running stack (postgres, minio, qdrant,
   litellm, dagster, searxng). A new `aviation` domain pack was scaffolded via
@@ -16,13 +33,27 @@ counts:
   medium: 6
   low: 8
   total: 17
+  open: 16
+  resolved: 1
   verified_working: 7
 tests:
-  unit: 828 passed
-  failed: 6
-  errors: 13
-  xpassed: 42
-  note: "Failures and errors are pre-existing, not caused by the E2E run."
+  at_audit_time:
+    combined: 828 passed
+    failed: 6
+    errors: 13
+    xpassed: 42
+    note: >
+      828 is the COMBINED unit+integration run (`uv run pytest -q`), not
+      unit-only — an earlier revision of this file mislabelled it as `unit`.
+      Corrected 2026-07-15 during quick task 260715-4b9, which measured the
+      unit-only baseline at 651 passed.
+    caveat: "Failures and errors were pre-existing, not caused by the E2E run."
+  after_kl03_fix:
+    combined: 859 passed
+    failed: 0
+    errors: 0
+    xpassed: 42
+    integration: 193 passed
 findings:
   - id: KL-01
     severity: high
@@ -230,6 +261,12 @@ quietly guesses is worse than one that fails.
 
 ### KL-03 — CI never runs the 211 integration tests, and they have rotted
 
+> **RESOLVED 2026-07-15** — quick task `260715-4b9`
+> (`c75468e`, `9827c61`, `4ab0744`, `92ae035`, `ea14046`).
+> `pytest tests/integration -m "not browser"` → **193 passed, 0 failed, 0 errors**
+> (was 6 failed / 13 errors). Full suite → 859 passed, 0 failed.
+> See "Resolution" at the end of this finding.
+
 **What.** `.github/workflows/ci.yml:69` runs
 `uv run pytest tests/unit -m "not browser" -q`. That is the only test invocation.
 All 29 files / 211 tests under `tests/integration/` never execute in CI — and
@@ -259,6 +296,30 @@ are precisely the class of bug this suite exists to catch.
 **Fix.** Add a CI job with Postgres/MinIO/Qdrant services that creates
 `klake_test` and runs `tests/integration`. Repair the six stale mocks. Set
 `xfail_strict = true` (see KL-10).
+
+**Resolution (2026-07-15, quick task `260715-4b9`).** Two corrections to the
+analysis above, both surfaced while fixing it:
+
+1. *The CI exclusion was deliberate, not an oversight.* `ci.yml` ended with a
+   comment block stating integration tests are "intentionally not run on every
+   push to keep CI fast and reliable... enable the job below by adding the
+   required `services:`". The team knowingly traded CI coverage for speed and
+   documented the local fallback. What went unnoticed was the **rot**, not the
+   exclusion.
+2. *The documented local fallback was broken too.* `infra/postgres/init.sql`
+   creates `dagster_storage` and `litellm_storage` but never `klake_test` — the
+   database `test_migrations.py:4` calls "the compose klake_test DB". So
+   `make up && make test-integration` failed with 13 errors for anyone who tried
+   it. The escape hatch that justified skipping CI did not work, which is why the
+   rot could persist undetected.
+
+Fixed: `klake_test` added to `init.sql` (idempotent, matching the existing
+`\gexec` pattern); the six mocks given `domain=None, tags=None` to match
+production `put_raw`; the comment block replaced with a real `integration` job
+that brings up the project's own `docker compose` stack (one source of truth with
+the local path — GH Actions `services:` cannot override MinIO's required
+`server /data` command). `xfail_strict` was deliberately **not** flipped: 42
+tests currently xpass, so enabling it turns them all red. That stays KL-10.
 
 ---
 
@@ -535,9 +596,10 @@ exports to every other domain's state is the same missing dimension as KL-01.
 
 ## Suggested fix order
 
-1. **KL-03 first.** Wire integration tests into CI before fixing anything else —
+1. ~~**KL-03 first.** Wire integration tests into CI before fixing anything else —
    otherwise the fixes below have nothing holding them in place, which is how
-   KL-01 arrived.
+   KL-01 arrived.~~ **Done 2026-07-15** (`260715-4b9`). The net is now in place:
+   211 integration tests run on every push to main.
 2. **KL-02** — a one-line key change; stops silent 9× budget overrun.
 3. **KL-07** — a one-line `is_global` change; closes the reserved-range gap.
 4. **KL-01** — decide whether `domain` filters or merely labels, then make the

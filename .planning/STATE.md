@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 15 — Query Router
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-15 — Completed quick task 260715-3w5: Write E2E gap analysis report
+Last activity: 2026-07-15 — Completed quick task 260715-4b9: Fix CI integration tests (KL-03), add aviation reference pack
 
 Progress: [██████████] 100%
 
@@ -124,13 +124,15 @@ None yet.
 - [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
 - [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
-- [Audit 2026-07-15]: E2E gap analysis found 17 open findings (3 high) — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). KL-01 (exports mislabel domain), KL-02 (budget caps under-enforce 2.4–9×), KL-03 (211 integration tests never run in CI) are unresolved.
+- [Audit 2026-07-15]: E2E gap analysis found 17 findings — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). KL-03 resolved 2026-07-15. Still open and highest-value: KL-01 (exports mislabel domain — 62% foreign rows under a `domain=` tag), KL-02 (budget caps under-enforce 2.4–9×).
+- [KL-10]: `xfail_strict` cannot be enabled until the 42 stale "Wave 0 stub" xfail markers are removed — flipping it first turns 42 xpassing tests red. Ordering constraint, not optional.
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260715-3w5 | Write E2E gap analysis report | 2026-07-15 | 9d1666e | [260715-3w5-write-e2e-gap-analysis-report](./quick/260715-3w5-write-e2e-gap-analysis-report/) |
+| 260715-4b9 | Fix CI integration tests (KL-03) and add aviation reference pack | 2026-07-15 | ea14046 | [260715-4b9-fix-ci-integration-tests-kl-03-and-add-a](./quick/260715-4b9-fix-ci-integration-tests-kl-03-and-add-a/) |
 
 ## Deferred Items
 
