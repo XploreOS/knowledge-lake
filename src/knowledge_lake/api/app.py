@@ -1210,16 +1210,16 @@ def export_endpoint(body: ExportRequest) -> ExportResponse:
             detail="dataset_name is required for kind='finetune'.",
         )
 
-    logger.info("api.export", kind=body.kind, dataset_name=body.dataset_name)
+    logger.info("api.export", kind=body.kind, dataset_name=body.dataset_name, domain=body.domain)
 
     try:
         if body.kind == "rag-corpus":
-            result = export_rag_corpus()
+            result = export_rag_corpus(domain=body.domain)
         elif body.kind == "pretrain":
-            result = export_pretrain_corpus()
+            result = export_pretrain_corpus(domain=body.domain)
         else:
             assert body.dataset_name is not None  # validated above
-            result = export_finetune_dataset(body.dataset_name)
+            result = export_finetune_dataset(body.dataset_name, domain=body.domain)
     except TrainEvalContaminationError as exc:
         logger.warning("api.export.contamination", error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc

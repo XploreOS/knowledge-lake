@@ -868,6 +868,20 @@
             "description": "Required for kind='finetune'. The logical Dataset name to export.",
             "title": "Dataset Name"
           },
+          "domain": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Scope the export to a single domain (KL-01: filters rows, not just the output path/tag). Default: no filter, all domains, written under the '_unclassified' path segment.",
+            "title": "Domain"
+          },
           "kind": {
             "description": "Export kind: 'rag-corpus', 'pretrain', or 'finetune'.",
             "pattern": "^(rag-corpus|pretrain|finetune)$",

@@ -258,6 +258,16 @@ class ExportRequest(BaseModel):
         max_length=255,
         description="Required for kind='finetune'. The logical Dataset name to export.",
     )
+    domain: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description=(
+            "Scope the export to a single domain (KL-01: filters rows, not just "
+            "the output path/tag). Default: no filter, all domains, written "
+            "under the '_unclassified' path segment."
+        ),
+    )
 
 
 class ExportResponse(BaseModel):

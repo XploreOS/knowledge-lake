@@ -1019,6 +1019,16 @@ def cmd_export(
         "-d",
         help="Required for kind=finetune. The logical Dataset name to export.",
     ),
+    domain: str | None = typer.Option(
+        None,
+        "--domain",
+        "-D",
+        help=(
+            "Scope the export to a single domain (KL-01: filters rows, not just "
+            "the output path/tag). Default: no filter, all domains, "
+            "written under the '_unclassified' path segment."
+        ),
+    ),
 ) -> None:
     """Export the curated corpus or a dataset to the gold zone.
 
@@ -1028,8 +1038,9 @@ def cmd_export(
 
     Examples:
         klake export rag-corpus
+        klake export rag-corpus --domain aviation
         klake export pretrain
-        klake export finetune --dataset-name my_rag_eval_v1
+        klake export finetune --dataset-name my_rag_eval_v1 --domain healthcare
     """
     from knowledge_lake.pipeline.export import (
         TrainEvalContaminationError,
@@ -1049,12 +1060,12 @@ def cmd_export(
 
     try:
         if kind == "rag-corpus":
-            result = export_rag_corpus()
+            result = export_rag_corpus(domain=domain)
         elif kind == "pretrain":
-            result = export_pretrain_corpus()
+            result = export_pretrain_corpus(domain=domain)
         else:
             assert dataset_name is not None
-            result = export_finetune_dataset(dataset_name)
+            result = export_finetune_dataset(dataset_name, domain=domain)
     except TrainEvalContaminationError as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
