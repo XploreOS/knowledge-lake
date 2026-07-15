@@ -7,6 +7,8 @@ Validates that:
   4. Resources are defined with EnvVar config (Pitfall 14)
   5. No IO managers are used for object bytes (Pitfall 7) — deps-ordering only
   6. CLI/API surface is unchanged (D-02) — grep confirmation embedded in test
+  7. The KL-06 chain (clean -> enrich -> curate -> chunk) actually serializes at
+     execution time, asserted from the STEP_START event order
 
 Requires:
     - Compose stack up (PostgreSQL + MinIO + Qdrant)
@@ -175,13 +177,33 @@ class TestAssetMaterialization:
         )
 
     def test_dagster_materialize_succeeds(self, inprocess_result: dict) -> None:
-        """The full asset graph must materialize successfully in-process."""
+        """The full asset graph must materialize successfully in-process.
+
+        KL-06: enrich_document and curate_document_asset are included so this
+        test exercises the REAL chain (clean -> enrich -> curate -> chunk ->
+        embed -> index). Omitting them made this test materialize a graph where
+        chunk_document's deps=[curate_document_asset] edge did not exist —
+        Dagster drops a deps= edge whose target is outside the selection — so
+        the test passed against a graph that still had the KL-06 scheduling race.
+
+        Cost profile of including enrich_document: enrichment is content-hash
+        cached (cache key = cleaned content_hash + prompt_version), so this
+        fixture costs at most ONE LLM call per unique fixture/prompt_version
+        across the whole suite lifetime; every later run is a cache hit. When
+        no LLM credentials/budget are available (e.g. a fresh CI box),
+        enrich_document degrades to a status dict rather than raising (D-05:
+        'skipped_budget_exceeded' / 'skipped_enrichment_failed'), so the asset
+        still succeeds and this test stays green — it simply exercises the
+        ordering without a real enrichment.
+        """
         from dagster import materialize
 
         from knowledge_lake.dagster_defs.assets import (
             chunk_document,
             clean_document,
+            curate_document_asset,
             embed_chunks,
+            enrich_document,
             index_chunks,
             ingest_raw_document,
             parsed_document,
@@ -221,6 +243,8 @@ class TestAssetMaterialization:
                 ingest_raw_document,
                 parsed_document,
                 clean_document,
+                enrich_document,
+                curate_document_asset,
                 chunk_document,
                 embed_chunks,
                 index_chunks,
@@ -243,14 +267,42 @@ class TestAssetMaterialization:
             f"Check Dagster run logs for details."
         )
 
+        # KL-06: assert the chain actually SERIALIZED in the right order at
+        # execution time, not merely that the edges exist in the graph.
+        # Dagster emits STEP_START in topological execution order.
+        step_order = [
+            e.step_key for e in result.all_events if e.event_type_value == "STEP_START"
+        ]
+        assert step_order.index("enrich_document") < step_order.index(
+            "curate_document_asset"
+        ), (
+            "enrich_document must execute BEFORE curate_document_asset (KL-06) — "
+            f"curate reads the enriched sibling's quality_score for the 40% enrich "
+            f"term of its composite and silently defaults to 0.5 otherwise. "
+            f"Observed step order: {step_order}"
+        )
+        assert step_order.index("curate_document_asset") < step_order.index(
+            "chunk_document"
+        ), (
+            "curate_document_asset must execute BEFORE chunk_document (KL-06). "
+            f"Observed step order: {step_order}"
+        )
+
     def test_dagster_materialize_produces_artifacts(self, inprocess_result: dict) -> None:
-        """Materialization must yield artifacts with correct types."""
+        """Materialization must yield artifacts with correct types.
+
+        KL-06: includes enrich_document + curate_document_asset so the graph
+        under test is the real chain (see test_dagster_materialize_succeeds for
+        the cost/degradation profile of including enrichment).
+        """
         from dagster import materialize
 
         from knowledge_lake.dagster_defs.assets import (
             chunk_document,
             clean_document,
+            curate_document_asset,
             embed_chunks,
+            enrich_document,
             index_chunks,
             ingest_raw_document,
             parsed_document,
@@ -289,6 +341,8 @@ class TestAssetMaterialization:
                 ingest_raw_document,
                 parsed_document,
                 clean_document,
+                enrich_document,
+                curate_document_asset,
                 chunk_document,
                 embed_chunks,
                 index_chunks,

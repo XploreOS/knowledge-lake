@@ -963,14 +963,29 @@ def export_finetune_dataset(
 
 # ── Core Pipeline E2E Job (DOMAIN-04) ─────────────────────────────────────────
 
-# Selects exactly the 7 core pipeline assets for the E2E validation job.
-# curate_document_asset and generate_dataset are NOT included — see Pitfall 6
-# (RESEARCH.md): including dataset-generation assets in the core E2E job
-# would require valid source_artifact_id config for those assets which is
-# separate from the ingest-to-index pipeline being validated. T-06-14 mitigation.
+# Selects exactly the 8 core pipeline assets for the E2E validation job.
+#
+# generate_dataset is NOT included — see Pitfall 6 (RESEARCH.md): it declares a
+# GenerateDatasetConfig (kind / source_artifact_id / dataset_name), so including
+# it would require valid source_artifact_id run config that is separate from the
+# ingest-to-index pipeline being validated. T-06-14 mitigation.
+#
+# KL-06 (2026-07-15): curate_document_asset IS included, and its exclusion was a
+# bug, not a decision. The Pitfall 6 / T-06-14 rationale above is specifically
+# about assets that need run config — curate_document_asset(clean_document,
+# postgres, minio) declares NO Config, so it needs no run config and that
+# rationale never applied to it. Leaving it out actively defeated the KL-06 fix:
+# Dagster drops a deps= edge whose target is outside the selection, so with
+# curate excluded, chunk_document's deps=[curate_document_asset] edge vanished
+# for THIS job and chunk regained its unordered relationship with enrich — the
+# exact scheduling race KL-06 closed, alive again in the main E2E job people
+# actually run. The selection must contain every asset the ordering chain
+# depends on, or the chain is not enforced where it matters.
+# test_asset_ordering.py pins this so the selection cannot be re-narrowed
+# silently.
 #
 # KL-16: this job was previously named for one specific domain, even though
-# the asset selection is fully domain-generic (these 7 core assets run
+# the asset selection is fully domain-generic (these core assets run
 # identically for any domain pack) — a domain-specific name in framework
 # core was misleading, not accurate. The real gap this doesn't solve —
 # domain packs cannot contribute their own Dagster jobs without editing
@@ -982,14 +997,17 @@ core_pipeline_e2e_job = define_asset_job(
         ingest_raw_document,
         parsed_document,
         clean_document,
-        chunk_document,
         enrich_document,
+        curate_document_asset,
+        chunk_document,
         embed_chunks,
         index_chunks,
     ),
     description=(
         "Full pipeline job for core E2E validation (DOMAIN-04). "
-        "Materializes the core ingest-to-index chain; domain-agnostic — the "
-        "asset selection is the same regardless of which domain pack is active."
+        "Materializes the core ingest-to-index chain "
+        "(ingest → parse → clean → enrich → curate → chunk → embed → index); "
+        "domain-agnostic — the asset selection is the same regardless of which "
+        "domain pack is active."
     ),
 )
