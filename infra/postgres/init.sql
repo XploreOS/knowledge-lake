@@ -33,3 +33,16 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'litellm_storage') \ge
 \c litellm_storage
 GRANT ALL PRIVILEGES ON DATABASE litellm_storage TO klake;
 \c klake
+
+-- ── Integration test database ───────────────────────────────────────────────
+-- tests/integration/ expects a dedicated 'klake_test' database (compose's
+-- documented fixture DB). Its schema is created by the Alembic migration
+-- fixture at test run time, not by manual DDL here (FOUND-09) — this block
+-- only ensures the empty database exists.
+SELECT 'CREATE DATABASE klake_test OWNER klake'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'klake_test') \gexec
+
+-- Grant the klake user full access to klake_test
+\c klake_test
+GRANT ALL PRIVILEGES ON DATABASE klake_test TO klake;
+\c klake
