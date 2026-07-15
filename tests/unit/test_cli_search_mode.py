@@ -2,23 +2,23 @@
 
 RED test scaffold: asserts that invoking `klake search <query> --mode hybrid`
 forwards mode='hybrid' into pipeline.search. The --mode flag does not yet exist
-on cmd_search — Plan 10-08 added it. test_cli_search_mode_help_shows_mode_option
-now passes; the two forwarding tests remain xfail (stale mock patch target, see
-their reason strings).
+on cmd_search — Plan 10-08 added it. All three tests now pass; the two
+forwarding tests previously patched the wrong target (see KL-19 in
+E2E-GAP-ANALYSIS.md) — fixed to patch knowledge_lake.pipeline.route.search,
+which is what routed_search() actually calls.
 
-Pattern: monkeypatch knowledge_lake.pipeline.search.search imported inside
-cmd_search, capture forwarded kwargs via a stub, then invoke the CLI runner.
+Pattern: monkeypatch knowledge_lake.pipeline.route.search (what routed_search()
+actually calls), capture forwarded kwargs via a stub, then invoke the CLI runner.
 Mirrors tests/unit/test_cli_init_index.py: CliRunner + try/except ImportError guard.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 try:
     from typer.testing import CliRunner
+
     from knowledge_lake.cli.app import app
     _IMPORT_OK = True
 except ImportError:
@@ -32,18 +32,6 @@ runner = CliRunner() if CliRunner is not None else None
 class TestCliModeForwarding:
     """CLI --mode flag threads mode into pipeline.search (RETR-03, T-10-02)."""
 
-    @pytest.mark.xfail(
-        reason=(
-            "--mode is wired on cmd_search (cli/app.py) and forwarded into "
-            "routed_search(mode=...), but this test patches "
-            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
-            "`from knowledge_lake.pipeline.search import search` at import time "
-            "(route.py:18), binding its own module-level name, so routed_search calls "
-            "route.search — the patch on pipeline.search.search has no effect on that "
-            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
-        ),
-        strict=False,
-    )
     def test_cli_mode_forwarded_hybrid(self) -> None:
         """Invoking `search <q> --mode hybrid` forwards mode='hybrid' into pipeline.search.
 
@@ -59,14 +47,13 @@ class TestCliModeForwarding:
             captured_kwargs.update({"query": query, **kwargs})
             return []
 
-        # Patch the search function where cmd_search imports it at call time:
-        # cmd_search does `from knowledge_lake.pipeline.search import search`
-        # inside the function body, so we must patch the module-level symbol.
-        with patch("knowledge_lake.pipeline.search.search", side_effect=search_stub):
+        # cmd_search delegates to routed_search(), which calls its own
+        # module-level `search` binding (route.py: `from
+        # knowledge_lake.pipeline.search import search`) — not
+        # pipeline.search.search directly (KL-19). Patch the real target.
+        with patch("knowledge_lake.pipeline.route.search", side_effect=search_stub):
             result = runner.invoke(app, ["search", "test query", "--mode", "hybrid"])
 
-        # --mode is unknown today → Typer exits with "No such option" error.
-        # Once Plan 10-08 adds the flag, exit_code will be 0 and mode will be forwarded.
         assert result.exit_code == 0, (
             f"Expected exit 0 for 'search <q> --mode hybrid', got {result.exit_code}. "
             f"Output: {result.output!r}"
@@ -76,18 +63,6 @@ class TestCliModeForwarding:
             f"got: {captured_kwargs.get('mode')!r}. Full kwargs: {captured_kwargs}"
         )
 
-    @pytest.mark.xfail(
-        reason=(
-            "--mode is wired on cmd_search (cli/app.py) and forwarded into "
-            "routed_search(mode=...), but this test patches "
-            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
-            "`from knowledge_lake.pipeline.search import search` at import time "
-            "(route.py:18), binding its own module-level name, so routed_search calls "
-            "route.search — the patch on pipeline.search.search has no effect on that "
-            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
-        ),
-        strict=False,
-    )
     def test_cli_mode_forwarded_dense(self) -> None:
         """Invoking `search <q> --mode dense` forwards mode='dense' into pipeline.search."""
         assert _IMPORT_OK, "CliRunner or app import failed"
@@ -99,7 +74,7 @@ class TestCliModeForwarding:
             captured_kwargs.update({"query": query, **kwargs})
             return []
 
-        with patch("knowledge_lake.pipeline.search.search", side_effect=search_stub):
+        with patch("knowledge_lake.pipeline.route.search", side_effect=search_stub):
             result = runner.invoke(app, ["search", "test query", "--mode", "dense"])
 
         assert result.exit_code == 0, (

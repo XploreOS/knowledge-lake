@@ -4,9 +4,11 @@ RED test scaffold: asserts that GET /search?q=x&mode=hybrid forwards mode='hybri
 into pipeline.search and that GET /search?q=x&mode=bogus returns HTTP 422
 (Literal/pattern validation at the boundary, T-10-02).
 
-Plan 10-08 added the ?mode= query parameter; most xfail decorators have been
-removed. TestApiModeForwarding's two tests remain xfail — see their reason
-strings (stale mock patch target, not a missing feature).
+Plan 10-08 added the ?mode= query parameter; all xfail decorators have been
+removed. TestApiModeForwarding's two tests previously patched the wrong
+target (see KL-19 in E2E-GAP-ANALYSIS.md) — fixed to patch
+knowledge_lake.pipeline.route.search, which is what routed_search() actually
+calls.
 
 Pattern mirrors tests/integration/test_api_new_endpoints.py: starlette TestClient +
 try/except ImportError guard. The search seam is stubbed/patched so no real embedder
@@ -15,12 +17,13 @@ or Qdrant server is contacted.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 try:
     from starlette.testclient import TestClient
+
     from knowledge_lake.api.app import app
     _IMPORT_OK = True
 except ImportError:
@@ -41,18 +44,6 @@ def api_client():
 class TestApiModeForwarding:
     """API ?mode= query param threads mode into pipeline.search (RETR-03)."""
 
-    @pytest.mark.xfail(
-        reason=(
-            "?mode= is wired on search_endpoint (api/app.py) and forwarded into "
-            "routed_search(mode=...), but this test patches "
-            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
-            "`from knowledge_lake.pipeline.search import search` at import time "
-            "(route.py:18), binding its own module-level name, so routed_search calls "
-            "route.search — the patch on pipeline.search.search has no effect on that "
-            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
-        ),
-        strict=False,
-    )
     def test_api_mode_forwarded_hybrid(self, api_client) -> None:
         """GET /search?q=x&mode=hybrid forwards mode='hybrid' into pipeline.search.
 
@@ -64,8 +55,10 @@ class TestApiModeForwarding:
             captured_kwargs.update({"query": query, **kwargs})
             return []
 
-        # Patch the search function that search_endpoint imports at call time
-        with patch("knowledge_lake.pipeline.search.search", side_effect=search_stub):
+        # routed_search() calls route.search (its own module-level binding from
+        # `from knowledge_lake.pipeline.search import search`), not
+        # pipeline.search.search directly (KL-19) — patch the target it actually uses.
+        with patch("knowledge_lake.pipeline.route.search", side_effect=search_stub):
             resp = api_client.get("/search", params={"q": "test query", "mode": "hybrid"})
 
         # ?mode= is unknown today → FastAPI may return 422 or ignore the param.
@@ -79,18 +72,6 @@ class TestApiModeForwarding:
             f"got: {captured_kwargs.get('mode')!r}. Full kwargs: {captured_kwargs}"
         )
 
-    @pytest.mark.xfail(
-        reason=(
-            "?mode= is wired on search_endpoint (api/app.py) and forwarded into "
-            "routed_search(mode=...), but this test patches "
-            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
-            "`from knowledge_lake.pipeline.search import search` at import time "
-            "(route.py:18), binding its own module-level name, so routed_search calls "
-            "route.search — the patch on pipeline.search.search has no effect on that "
-            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
-        ),
-        strict=False,
-    )
     def test_api_mode_forwarded_dense(self, api_client) -> None:
         """GET /search?q=x&mode=dense forwards mode='dense' into pipeline.search."""
         captured_kwargs: dict = {}
@@ -99,7 +80,7 @@ class TestApiModeForwarding:
             captured_kwargs.update({"query": query, **kwargs})
             return []
 
-        with patch("knowledge_lake.pipeline.search.search", side_effect=search_stub):
+        with patch("knowledge_lake.pipeline.route.search", side_effect=search_stub):
             resp = api_client.get("/search", params={"q": "test query", "mode": "dense"})
 
         assert resp.status_code == 200, (
