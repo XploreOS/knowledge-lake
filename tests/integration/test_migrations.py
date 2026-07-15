@@ -133,6 +133,8 @@ class TestSourcesSchema:
         "license_url", "robots_checked", "config", "created_at",
         # Phase 11 (crawl-scheduling) columns — Alembic 0009
         "crawl_schedule", "last_crawled_at", "last_content_hash",
+        # KL-15 (domain first-class column) — Alembic 0010
+        "domain",
     ]
 
     def test_sources_columns(self, engine) -> None:

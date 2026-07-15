@@ -110,12 +110,16 @@ def load_domain(name: str) -> dict:
                     normalized_url=norm_url,
                     license_type=entry.license,
                     crawl_schedule=validated_schedule,
+                    # KL-15: domain is ALSO written to the first-class Source.domain
+                    # column via domain=name below — config["domain"] is kept for one
+                    # release as a transitional dual-write.
                     config={
                         "domain": name,
                         "tags": entry.tags,
                         "crawl_config": entry.crawl_config,
                         "ingest_type": entry.ingest_type,
                     },
+                    domain=name,
                 )
                 session.commit()
                 loaded_count += 1

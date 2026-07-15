@@ -93,6 +93,19 @@ class Source(Base):
     config: Mapped[Any | None] = mapped_column(_JSON, nullable=True)
     """Arbitrary source configuration (crawl parameters, credentials refs, etc.)."""
 
+    domain: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """First-class domain classification (KL-15). Indexed, unvalidated string.
+
+    Added by migration 0010, backfilled from ``config->>'domain'`` for existing
+    rows. Both write sites (``pipeline/ingest.py``'s ``register_source`` and
+    ``pipeline/domains.py``'s ``load_domain``) dual-write this column AND
+    ``config["domain"]`` for one release, so any code still reading the JSON
+    blob directly keeps working. ``get_domain_for_source()`` reads this column
+    first, falling back to ``config['domain']`` only as a defensive belt for
+    rows the backfill somehow missed. The dual-write is a deliberate,
+    documented deprecation — remove ``config["domain"]`` writes in a later
+    release once nothing reads the blob directly."""
+
     crawl_schedule: Mapped[str | None] = mapped_column(String(255), nullable=True)
     """5-field UTC cron string (SCHED-01, D-02/D-03). NULL means source is not
     auto-recrawled."""

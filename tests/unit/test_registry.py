@@ -473,6 +473,111 @@ class TestEnrichedArtifactAndSpend:
 
         assert get_domain_for_source(session, source.id) is None
 
+    def test_get_domain_for_source_reads_column_first(self, session) -> None:
+        """KL-15: get_domain_for_source() prefers the first-class column."""
+        from knowledge_lake.registry.repo import create_source, get_domain_for_source
+
+        source = create_source(
+            session, name="Column Source", source_type="web", domain="aviation",
+        )
+        session.flush()
+
+        assert get_domain_for_source(session, source.id) == "aviation"
+        assert source.domain == "aviation"
+
+    def test_get_domain_for_source_falls_back_to_config_blob(self, session) -> None:
+        """Rows with only config['domain'] (no column value) still resolve (KL-15)."""
+        from knowledge_lake.registry.repo import create_source, get_domain_for_source
+
+        source = create_source(
+            session, name="Blob-only Source", source_type="web",
+            config={"domain": "functional-medicine"},
+        )
+        session.flush()
+
+        assert source.domain is None
+        assert get_domain_for_source(session, source.id) == "functional-medicine"
+
+    def test_create_source_dual_writes_domain_column_and_config(self, session) -> None:
+        """Both KL-15 write sites dual-write: column AND config['domain']."""
+        from knowledge_lake.registry.repo import create_source
+
+        source = create_source(
+            session, name="Dual Write Source", source_type="web",
+            domain="aviation", config={"domain": "aviation"},
+        )
+        session.flush()
+
+        assert source.domain == "aviation"
+        assert source.config["domain"] == "aviation"
+
+
+# ── Alembic 0010 migration + Source.domain column (KL-15) ───────────────────
+
+
+class TestAlembic0010Migration:
+    """Verify 0010 migration module exposes correct revision chain."""
+
+    def test_0010_revision_identifiers(self) -> None:
+        import importlib
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0010_sources_domain_column"
+        )
+        assert mod.revision == "0010"
+        assert mod.down_revision == "0009"
+
+    def test_0010_upgrade_adds_domain_column_and_index(self) -> None:
+        import importlib
+        import inspect
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0010_sources_domain_column"
+        )
+        src = inspect.getsource(mod.upgrade)
+        assert "add_column" in src
+        assert '"domain"' in src
+        assert "create_index" in src
+
+    def test_0010_downgrade_drops_index_then_column(self) -> None:
+        import importlib
+        import inspect
+        mod = importlib.import_module(
+            "knowledge_lake.registry.alembic.versions.0010_sources_domain_column"
+        )
+        src = inspect.getsource(mod.downgrade)
+        assert "drop_index" in src
+        assert "drop_column" in src
+        # index dropped before the column it indexes
+        assert src.index("drop_index") < src.index("drop_column")
+
+
+class TestSourceDomainColumn:
+    """Source ORM has the first-class domain column (KL-15)."""
+
+    def test_source_has_domain_attr(self) -> None:
+        from knowledge_lake.registry.models import Source
+        assert hasattr(Source, "domain")
+
+    def test_domain_column_is_nullable(self, engine) -> None:
+        from sqlalchemy import inspect as sa_inspect
+        insp = sa_inspect(engine)
+        cols = {c["name"]: c for c in insp.get_columns("sources")}
+        assert cols["domain"]["nullable"] is True
+
+    def test_source_domain_defaults_none(self, session) -> None:
+        from knowledge_lake.registry.repo import create_source
+
+        source = create_source(session, name="NoDomain", source_type="web")
+        session.flush()
+        assert source.domain is None
+
+    def test_create_source_accepts_domain_kwarg(self, session) -> None:
+        import inspect
+        from knowledge_lake.registry.repo import create_source
+
+        sig = inspect.signature(create_source)
+        assert "domain" in sig.parameters
+        assert sig.parameters["domain"].default is None
+
 
 # ── Alembic 0009 migration + Source crawl columns (Phase 11, SCHED-01/02) ────
 

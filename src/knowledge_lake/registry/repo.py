@@ -64,6 +64,7 @@ def create_source(
     robots_checked: bool = False,
     config: Any | None = None,
     crawl_schedule: str | None = None,
+    domain: str | None = None,
 ) -> Source:
     """Register a new source and add it to the session.
 
@@ -88,9 +89,17 @@ def create_source(
     robots_checked:
         Whether robots.txt was checked before crawling.
     config:
-        Arbitrary JSON-serialisable configuration dict.
+        Arbitrary JSON-serialisable configuration dict. Callers that also pass
+        ``domain=`` are expected to keep ``config["domain"]`` in sync themselves
+        during the KL-15 dual-write deprecation window — this function does not
+        derive one from the other.
     crawl_schedule:
         5-field UTC cron string (SCHED-01). None means not auto-recrawled.
+    domain:
+        First-class domain classification (KL-15), written to the indexed
+        ``sources.domain`` column. Callers should also set
+        ``config["domain"]`` to the same value during the dual-write window
+        (see ``registry/models.py``'s ``Source.domain`` docstring).
 
     Returns
     -------
@@ -108,6 +117,7 @@ def create_source(
         robots_checked=robots_checked,
         config=config,
         crawl_schedule=crawl_schedule,
+        domain=domain,
         created_at=datetime.datetime.now(datetime.UTC),
     )
     session.add(source)
@@ -894,16 +904,23 @@ def get_curated_artifact_for_parsed(
 
 
 def get_domain_for_source(session: Session, source_id: str) -> str | None:
-    """Return the domain classification stored in Source.config, or None.
+    """Return the domain classification for a source, or None.
 
-    RESEARCH.md Pitfall 4: domain is never a dedicated column, always stored
-    under Source.config["domain"] (see pipeline/ingest.py's register_source).
-    Returns None if the source is missing or has no config.
+    KL-15: domain is now a first-class indexed column (``Source.domain``,
+    migration 0010) and is read from there first. Falls back to the legacy
+    ``Source.config["domain"]`` JSON blob only as a defensive belt for rows
+    the backfill migration somehow missed, or rows written by code that has
+    not yet picked up the ``domain=`` column write (dual-write window).
+    Returns None if the source is missing or has neither.
     """
     source = session.get(Source, source_id)
-    if source is None or not source.config:
+    if source is None:
         return None
-    return source.config.get("domain")
+    if source.domain:
+        return source.domain
+    if source.config:
+        return source.config.get("domain")
+    return None
 
 
 def get_source(session: Session, source_id: str) -> Source | None:

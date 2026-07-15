@@ -296,6 +296,9 @@ def register_source(
 
         # Build config dict from non-None values (D-05): domain, tags, organization.
         # Backward-compatible: callers without tags/organization produce identical behavior.
+        # KL-15: domain is ALSO written to the first-class Source.domain column
+        # below — config["domain"] is kept for one release as a transitional
+        # dual-write so code still reading the blob directly does not break.
         config_dict: dict = {}
         if domain:
             config_dict["domain"] = domain
@@ -313,6 +316,7 @@ def register_source(
                 normalized_url=norm_url,
                 license_type=license_type,
                 config=config,
+                domain=domain,
             )
             session.flush()
         except IntegrityError:
