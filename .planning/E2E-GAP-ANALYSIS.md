@@ -5,6 +5,42 @@ audited: 2026-07-15T02:48:00Z
 audited_against: 49c77f4
 status: findings_open
 resolved:
+  - id: KL-01
+    resolved: 2026-07-15
+    quick_task: 260715-51d
+    commits: [635e96a, fa3a1ca, 6ea82c2]
+    decision: "domain= FILTERS rows, it does not merely label the path (user decision)"
+    fix: >
+      All three export functions now filter rows by source domain via
+      registry_repo.get_domain_for_source when domain is not None (strict
+      equality; null-domain rows excluded). domain=None is unchanged — no
+      filter, all domains, '_unclassified' path — with a regression test
+      pinning that default. Filtering is now reachable: added --domain/-D to
+      `klake export` and an optional `domain` field to the API ExportRequest
+      (previously only Dagster could pass it). Verified on the same real data
+      that exposed the bug: gold/aviation/rag_corpus/*.parquet went from
+      51 aviation + 53 functional-medicine + 29 null (62% foreign) to
+      51 rows, 100% aviation.
+    known_limitation: >
+      With domain=None the '_unclassified' path segment and S3 tag still
+      describe an all-domain export. Renaming it would change the STORE-03
+      gold-zone layout — deliberately deferred.
+  - id: KL-02
+    resolved: 2026-07-15
+    quick_task: 260715-51d
+    commits: [4396e56, fa3a1ca]
+    fix: >
+      A live probe showed the LiteLLM proxy already returns the correct cost in
+      response._hidden_params["response_cost"] — the hand-maintained settings
+      price table was both wrong and unnecessary. compute_call_cost() now
+      prefers response_cost, falls back to completion_cost(), then to the flat
+      estimate (now logged as an explicit under-estimation warning, not a bare
+      cost_calc_failed). bootstrap_llm_pricing() registers under the ALIAS names
+      actually sent (cheap_model/strong_model/eval_model) instead of Bedrock IDs,
+      so the fallback resolves too; eval_model_* price settings added. Verified
+      on a live eval_model call: cost went from $0.0002525 WITH a cost_calc_failed
+      warning to $0.0020427 with NO warning — ~8x higher, i.e. the real price.
+      Budget caps now mean what they say.
   - id: KL-03
     resolved: 2026-07-15
     quick_task: 260715-4b9
@@ -33,8 +69,9 @@ counts:
   medium: 6
   low: 8
   total: 17
-  open: 16
-  resolved: 1
+  open: 14
+  resolved: 3
+  high_open: 0
   verified_working: 7
 tests:
   at_audit_time:
@@ -180,6 +217,14 @@ for data governance or cost.
 
 ### KL-01 — Domain-scoped exports are not domain-scoped
 
+> **RESOLVED 2026-07-15** — quick task `260715-51d` (`635e96a`, `fa3a1ca`, `6ea82c2`).
+> **Decision: `domain=` filters.** Re-running the exact probe that exposed this,
+> against the same real data: `gold/aviation/rag_corpus/*.parquet` went from
+> **133 rows (62% foreign)** to **51 rows, 100% aviation**. `--domain/-D` added to
+> `klake export` and `domain` to the API so filtering is reachable outside Dagster.
+> `domain=None` deliberately unchanged (all domains, `_unclassified` path), pinned
+> by a regression test. See "Resolution" below.
+
 **What.** `export_rag_corpus()`, `export_pretrain_corpus()` and
 `export_finetune_dataset()` all accept a `domain` kwarg. It is used *only* to
 build the S3 path segment and the object tag — never to filter rows. The row
@@ -218,9 +263,41 @@ to `path_label` and refuse to tag what wasn't filtered. Note `export-wiki`
 already does this correctly — it *requires* `--domain` and genuinely scopes its
 output — so the pattern is proven in-repo.
 
+**Resolution (2026-07-15, quick task `260715-51d`).** The ambiguity was resolved
+in favour of filtering: `domain=X` now selects only rows whose source domain is
+`X` (strict equality via `get_domain_for_source`; null-domain rows excluded), in
+all three export functions. The path and S3 tag now describe contents truthfully.
+
+`domain=None` is deliberately unchanged — no filter, all domains, `_unclassified`
+path — because that is the current CLI/API default and narrowing it would be a
+breaking change. A regression test pins that default alongside the new filter
+tests.
+
+Filtering was also *unreachable* before this: neither the CLI nor the API passed
+`domain`, so only a Dagster operator could trigger the bug. Both now expose it
+(`klake export --domain aviation`, `{"domain": "aviation"}` on the API), with the
+committed `docs/openapi.json` regenerated.
+
+Verified against the same real corpus that produced the original evidence:
+
+```
+before: 51 aviation + 53 functional-medicine + 29 null = 133 rows   (62% foreign)
+after : 51 aviation                                    =  51 rows   (100% aviation)
+```
+
+*Known limitation, deliberately deferred:* with `domain=None` the
+`_unclassified` segment and tag still label an all-domain export. Fixing that
+means changing the STORE-03 gold-zone layout.
+
 ---
 
 ### KL-02 — LLM budget caps under-enforce by 2.4×–9×
+
+> **RESOLVED 2026-07-15** — quick task `260715-51d` (`4396e56`, `fa3a1ca`).
+> A live probe revealed the proxy **already computes the correct cost** and we
+> were ignoring it. On a real `eval_model` call, reported cost went from
+> **$0.0002525 with a `cost_calc_failed` warning** to **$0.0020427 with none** —
+> ~8× higher, i.e. the true price. See "Resolution" below.
 
 **What.** `bootstrap_llm_pricing()` registers prices keyed by *Bedrock model ID*
 (`bedrock/us.anthropic.claude-haiku-4-5…`). But calls go through the LiteLLM
@@ -256,6 +333,35 @@ matched.
 which the proxy already computes. Add `eval_model` pricing. Consider making a
 pricing-lookup miss loud rather than a silent fallback — a cost guardrail that
 quietly guesses is worse than one that fails.
+
+**Resolution (2026-07-15, quick task `260715-51d`).** A live probe against the
+running proxy settled which of the two fixes was right, and the answer was better
+than either:
+
+```
+response.model                   : cheap_model
+_hidden_params["response_cost"]  : 3.74e-05   ← proxy already computed it, correctly
+completion_cost() (alias fixed)  : 2.72e-05   ← from the hand-maintained settings table
+```
+
+The proxy computes cost from the real backend model's pricing on every call. The
+settings price table was therefore both **wrong** (never consulted) and
+**unnecessary** (duplicating something authoritative). `compute_call_cost()` now
+tries, in order: `response_cost` → `completion_cost()` → flat estimate. The last
+resort now logs an explicit under-estimation warning rather than a bare
+`cost_calc_failed`, and `bootstrap_llm_pricing()` registers under the alias names
+actually sent, so the middle rung genuinely works. `eval_model` — which had no
+registered price at all — gained one, though `response_cost` covers it and every
+future alias for free.
+
+Verified on a real `eval_model` call (the alias that was previously unpriced):
+
+```
+before: cost_usd 0.0002525  + {"event": "enrich.cost_calc_failed", ...}
+after : cost_usd 0.0020427  + no warning        (~8× higher — the real price)
+```
+
+`budget_usd` now means what it says.
 
 ---
 
@@ -600,13 +706,22 @@ exports to every other domain's state is the same missing dimension as KL-01.
    otherwise the fixes below have nothing holding them in place, which is how
    KL-01 arrived.~~ **Done 2026-07-15** (`260715-4b9`). The net is now in place:
    211 integration tests run on every push to main.
-2. **KL-02** — a one-line key change; stops silent 9× budget overrun.
-3. **KL-07** — a one-line `is_global` change; closes the reserved-range gap.
-4. **KL-01** — decide whether `domain` filters or merely labels, then make the
-   code and the S3 tag agree.
+2. ~~**KL-02** — a one-line key change; stops silent 9× budget overrun.~~
+   **Done 2026-07-15** (`260715-51d`). Not a one-liner in the end — the proxy's
+   own `response_cost` made the hand-maintained price table redundant.
+3. ~~**KL-01** — decide whether `domain` filters or merely labels, then make the
+   code and the S3 tag agree.~~ **Done 2026-07-15** (`260715-51d`). Decided:
+   it filters.
+4. **KL-07** — a one-line `is_global` change; closes the reserved-range gap.
+   *Next up: cheapest remaining fix with real security value.*
 5. **KL-04 / KL-05 / KL-06** — these are one decision: settle what
    `quality_score` in the payload actually means, who writes it, and when.
-6. The rest as hygiene.
+   Worth doing as a single design pass, not three patches.
+6. **KL-10** — remove the 42 stale "Wave 0 stub" xfail markers, *then* enable
+   `xfail_strict`. Order matters: flipping the flag first turns them all red.
+7. The rest as hygiene.
+
+**All three high-severity findings are now closed.** Remaining: 6 medium, 8 low.
 
 ---
 
