@@ -177,6 +177,15 @@ class EnrichSettings(BaseModel):
     """Same rationale as cheap_model_bedrock_id, registered for
     forward-compatibility with Phase 5's strong_model/eval_model usage."""
 
+    eval_model_bedrock_id: str = "bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    """Documentation-only, mirrors strong_model_bedrock_id: eval_model maps to
+    the same Sonnet backend model per infra/litellm/config.yaml. NEVER passed
+    as the `model=` argument to litellm.completion(), which always uses the
+    "eval_model" task alias. Not used by bootstrap_llm_pricing() directly
+    (KL-02 registers by alias name, not Bedrock ID) — kept for parity with
+    cheap_model_bedrock_id / strong_model_bedrock_id and any future direct
+    Bedrock-ID lookup."""
+
     cheap_model_input_cost_per_token: float = 0.0000008
     """USD cost per input token for the cheap_model alias's registered price."""
 
@@ -188,6 +197,16 @@ class EnrichSettings(BaseModel):
 
     strong_model_output_cost_per_token: float = 0.000015
     """USD cost per output token for the strong_model alias's registered price."""
+
+    eval_model_input_cost_per_token: float = 0.000003
+    """USD cost per input token for the eval_model alias's registered price.
+    Mirrors strong_model_input_cost_per_token — eval_model maps to the same
+    Sonnet model per infra/litellm/config.yaml (KL-02: eval_model previously
+    had no registered price at all)."""
+
+    eval_model_output_cost_per_token: float = 0.000015
+    """USD cost per output token for the eval_model alias's registered price.
+    Mirrors strong_model_output_cost_per_token (KL-02)."""
 
     fallback_cost_per_1k_input: float = 0.0005
     """Used only if completion_cost() itself raises even after registration."""
