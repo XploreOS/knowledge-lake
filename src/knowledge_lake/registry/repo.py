@@ -1135,6 +1135,7 @@ def create_dataset(
     format: str | None = None,
     storage_uri: str | None = None,
     example_count: int | None = None,
+    id: str | None = None,
 ) -> Dataset:
     """Create a new Dataset row and add it to the session.
 
@@ -1152,6 +1153,11 @@ def create_dataset(
         S3 URI of the exported dataset file. None until exported.
     example_count:
         Running example count. None until populated by export.
+    id:
+        Row ID to use, e.g. when the caller already minted a ``dst_`` ID for a
+        storage key (filename) and wants the row to carry the SAME ID rather
+        than a second, unrelated one (KL-14). Defaults to a freshly minted
+        ``new_id("dataset")`` when not supplied — the pre-existing behavior.
 
     Returns
     -------
@@ -1159,7 +1165,7 @@ def create_dataset(
         The newly created (unsaved) Dataset instance.
     """
     dataset = Dataset(
-        id=new_id("dataset"),
+        id=id or new_id("dataset"),
         name=name,
         dataset_type=dataset_type,
         format=format,

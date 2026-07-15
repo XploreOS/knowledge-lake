@@ -373,6 +373,7 @@ def export_rag_corpus(
 
         dataset = registry_repo.create_dataset(
             session,
+            id=export_id,
             name=f"rag_corpus_{export_id}",
             dataset_type="rag_corpus",
             format="parquet",
@@ -489,6 +490,7 @@ def export_pretrain_corpus(
 
         dataset = registry_repo.create_dataset(
             session,
+            id=export_id,
             name=f"pretrain_{export_id}",
             dataset_type="pretrain_corpus",
             format="jsonl",
