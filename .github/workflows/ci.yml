@@ -123,13 +123,14 @@ jobs:
           python-version: "3.12"
           enable-cache: true
       - name: Write .env for compose stack
-        # KLAKE_STORAGE__ACCESS_KEY_ID / SECRET_ACCESS_KEY have no defaults
-        # (WR-09) — compose fails loudly without them. Secret must be >= 8
-        # chars (MinIO's MINIO_ROOT_PASSWORD minimum).
+        # All KLAKE_STORAGE__* vars must be in .env so both docker-compose
+        # (for MinIO) and pydantic-settings (for tests) resolve the same values.
         run: |
           printf '%s\n' \
             'KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access' \
             'KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret' \
+            'KLAKE_STORAGE__ENDPOINT_URL=http://localhost:9000' \
+            'KLAKE_STORAGE__BUCKET=klake-data' \
             > .env
       - name: Bring up service stack
         # Compose is the single source of truth for services (KL-03 finding):

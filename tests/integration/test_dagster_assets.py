@@ -20,7 +20,6 @@ which confirms the asset graph is correct without needing the Dagster webserver.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -215,16 +214,17 @@ class TestAssetMaterialization:
             QdrantResource,
         )
 
-        # Build resources from current env (same as production would use EnvVar)
-        db_url = os.environ.get(
-            "KLAKE_DATABASE_URL", "postgresql+psycopg://klake:klake@localhost:5432/klake"
-        )
-        minio_endpoint = os.environ.get("KLAKE_STORAGE__ENDPOINT_URL", "http://localhost:9000")
-        minio_bucket = os.environ.get("KLAKE_STORAGE__BUCKET", "klake-data")
-        minio_access_key = os.environ.get("KLAKE_STORAGE__ACCESS_KEY_ID", "minioadmin")
-        minio_secret_key = os.environ.get("KLAKE_STORAGE__SECRET_ACCESS_KEY", "minioadmin")
-        qdrant_url = os.environ.get("KLAKE_QDRANT_URL", "http://localhost:6333")
-        litellm_url = os.environ.get("KLAKE_LITELLM_URL", "http://localhost:4000")
+        # Build resources from settings (reads .env file; env vars are stripped
+        # by the autouse _isolate_env fixture so os.environ.get() won't work).
+        from knowledge_lake.config.settings import get_settings
+        _s = get_settings()
+        db_url = _s.database_url
+        minio_endpoint = _s.storage.endpoint_url
+        minio_bucket = _s.storage.bucket
+        minio_access_key = _s.storage.access_key_id
+        minio_secret_key = _s.storage.secret_access_key
+        qdrant_url = _s.qdrant_url
+        litellm_url = _s.litellm_url
 
         resources = {
             "postgres": PostgresResource(database_url=db_url),
@@ -314,15 +314,15 @@ class TestAssetMaterialization:
             QdrantResource,
         )
 
-        db_url = os.environ.get(
-            "KLAKE_DATABASE_URL", "postgresql+psycopg://klake:klake@localhost:5432/klake"
-        )
-        minio_endpoint = os.environ.get("KLAKE_STORAGE__ENDPOINT_URL", "http://localhost:9000")
-        minio_bucket = os.environ.get("KLAKE_STORAGE__BUCKET", "klake-data")
-        minio_access_key = os.environ.get("KLAKE_STORAGE__ACCESS_KEY_ID", "minioadmin")
-        minio_secret_key = os.environ.get("KLAKE_STORAGE__SECRET_ACCESS_KEY", "minioadmin")
-        qdrant_url = os.environ.get("KLAKE_QDRANT_URL", "http://localhost:6333")
-        litellm_url = os.environ.get("KLAKE_LITELLM_URL", "http://localhost:4000")
+        from knowledge_lake.config.settings import get_settings
+        _s = get_settings()
+        db_url = _s.database_url
+        minio_endpoint = _s.storage.endpoint_url
+        minio_bucket = _s.storage.bucket
+        minio_access_key = _s.storage.access_key_id
+        minio_secret_key = _s.storage.secret_access_key
+        qdrant_url = _s.qdrant_url
+        litellm_url = _s.litellm_url
 
         resources = {
             "postgres": PostgresResource(database_url=db_url),
