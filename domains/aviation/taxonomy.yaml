@@ -1,0 +1,14 @@
+# Taxonomy for the aviation domain pack (loaded as a flexible dict).
+# entity_types drives entity extraction; categories label document types.
+entity_types:
+  - Aircraft
+  - Airport
+  - Maneuver
+  - Regulation
+  - NavigationAid
+  - WeatherPhenomenon
+categories:
+  - handbook
+  - federal_regulation
+  - advisory_circular
+  - procedures

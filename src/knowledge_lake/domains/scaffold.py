@@ -111,7 +111,7 @@ Document text:
 _QA_GENERATION_J2 = """\
 You are a question-answer generator for the __DOMAIN__ knowledge base. Generate
 high-quality question-answer pairs grounded strictly in the provided chunk,
-suitable for fine-tuning a __DOMAIN__-domain language model.
+suitable for fine-tuning __ARTICLE__ __DOMAIN__-domain language model.
 
 Respond with ONLY valid JSON matching exactly this shape, with no markdown
 fences and no commentary before or after the JSON:
@@ -204,9 +204,23 @@ def _pascal_case(name: str) -> str:
     return "".join(part[:1].upper() + part[1:] for part in parts if part)
 
 
+def _article_for(name: str) -> str:
+    """Choose "a" or "an" for a domain name based on its leading sound.
+
+    Simple vowel-letter heuristic (a/e/i/o/u) — sufficient for domain pack
+    names, which are short single words or hyphenated compounds (e.g.
+    "aviation" -> "an", "healthcare" -> "a", "energy" -> "an").
+    """
+    return "an" if name[:1].lower() in "aeiou" else "a"
+
+
 def _render(template: str, name: str) -> str:
     """Substitute the sentinel placeholders in a template."""
-    return template.replace("__PASCAL__", _pascal_case(name)).replace("__DOMAIN__", name)
+    return (
+        template.replace("__PASCAL__", _pascal_case(name))
+        .replace("__ARTICLE__", _article_for(name))
+        .replace("__DOMAIN__", name)
+    )
 
 
 def scaffold_domain(

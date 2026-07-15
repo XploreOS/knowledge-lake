@@ -1,0 +1,30 @@
+# Sources for the aviation domain pack.
+# Registered by:  klake init --domain aviation
+
+- name: FAA Airplane Flying Handbook Ch4 - Energy Management
+  url: https://www.faa.gov/sites/faa.gov/files/regulations_policies/handbooks_manuals/aviation/airplane_handbook/05_afh_ch4.pdf
+  source_type: pdf
+  license: public-domain
+  tags: ["aviation", "flight-training", "handbook"]
+  ingest_type: crawl
+
+- name: FAA Aeronautical Information Manual
+  url: https://www.faa.gov/air_traffic/publications/atpubs/aim_html/
+  source_type: html
+  license: public-domain
+  tags: ["aviation", "atc", "procedures"]
+  ingest_type: crawl
+
+- name: FAA Pilot's Handbook of Aeronautical Knowledge
+  url: https://www.faa.gov/regulations_policies/handbooks_manuals/aviation/phak
+  source_type: html
+  license: public-domain
+  tags: ["aviation", "handbook"]
+  ingest_type: crawl
+
+- name: FAA NASR Subscription Bulk Data
+  url: https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/
+  source_type: csv
+  license: public-domain
+  tags: ["aviation", "navigation", "bulk"]
+  ingest_type: upload
