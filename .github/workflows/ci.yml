@@ -68,6 +68,49 @@ jobs:
       - name: Run unit tests
         run: uv run pytest tests/unit -m "not browser" -q
 
+  docker-build:
+    name: Docker build (api image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert Dockerfile base matches .python-version
+        # Cheap guard against the exact drift that caused KL-08: the base was
+        # bumped to python:3.14-slim (unbuildable — greenlet has no CPython
+        # 3.14 support) and nothing caught it because the image was never
+        # built in CI. This is a fast pre-check; the build step below is the
+        # real guard.
+        run: |
+          pinned="$(cat .python-version)"
+          base_line="$(grep -m1 '^FROM python:' Dockerfile)"
+          echo "Dockerfile base: ${base_line}"
+          echo ".python-version: ${pinned}"
+          case "${base_line}" in
+            "FROM python:${pinned}-slim"*) echo "OK: base matches .python-version" ;;
+            *)
+              echo "FAIL: Dockerfile base (${base_line}) does not match .python-version (${pinned})"
+              exit 1
+              ;;
+          esac
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Write .env for compose build
+        # docker compose interpolates the compose file (including the
+        # required KLAKE_STORAGE__* vars referenced by other services) before
+        # running any subcommand, `build` included — so a value must be
+        # present even though the api image itself needs no secrets to build.
+        run: |
+          cat > .env <<'EOF'
+          KLAKE_STORAGE__ACCESS_KEY_ID=klake-ci-access
+          KLAKE_STORAGE__SECRET_ACCESS_KEY=klake-ci-secret
+          EOF
+      - name: Build api image (no push)
+        # This is the actual guard KL-08/the Dockerfile landmine needed: the
+        # api service has a `build:` stanza but the integration job below
+        # only brings up pre-built public images (postgres/minio/qdrant), so
+        # nothing in CI previously built this image. An unbuildable
+        # Dockerfile could — and did — rot for 13 days behind a green badge.
+        run: docker compose build api
+
   integration:
     name: Integration tests
     needs: test
