@@ -1,12 +1,9 @@
-"""Wave 0 test stubs for CLI init/index commands (IFACE-01).
+"""Tests for CLI init/index commands (IFACE-01).
 
-All tests are marked xfail until the implementation is created in Task 2.
 Import uses a try/except guard so pytest can collect the file before the commands exist.
 """
 
 from __future__ import annotations
-
-import pytest
 
 try:
     from typer.testing import CliRunner
@@ -20,7 +17,6 @@ except ImportError:
 runner = CliRunner() if CliRunner is not None else None
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — init command not yet added")
 def test_init_command_exists() -> None:
     """typer app ["init", "--domain", "healthcare"] must not produce 'No such command' error."""
     assert _IMPORT_OK, "CliRunner or app import failed"
@@ -31,7 +27,6 @@ def test_init_command_exists() -> None:
     )
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — init command not yet added")
 def test_init_command_help() -> None:
     """app ['init', '--help'] must exit 0 and output must contain '--domain'."""
     assert _IMPORT_OK, "CliRunner or app import failed"
@@ -45,7 +40,6 @@ def test_init_command_help() -> None:
     )
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — index command not yet added")
 def test_index_command_exists() -> None:
     """app ['index', '--help'] must exit 0 and output must contain '--collection'."""
     assert _IMPORT_OK, "CliRunner or app import failed"

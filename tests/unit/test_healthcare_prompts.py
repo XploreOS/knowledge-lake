@@ -1,13 +1,8 @@
-"""Wave 0 test stubs for healthcare Jinja2 prompt templates (DOMAIN-03).
-
-All tests are marked xfail until the domain pack content files are created in Task 3.
-"""
+"""Tests for healthcare Jinja2 prompt templates (DOMAIN-03)."""
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 try:
     from jinja2 import Environment, FileSystemLoader
@@ -28,7 +23,6 @@ def _make_env() -> "Environment":
     return Environment(loader=FileSystemLoader(str(PROMPTS_DIR)), autoescape=False)
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_enrich_j2_renders() -> None:
     """enrich.j2 rendered with title='T', dates=[], headings=[], excerpt='text' returns str containing 'clinical_codes'."""
     assert PROMPTS_DIR.exists(), f"Prompts directory not found: {PROMPTS_DIR}"
@@ -44,7 +38,6 @@ def test_enrich_j2_renders() -> None:
     assert "clinical_codes" in rendered, "enrich.j2 must include 'clinical_codes' in output schema"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_enrich_j2_no_autoescape() -> None:
     """Text '<E11.9>' in excerpt passes through without HTML-encoding."""
     assert PROMPTS_DIR.exists(), f"Prompts directory not found: {PROMPTS_DIR}"
@@ -60,7 +53,6 @@ def test_enrich_j2_no_autoescape() -> None:
     assert "&gt;" not in rendered, "Angle brackets were HTML-escaped — autoescape must be False"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_qa_generation_j2_renders() -> None:
     """qa_generation.j2 rendered with document_text='d', chunk_text='c' returns str containing 'question'."""
     assert PROMPTS_DIR.exists(), f"Prompts directory not found: {PROMPTS_DIR}"

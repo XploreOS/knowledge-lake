@@ -1,10 +1,9 @@
 """Unit tests for QdrantVectorStore hybrid retrieval (RETR-01, D-05, D-07, D-11, D-12, D-14).
 
-RED test scaffold — these tests encode acceptance behaviors for the hybrid
-retrieval surface (named dense+sparse collections, hybrid prefetch/RRF assembly,
-get_collection_dim named-vector branch, server preflight, and upsert shape
-branching).  Each is marked xfail(strict=False) because the implementation lives
-in Plan 10-06 — the xfail decorators will be removed as each behavior lands.
+Tests encode acceptance behaviors for the hybrid retrieval surface (named
+dense+sparse collections, hybrid prefetch/RRF assembly, get_collection_dim
+named-vector branch, server preflight, and upsert shape branching). Plan 10-06
+landed this behavior; the xfail decorators have been removed.
 
 Fixture mirrors tests/unit/test_qdrant_payload_indexes.py: uses
 QdrantVectorStore.__new__ + MagicMock _client to avoid any real Qdrant connection.
@@ -59,7 +58,6 @@ def mock_store():
 # ── Test: Named create-path config (D-05, D-13, RETR-01) ────────────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: named create-path not yet implemented", strict=False)
 def test_named_create_config(mock_store):
     """After ensure_aliased_collection(alias, dim=384), assert create_collection
     was called with vectors_config carrying a 'dense' key and
@@ -100,7 +98,6 @@ def test_named_create_config(mock_store):
 # ── Test: get_collection_dim for named collections (Pitfall 2) ──────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: get_collection_dim named-vector branch not yet implemented", strict=False)
 def test_get_dim_named(mock_store):
     """Stub _client.get_collection(...).config.params.vectors to a dict
     {'dense': obj(size=384)} and assert get_collection_dim returns 384
@@ -210,7 +207,6 @@ def test_hybrid_prefetch_limits(mock_store):
 # ── Test: Server preflight (D-07) ───────────────────────────────────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: server preflight helper not yet implemented", strict=False)
 def test_server_preflight(mock_store):
     """Stub _client.info() to return version='1.9.0' and assert the preflight
     raises RuntimeError naming the version and >= 1.10 requirement.
@@ -236,7 +232,6 @@ def test_server_preflight(mock_store):
 # ── Test: Upsert named shape (Pitfall 1, D-09) ──────────────────────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: named upsert shape branching not yet implemented", strict=False)
 def test_upsert_named_shape(mock_store):
     """With _is_named returning True, upsert a VectorPoint carrying a sparse
     value; assert the built point vector is a dict with 'dense' and 'sparse' keys.
@@ -273,7 +268,6 @@ def test_upsert_named_shape(mock_store):
 # ── Test: Upsert legacy shape (Pitfall 1, D-09) ─────────────────────────────────
 
 
-@pytest.mark.xfail(reason="Plan 10-06: upsert shape branching not yet implemented", strict=False)
 def test_upsert_legacy_shape(mock_store):
     """With _is_named returning False, upsert a VectorPoint; assert the built
     point vector is the bare list (legacy unnamed collection) AND that the

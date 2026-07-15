@@ -4,8 +4,8 @@ RED test scaffold: encodes acceptance behaviors for the mode parameter and
 sparse_query threading through pipeline.search(), plus the fail-loud contract
 when a hybrid/sparse mode is used against a collection with no sparse vectors.
 
-Each test is marked xfail(strict=False) because the implementation lives in
-Plans 10-06 and 10-07 — xfail decorators will be removed when those plans land.
+Plans 10-06 and 10-07 landed this implementation; the xfail decorators have
+been removed.
 
 Fixture mirrors tests/unit/test_search_filters.py (lines 19-32): monkeypatch
 knowledge_lake.pipeline.search.get_embedder / get_vectorstore at the pipeline
@@ -55,10 +55,6 @@ except (ImportError, AttributeError):
 class TestModeThreadsSparseQuery:
     """search() threads mode and sparse_query into vstore.search (D-09, D-03, RETR-03)."""
 
-    @pytest.mark.xfail(
-        reason="Plan 10-06/10-07: mode + sparse_query args not yet wired in pipeline.search",
-        strict=False,
-    )
     def test_mode_threads_sparse_query(self, fake_vstore, monkeypatch) -> None:
         """search('q', mode='hybrid') forwards mode='hybrid' and a non-None sparse_query
         into vstore.search (D-09, D-03).
@@ -87,10 +83,6 @@ class TestModeThreadsSparseQuery:
             f"got None. vstore.search called with: {call_kwargs}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 10-06/10-07: mode arg not yet wired in pipeline.search",
-        strict=False,
-    )
     def test_dense_mode_no_sparse_query(self, fake_vstore) -> None:
         """search('q', mode='dense') must NOT pass a sparse_query (backward-compat, D-09)."""
         search_module.search("q", collection="c", top_k=5, mode="dense")  # type: ignore[call-arg]
@@ -106,10 +98,6 @@ class TestModeThreadsSparseQuery:
 class TestFailLoudMissingSparse:
     """search() raises a clear error when mode requires sparse vectors but collection has none (D-10, T-10-03)."""
 
-    @pytest.mark.xfail(
-        reason="Plan 10-06/10-07: fail-loud sparse-presence check not yet in pipeline.search",
-        strict=False,
-    )
     def test_fail_loud_missing_sparse_hybrid(self, fake_vstore) -> None:
         """search('q', mode='hybrid') against a sparse-less collection MUST raise.
 
@@ -145,10 +133,6 @@ class TestFailLoudMissingSparse:
             f"but error was: {exc_info.value!r}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 10-06/10-07: fail-loud sparse-presence check not yet in pipeline.search",
-        strict=False,
-    )
     def test_fail_loud_missing_sparse_no_fallback(self, fake_vstore) -> None:
         """search() with mode='hybrid' on a sparse-less collection MUST NOT silently
         downgrade to dense (T-10-03 — no silent mode substitution).

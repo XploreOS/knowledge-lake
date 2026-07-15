@@ -1,11 +1,6 @@
-"""Wave 0 test stubs for HealthcareValidator (DOMAIN-03).
-
-All tests are marked xfail until the validator is created in Task 3.
-"""
+"""Tests for HealthcareValidator (DOMAIN-03)."""
 
 from __future__ import annotations
-
-import pytest
 
 try:
     from knowledge_lake.domains.loader import DomainLoader
@@ -38,7 +33,6 @@ except Exception:
     _StandaloneValidationResult = None  # type: ignore[assignment]
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_validate_document_returns_validation_result() -> None:
     """HealthcareValidator().validate_document({'text': 'normal text'}) returns ValidationResult with passed, warnings, errors."""
     assert HealthcareValidator is not None, "HealthcareValidator not yet implemented"
@@ -50,7 +44,6 @@ def test_validate_document_returns_validation_result() -> None:
     assert hasattr(result, "errors"), "ValidationResult must have 'errors' attribute"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_validate_document_clinical_code_passes() -> None:
     """Text 'ICD-10 code E11.9' produces passed=True (no unknown coding system)."""
     assert HealthcareValidator is not None
@@ -59,7 +52,6 @@ def test_validate_document_clinical_code_passes() -> None:
     assert result.passed is True, f"Expected passed=True for valid ICD-10 code, got passed={result.passed!r}"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_phi_heuristic_triggers_warning() -> None:
     """Text containing PHI triggers warnings containing phi-related item (or passed=False)."""
     assert HealthcareValidator is not None

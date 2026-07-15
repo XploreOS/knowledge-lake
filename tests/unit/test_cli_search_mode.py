@@ -2,8 +2,9 @@
 
 RED test scaffold: asserts that invoking `klake search <query> --mode hybrid`
 forwards mode='hybrid' into pipeline.search. The --mode flag does not yet exist
-on cmd_search (Plan 10-08 adds it) — each test is marked xfail(strict=False) so
-the suite stays green.
+on cmd_search — Plan 10-08 added it. test_cli_search_mode_help_shows_mode_option
+now passes; the two forwarding tests remain xfail (stale mock patch target, see
+their reason strings).
 
 Pattern: monkeypatch knowledge_lake.pipeline.search.search imported inside
 cmd_search, capture forwarded kwargs via a stub, then invoke the CLI runner.
@@ -32,7 +33,15 @@ class TestCliModeForwarding:
     """CLI --mode flag threads mode into pipeline.search (RETR-03, T-10-02)."""
 
     @pytest.mark.xfail(
-        reason="Plan 10-08: --mode flag not yet added to cmd_search in cli/app.py",
+        reason=(
+            "--mode is wired on cmd_search (cli/app.py) and forwarded into "
+            "routed_search(mode=...), but this test patches "
+            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
+            "`from knowledge_lake.pipeline.search import search` at import time "
+            "(route.py:18), binding its own module-level name, so routed_search calls "
+            "route.search — the patch on pipeline.search.search has no effect on that "
+            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
+        ),
         strict=False,
     )
     def test_cli_mode_forwarded_hybrid(self) -> None:
@@ -68,7 +77,15 @@ class TestCliModeForwarding:
         )
 
     @pytest.mark.xfail(
-        reason="Plan 10-08: --mode flag not yet added to cmd_search in cli/app.py",
+        reason=(
+            "--mode is wired on cmd_search (cli/app.py) and forwarded into "
+            "routed_search(mode=...), but this test patches "
+            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
+            "`from knowledge_lake.pipeline.search import search` at import time "
+            "(route.py:18), binding its own module-level name, so routed_search calls "
+            "route.search — the patch on pipeline.search.search has no effect on that "
+            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
+        ),
         strict=False,
     )
     def test_cli_mode_forwarded_dense(self) -> None:
@@ -94,10 +111,6 @@ class TestCliModeForwarding:
             f"got: {captured_kwargs.get('mode')!r}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 10-08: --mode flag not yet added to cmd_search in cli/app.py",
-        strict=False,
-    )
     def test_cli_search_mode_help_shows_mode_option(self) -> None:
         """klake search --help must list --mode as an accepted option (Plan 10-08)."""
         assert _IMPORT_OK, "CliRunner or app import failed"

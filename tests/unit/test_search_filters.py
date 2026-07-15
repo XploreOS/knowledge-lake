@@ -197,10 +197,6 @@ class TestFilterPrefetchParity:
     store layer in tests/unit/test_qdrant_hybrid.py::test_hybrid_prefetch_limits.
     """
 
-    @pytest.mark.xfail(
-        reason="Plan 10-06/10-07: mode kwarg not yet wired in pipeline.search",
-        strict=False,
-    )
     def test_filter_attaches_each_prefetch_branch(self, fake_vstore) -> None:
         """search('q', mode='hybrid', domain='healthcare') carries the built Filter
         unchanged in vstore.search.call_args.kwargs['query_filter'] (D-14).

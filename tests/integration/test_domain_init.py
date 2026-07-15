@@ -19,7 +19,6 @@ except ImportError:
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(reason="Wave 0 stub — init command not yet added")
 def test_klake_init_domain_registers_sources() -> None:
     """klake init --domain healthcare registers at least 1 source with domain=='healthcare' in DB."""
     if not _IMPORT_OK:

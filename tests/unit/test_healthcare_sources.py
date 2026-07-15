@@ -1,13 +1,8 @@
-"""Wave 0 test stubs for healthcare sources.yaml content (DOMAIN-02).
-
-All tests are marked xfail until sources.yaml is created in Task 3.
-"""
+"""Tests for healthcare sources.yaml content (DOMAIN-02)."""
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 try:
     import yaml
@@ -23,7 +18,6 @@ _VALID_LICENSE_VALUES = {"public-domain", "CC", "open", "unknown"}
 _REQUIRED_SOURCE_FIELDS = {"name", "url", "source_type", "license", "tags", "crawl_config", "ingest_type"}
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_sources_yaml_parses() -> None:
     """yaml.safe_load(sources_yaml_text) returns a list."""
     assert yaml is not None, "pyyaml not installed"
@@ -32,7 +26,6 @@ def test_sources_yaml_parses() -> None:
     assert isinstance(sources, list)
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_sources_count_gte_25() -> None:
     """len(sources) >= 25 (per D-03 ≥25 requirement)."""
     assert yaml is not None
@@ -42,7 +35,6 @@ def test_sources_count_gte_25() -> None:
     assert len(sources) >= 25, f"Expected ≥25 sources, got {len(sources)}"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_each_source_has_required_fields() -> None:
     """Every entry has name, url, source_type, license, tags, crawl_config, ingest_type keys."""
     assert yaml is not None
@@ -54,7 +46,6 @@ def test_each_source_has_required_fields() -> None:
         assert not missing, f"Source #{i} ({source.get('name', '?')!r}) missing fields: {missing}"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_upload_sources_flagged() -> None:
     """At least 3 entries have ingest_type == 'upload' (NPPES, LOINC, NDC bulk, etc.)."""
     assert yaml is not None
@@ -68,7 +59,6 @@ def test_upload_sources_flagged() -> None:
     )
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_license_values_valid() -> None:
     """License values are in {'public-domain', 'CC', 'open', 'unknown'}."""
     assert yaml is not None

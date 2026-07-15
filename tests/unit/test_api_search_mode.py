@@ -4,9 +4,9 @@ RED test scaffold: asserts that GET /search?q=x&mode=hybrid forwards mode='hybri
 into pipeline.search and that GET /search?q=x&mode=bogus returns HTTP 422
 (Literal/pattern validation at the boundary, T-10-02).
 
-Each test is marked xfail(strict=False) because the ?mode= query parameter
-does not yet exist on the search endpoint (Plan 10-08 adds it). The xfail
-decorators will be removed when Plan 10-08 lands.
+Plan 10-08 added the ?mode= query parameter; most xfail decorators have been
+removed. TestApiModeForwarding's two tests remain xfail — see their reason
+strings (stale mock patch target, not a missing feature).
 
 Pattern mirrors tests/integration/test_api_new_endpoints.py: starlette TestClient +
 try/except ImportError guard. The search seam is stubbed/patched so no real embedder
@@ -42,7 +42,15 @@ class TestApiModeForwarding:
     """API ?mode= query param threads mode into pipeline.search (RETR-03)."""
 
     @pytest.mark.xfail(
-        reason="Plan 10-08: ?mode= query param not yet added to search_endpoint in api/app.py",
+        reason=(
+            "?mode= is wired on search_endpoint (api/app.py) and forwarded into "
+            "routed_search(mode=...), but this test patches "
+            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
+            "`from knowledge_lake.pipeline.search import search` at import time "
+            "(route.py:18), binding its own module-level name, so routed_search calls "
+            "route.search — the patch on pipeline.search.search has no effect on that "
+            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
+        ),
         strict=False,
     )
     def test_api_mode_forwarded_hybrid(self, api_client) -> None:
@@ -72,7 +80,15 @@ class TestApiModeForwarding:
         )
 
     @pytest.mark.xfail(
-        reason="Plan 10-08: ?mode= query param not yet added to search_endpoint in api/app.py",
+        reason=(
+            "?mode= is wired on search_endpoint (api/app.py) and forwarded into "
+            "routed_search(mode=...), but this test patches "
+            "knowledge_lake.pipeline.search.search directly. pipeline/route.py does "
+            "`from knowledge_lake.pipeline.search import search` at import time "
+            "(route.py:18), binding its own module-level name, so routed_search calls "
+            "route.search — the patch on pipeline.search.search has no effect on that "
+            "call. The correct patch target would be knowledge_lake.pipeline.route.search."
+        ),
         strict=False,
     )
     def test_api_mode_forwarded_dense(self, api_client) -> None:
@@ -103,10 +119,6 @@ class TestApiInvalidMode422:
     not in the allowed Literal set {'hybrid', 'dense', 'sparse'}.
     """
 
-    @pytest.mark.xfail(
-        reason="Plan 10-08: ?mode= with Literal validation not yet added to search_endpoint",
-        strict=False,
-    )
     def test_api_invalid_mode_422(self, api_client) -> None:
         """GET /search?q=x&mode=bogus must return HTTP 422 (Literal validation, T-10-02).
 
@@ -120,10 +132,6 @@ class TestApiInvalidMode422:
             f"mode query param so invalid values are rejected at the API boundary (T-10-02)."
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 10-08: ?mode= with Literal validation not yet added to search_endpoint",
-        strict=False,
-    )
     def test_api_invalid_mode_sql_injection_422(self, api_client) -> None:
         """GET /search?mode='; DROP TABLE-- must return 422 (injection attempt, T-10-02)."""
         resp = api_client.get("/search", params={"q": "test", "mode": "'; DROP TABLE--"})
@@ -132,10 +140,6 @@ class TestApiInvalidMode422:
             f"Body: {resp.text!r}"
         )
 
-    @pytest.mark.xfail(
-        reason="Plan 10-08: ?mode= query param not yet added to search_endpoint",
-        strict=False,
-    )
     def test_api_mode_absent_uses_default(self, api_client) -> None:
         """GET /search?q=x with no mode must use the settings default (hybrid).
 

@@ -45,7 +45,6 @@ _IMPORT_OK = _SEARCH_OK and _MODELS_OK
 # ── SearchParams extensions ──────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(reason="Wave 0 scaffold — SearchParams filter fields added in Plan 02", strict=False)
 def test_search_params_has_filter_fields() -> None:
     """Extended SearchParams must include domain, document_type, min_quality_score, source_name, format, tags, source_id (Pitfall 4)."""
     assert SearchParams is not None

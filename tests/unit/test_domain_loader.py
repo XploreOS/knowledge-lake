@@ -1,14 +1,11 @@
-"""Wave 0 test stubs for DomainLoader (DOMAIN-01).
+"""Tests for DomainLoader (DOMAIN-01).
 
-All tests are marked xfail until the implementation is created in Task 2.
 Import uses a try/except guard so pytest can collect the file before the module exists.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 try:
     from knowledge_lake.domains.loader import DomainLoader
@@ -20,7 +17,6 @@ DOMAINS_ROOT = Path(__file__).parent.parent.parent  # project root
 HC_DIR = DOMAINS_ROOT / "domains" / "healthcare"
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_from_name_returns_loader() -> None:
     """DomainLoader.from_name('healthcare', root=project_root) returns a DomainLoader instance."""
     assert DomainLoader is not None, "DomainLoader not yet implemented"
@@ -29,7 +25,6 @@ def test_domain_loader_from_name_returns_loader() -> None:
     assert isinstance(loader, DomainLoader)
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_manifest_fields() -> None:
     """loader.manifest.name == 'healthcare' and loader.manifest.version is non-empty."""
     assert DomainLoader is not None
@@ -39,7 +34,6 @@ def test_domain_loader_manifest_fields() -> None:
     assert len(loader.manifest.version) > 0
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_sources_count() -> None:
     """len(loader.sources) >= 25."""
     assert DomainLoader is not None
@@ -47,7 +41,6 @@ def test_domain_loader_sources_count() -> None:
     assert len(loader.sources) >= 25
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_taxonomy_has_entity_types() -> None:
     """'entity_types' key in loader.taxonomy."""
     assert DomainLoader is not None
@@ -55,7 +48,6 @@ def test_domain_loader_taxonomy_has_entity_types() -> None:
     assert "entity_types" in loader.taxonomy
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_validator_has_method() -> None:
     """hasattr(loader.validator, 'validate_document')."""
     assert DomainLoader is not None
@@ -64,7 +56,6 @@ def test_domain_loader_validator_has_method() -> None:
     assert callable(loader.validator.validate_document)
 
 
-@pytest.mark.xfail(reason="Wave 0 stub — implementation pending")
 def test_domain_loader_render_enrich_prompt() -> None:
     """render_prompt('enrich.j2', ...) returns non-empty string containing 'clinical_codes'."""
     assert DomainLoader is not None
