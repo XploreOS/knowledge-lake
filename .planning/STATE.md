@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 15 — Query Router
 Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-14 — Phase 14 complete, transitioned to Phase 15
+Last activity: 2026-07-15 — Completed quick task 260715-3w5: Write E2E gap analysis report
 
 Progress: [██████████] 100%
 
@@ -124,6 +124,13 @@ None yet.
 - [Phase 15]: CR-01 MCP _search_handler crashes on non-empty results — needs `dataclasses.asdict(h)` fix before MCP search is usable in production
 - [Phase 15]: CR-02 mode param dual-semantics — `?mode=hybrid&route=tree` passes API validation but hits tree_search() with invalid value; needs split into mode/tree_mode
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density
+- [Audit 2026-07-15]: E2E gap analysis found 17 open findings (3 high) — see [.planning/E2E-GAP-ANALYSIS.md](./E2E-GAP-ANALYSIS.md). KL-01 (exports mislabel domain), KL-02 (budget caps under-enforce 2.4–9×), KL-03 (211 integration tests never run in CI) are unresolved.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260715-3w5 | Write E2E gap analysis report | 2026-07-15 | e23fbcc | [260715-3w5-write-e2e-gap-analysis-report](./quick/260715-3w5-write-e2e-gap-analysis-report/) |
 
 ## Deferred Items
 
