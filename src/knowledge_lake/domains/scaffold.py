@@ -28,7 +28,11 @@ import re
 from pathlib import Path
 
 # Path-traversal guard — kept in sync with loader.py / pipeline/domains.py (T-06-01).
-_DOMAIN_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
+# This is the canonical definition; other modules that need the pattern text
+# (e.g. cli/app.py's --help string) import DOMAIN_NAME_PATTERN from here rather
+# than redefining the literal (KL-13).
+DOMAIN_NAME_PATTERN = r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+_DOMAIN_NAME_RE = re.compile(DOMAIN_NAME_PATTERN)
 
 # Templates use __DOMAIN__ / __PASCAL__ sentinels (not str.format) so the Jinja
 # ``{{ ... }}`` and JSON ``{ ... }`` braces below survive substitution verbatim.

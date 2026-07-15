@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 import typer
 
 import knowledge_lake
+from knowledge_lake.domains.scaffold import DOMAIN_NAME_PATTERN
 from knowledge_lake.registry.repo import set_source_schedule
 
 app = typer.Typer(
@@ -1271,11 +1272,10 @@ def cmd_init(
     """
     import re
 
-    _DOMAIN_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")
-    if not _DOMAIN_NAME_RE.fullmatch(domain):
+    if not re.compile(DOMAIN_NAME_PATTERN).fullmatch(domain):
         typer.echo(
             f"Error: Invalid domain name {domain!r}: must match "
-            r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$ (path traversal guard)",
+            f"{DOMAIN_NAME_PATTERN} (path traversal guard)",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -1474,11 +1474,23 @@ domain_app = typer.Typer(
 )
 app.add_typer(domain_app, name="domain")
 
+# Rich markup mode (Typer's default when rich is installed) parses `[...]` in
+# help strings as style tags, so the raw DOMAIN_NAME_PATTERN regex renders
+# with its character classes silently stripped (KL-13). Escape every literal
+# `[` so `--help` shows the pattern verbatim.
+_DOMAIN_NAME_HELP_PATTERN = DOMAIN_NAME_PATTERN.replace("[", "\\[")
+
 
 @domain_app.command(name="new")
 def cmd_domain_new(
     name: str = typer.Argument(
-        ..., help="Domain pack name — must match ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$."
+        ...,
+        # Rich markup mode parses `[...]` as style tags and silently strips
+        # unrecognized ones (e.g. `[a-zA-Z]` -> ''), which is how KL-13
+        # rendered as "must match ^{0,63}$." — escape every literal `[` so
+        # the real pattern survives --help rendering.
+        help="Domain pack name — must match "
+        f"{_DOMAIN_NAME_HELP_PATTERN}.",
     ),
     root: str = typer.Option(
         "domains",
