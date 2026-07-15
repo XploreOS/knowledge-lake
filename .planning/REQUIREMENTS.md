@@ -196,3 +196,30 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 4. **Conservation:** `rejected + kept == considered` holds for every source
 5. **Lineage:** No cross-document artifact corruption (WR-05 extended to clean stage)
 6. **No regressions:** 971+ tests pass, `xfail_strict=true` holds, no tree-index fallback-rate increase
+
+---
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| CLEAN-01 | Phase 17 | Pending |
+| CLEAN-02 | Phase 17 | Pending |
+| CLEAN-03 | Phase 17 | Pending |
+| CLEAN-04 | Phase 19 | Pending |
+| CLEAN-05 | Phase 19 | Pending |
+| CLEAN-06 | Phase 19 | Pending |
+| GATE-01 | Phase 18 | Pending |
+| QUAL-01 | Phase 19 | Pending |
+| QUAL-02 | Phase 20 | Pending |
+| QUAL-03 | Phase 20 | Pending |
+| QUAL-04 | Phase 17 | Pending |
+| QUAL-05 | Phase 17 | Pending |
+| DEDUP-01 | Phase 21 | Pending |
+| DEDUP-02 | Phase 21 | Pending |
+| DEDUP-03 | Phase 21 | Pending |
+| EXPORT-01 | Phase 20 | Pending |
+| EXPORT-02 | Phase 20 | Pending |
+| MEAS-01 | Phase 17 | Pending |
+| MEAS-02 | Phase 20 | Pending |
+| PIPE-01 | Phase 20 | Pending |

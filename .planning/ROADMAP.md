@@ -5,7 +5,7 @@
 - ✅ **v1.0 MVP** — Phases 1-6 (shipped 2026-07-07)
 - ✅ **v2.0 Agent-Ready Lake** — Phases 7-12 (shipped 2026-07-12)
 - ✅ **v2.5 PageIndex Plugin Integration** — Phases 13-16 (shipped 2026-07-15)
-- 📋 **v2.6 Data Quality & Enrichment** — Phase 17+ (planning)
+- 📋 **v2.6 Data Quality & Enrichment** — Phases 17-21 (active)
 
 ## Phases
 
@@ -61,71 +61,129 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 </details>
 
-### 📋 v2.6 Data Quality & Enrichment (Phases 17–21)
+### v2.6 Data Quality & Enrichment (Phases 17-21)
 
 **Milestone Goal:** Stop garbage content from reaching the silver zone, chunking, tree index, and gold export — so the RAG corpus is trustworthy rather than merely populated.
 
-**Requirements:** [.planning/REQUIREMENTS.md](.planning/REQUIREMENTS.md) (20 requirements)
-**Research:** [.planning/research/SUMMARY.md](.planning/research/SUMMARY.md) (synthesis of 4 parallel researchers)
-**Context:** [.planning/MILESTONE-CONTEXT.md](.planning/MILESTONE-CONTEXT.md) (audit evidence, root causes)
+**Evidence:** 4,499 chunks from 34 healthcare sources. ~28% garbage chunks, 33% of gold RAG corpus unusable.
+**Root cause:** The clean stage is architecturally bypassed — `clean_document` forwards the uncleaned `parsed_doc` to all downstream consumers.
 
-**Scope decisions:** Crawler extraction DEFERRED · Forward-only CONFIRMED (fresh stack) · Dedup after substance gate · No FilterPlugin seam
+**Scope decisions:**
+- D-1 Crawler extraction: DEFERRED (section classifier covers superset)
+- D-2 Forward-only: CONFIRMED (test data wiped; fresh stack for production)
+- D-3 Index-time dedup: CONFIRMED (after substance gate — L3 before L4)
 
-| Phase | Name | Requirements | Depends On | Status |
-|-------|------|-------------|------------|--------|
-| 17 | Close the Bypass + Measurement | CLEAN-01, CLEAN-02, CLEAN-03, QUAL-04, QUAL-05, MEAS-01 | — | 📋 |
-| 18 | Gate Decouple | GATE-01 | — (parallel with 17) | 📋 |
-| 19 | Section Classifier + Patterns | CLEAN-04, CLEAN-05, CLEAN-06, QUAL-01 | 17, 18 | 📋 |
-| 20 | Chunk Substance Gate + Export Gate | QUAL-02, QUAL-03, MEAS-02, EXPORT-01, EXPORT-02, PIPE-01 | 17 | 📋 |
-| 21 | Index-Time Dedup | DEDUP-01, DEDUP-02, DEDUP-03 | 20 | 📋 |
+**References:**
+- Requirements: [.planning/REQUIREMENTS.md](.planning/REQUIREMENTS.md) (20 requirements)
+- Research: [.planning/research/SUMMARY.md](.planning/research/SUMMARY.md) (4 parallel researchers)
+- Context: [.planning/MILESTONE-CONTEXT.md](.planning/MILESTONE-CONTEXT.md) (audit evidence, root causes)
 
-**Critical path:** 17 → 19 (section classifier needs the bypass closed + gate decoupled).
-**Parallelizable:** 18 with 17; 20 with 19.
-**Hard constraint:** L3 before L4 (Phase 20 before 21) — dedup without filtering promotes garbage via IDF inversion.
+**Hard Ordering Constraints:**
+1. Phase 17 first — the only phase whose defects corrupt data rather than degrade it
+2. Measurement before filtering — or v2.6 repeats v2.5's failure
+3. Phase 18 before 19 — or extending patterns triggers a 34-source re-crawl storm
+4. L3 before L4 (Phase 20 before 21) — dedup before filtering makes BM25 worse via IDF inversion
+5. L3 before L5 — export gate has no chunk-level signal until L3 provides one
 
-#### Phase 17: Close the Bypass + Measurement
-The only phase whose defects *corrupt* data rather than degrade it. Proves the plumbing and establishes the baseline while changing filter policy as little as possible.
-- Close the Dagster bypass — `clean_document` returns cleaned `ParsedDoc` (CLEAN-01)
-- Close the `process_crawled` bypass — add clean stage (CLEAN-02)
-- Parent-scoped content hash in `clean()` — adopt WR-05 convention (CLEAN-03)
-- Rejection recording + garbage-rate metric (QUAL-04)
-- Conservation invariant: `rejected + kept == considered` (QUAL-05)
-- Re-runnable quality audit harness (MEAS-01)
+**Critical path:** 17 --> 19. Phases 18 and 20 are leaves/parallelizable.
 
-#### Phase 18: Gate Decouple
-Small, isolated prerequisite for touching `BOILERPLATE_PATTERNS`. Severs the SCHED-02 change gate from the evolving clean patterns.
-- Frozen `_GATE_NORMALIZE_PATTERNS` in `crawl.py` (GATE-01)
-- Pinning test: gate signature stable across clean-stage pattern changes
+- [ ] **Phase 17: Close the Bypass + Measurement** - Wire cleaned text onto the load-bearing path (both Dagster and CLI), fix lineage hash, establish garbage-rate baseline
+- [ ] **Phase 18: Gate Decouple** - Sever the re-crawl change gate from evolving clean patterns (parallelizable with 17)
+- [ ] **Phase 19: Section Classifier + Patterns** - Section-aware filtering with substance annotations, extended patterns, domain-pack allowlists
+- [ ] **Phase 20: Chunk Substance Gate + Export Gate** - Reject garbage at chunk scope, gate gold export on chunk-level quality signal
+- [ ] **Phase 21: Index-Time Dedup** - Corpus-wide exact dedup between chunk and embed with idempotent point IDs
 
-#### Phase 19: Section Classifier + Patterns
-Highest-yield policy change, now measurable against Phase 17's baseline. Should move garbage rate from 28% to single digits.
-- Section-aware cleaning with substance annotations (CLEAN-04)
-- Extended boilerplate patterns covering all 5 audit categories (CLEAN-05)
-- Domain-pack `filters.yaml` + healthcare clinical-code allowlist (CLEAN-06)
-- Pure quality predicate module — `pipeline/quality/` (QUAL-01)
+## Phase Details
 
-#### Phase 20: Chunk Substance Gate + Export Gate
-The gate that prevents garbage from reaching Qdrant and gold export.
-- Wire `FineWebQualityFilter` with chunk-scoped settings (QUAL-02)
-- Chunk min-substance gate with report/enforce modes (QUAL-03)
-- Must-not-reject CI fixtures (~20 clinical chunks) (MEAS-02)
-- Gold RAG export quality gate on chunk-level signal (EXPORT-01)
-- Eval dataset versioning (EXPORT-02)
-- Filter configuration versioning (PIPE-01)
+### Phase 17: Close the Bypass + Measurement
+**Goal**: The cleaned text reaches all downstream consumers and garbage is measurable against a frozen baseline
+**Depends on**: Nothing (first phase — highest risk, hard prerequisite for all others)
+**Requirements**: CLEAN-01, CLEAN-02, CLEAN-03, QUAL-04, QUAL-05, MEAS-01
+**Success Criteria** (what must be TRUE):
+  1. After processing a source with known boilerplate, `chunk_document` receives sections with boilerplate removed — the uncleaned `parsed_doc` is no longer forwarded by `clean_document`
+  2. `klake process <source>` produces chunks from cleaned text — identical output whether processed via Dagster or via `klake process`
+  3. Two documents with identical cleaned text produce distinct `cleaned_document` artifacts with different content hashes (parent-scoped WR-05 convention)
+  4. `klake quality-audit` produces a per-source table (34 rows) showing total sections, kept, rejected, rejection reasons, and garbage rate — reproducible across runs and independent of any gate's heuristic
+  5. Every gate asserts `rejected + kept == sections_considered` at runtime — a broken parser returning 0 sections is detected as distinct from a correct gate rejecting all sections
+**Plans**: TBD
 
-#### Phase 21: Index-Time Dedup
-Build against the residual after Phase 20 — most of the 653 duplicates are boilerplate removed at source.
-- Postgres `chunk_text_index` ledger + Alembic migration (DEDUP-01)
-- Deterministic point IDs via `uuid5(NAMESPACE, sha256(text))` (DEDUP-02)
-- Payload preservation with `contributors[]` for deduplicated points (DEDUP-03)
+### Phase 18: Gate Decouple
+**Goal**: Extending boilerplate patterns no longer triggers re-crawl of all sources
+**Depends on**: Nothing (parallelizable with Phase 17)
+**Requirements**: GATE-01
+**Success Criteria** (what must be TRUE):
+  1. Adding a new pattern to `BOILERPLATE_PATTERNS` does not change the content signature of any existing source
+  2. A pinning test asserts gate-signature byte-stability across a clean-stage pattern change
+**Plans**: TBD
 
-#### Success Criteria
-1. `klake process` on audit sources: <5% garbage (down from 28%)
-2. Gold RAG corpus: <2% junk (down from 33%)
-3. Must-not-reject fixtures all pass (no clinical codes dropped)
-4. Conservation: `rejected + kept == considered` for every source
-5. Lineage: no cross-document artifact corruption
-6. No regressions: 971+ tests, `xfail_strict=true`, no tree-index fallback increase
+### Phase 19: Section Classifier + Patterns
+**Goal**: Junk sections are identified and removed at section granularity with domain-aware exemptions protecting clinical content
+**Depends on**: Phase 17, Phase 18
+**Requirements**: CLEAN-04, CLEAN-05, CLEAN-06, QUAL-01
+**Success Criteria** (what must be TRUE):
+  1. A parsed document with nav, footer, and clinical sections retains only clinical sections in the cleaned output — substance annotations (link_density, terminal_punct_ratio, stopword_ratio, token_count) are persisted in the cleaned sidecar
+  2. Extended boilerplate patterns cover all 5 garbage categories from the audit (too-short, no-sentences, boilerplate, marketing, navigation) while existing Phase-3 test assertions continue to pass
+  3. A chunk containing `ICD-10 E11.9` or `Metformin 500 mg PO BID` is never dropped by any gate — healthcare-pack domain-code allowlist enforced via `DomainLoader`
+  4. Quality predicates in `pipeline/quality/` are independently importable with zero I/O, S3, or Dagster dependencies — deterministic and 100% branch coverage
+**Plans**: TBD
+
+### Phase 20: Chunk Substance Gate + Export Gate
+**Goal**: Garbage chunks are rejected before embedding and the gold RAG export contains only quality content
+**Depends on**: Phase 17 (parallelizable with Phase 19)
+**Requirements**: QUAL-02, QUAL-03, MEAS-02, EXPORT-01, EXPORT-02, PIPE-01
+**Success Criteria** (what must be TRUE):
+  1. `FineWebQualityFilter` rejects chunks matching the audit's "too short" and "no real sentences" categories while passing a clinical-prose control set — using chunk-scoped settings, not `CurateSettings`
+  2. Chunks failing the composite substance predicate are rejected (in enforce mode) or flagged with recorded reason (in report mode) — `is_table=True` chunks are always exempt
+  3. CI fails if any fixture in the ~20 hand-labeled must-not-reject set (ICD codes, dosage instructions, LOINC codes, HIPAA references) is dropped by the substance gate
+  4. A document with mixed quality (clinical tables + cookie banners) exports only the clinical chunks to gold — the 33% junk in gold drops to near-zero
+  5. Changing a filter threshold invalidates the cache for affected artifacts and triggers re-processing on next run (reuses `_curation_cache_key` versioning pattern)
+**Plans**: TBD
+
+### Phase 21: Index-Time Dedup
+**Goal**: Duplicate text is embedded and indexed exactly once while preserving per-document chunk lineage
+**Depends on**: Phase 20 (L3 must precede L4 — dedup before filtering promotes garbage via IDF inversion)
+**Requirements**: DEDUP-01, DEDUP-02, DEDUP-03
+**Success Criteria** (what must be TRUE):
+  1. Processing two documents containing identical boilerplate text produces one Qdrant point (not two) — the chunk registry still has both chunk artifacts with correct per-document lineage (WR-05 intact)
+  2. Re-processing the same document produces the same point ID — re-index is idempotent by construction via `uuid5(NAMESPACE, sha256(normalized_text))`
+  3. A deduplicated point is filterable by source_id, domain, and format — the `contributors[]` field lists all source documents that contained this text, with primary determined by earliest `created_at`
+**Plans**: TBD
+
+## Coverage
+
+| Requirement | Phase | Category |
+|-------------|-------|----------|
+| CLEAN-01 | 17 | Close bypass (Dagster) |
+| CLEAN-02 | 17 | Close bypass (CLI) |
+| CLEAN-03 | 17 | Parent-scoped hash |
+| CLEAN-04 | 19 | Section-aware cleaning |
+| CLEAN-05 | 19 | Extended patterns |
+| CLEAN-06 | 19 | Domain-pack filters |
+| GATE-01 | 18 | Gate decouple |
+| QUAL-01 | 19 | Quality predicates |
+| QUAL-02 | 20 | FineWebQualityFilter |
+| QUAL-03 | 20 | Chunk substance gate |
+| QUAL-04 | 17 | Rejection recording |
+| QUAL-05 | 17 | Conservation invariant |
+| DEDUP-01 | 21 | Exact dedup |
+| DEDUP-02 | 21 | Point ID determinism |
+| DEDUP-03 | 21 | Payload preservation |
+| EXPORT-01 | 20 | Gold export gate |
+| EXPORT-02 | 20 | Eval dataset versioning |
+| MEAS-01 | 17 | Quality audit harness |
+| MEAS-02 | 20 | Must-not-reject fixtures |
+| PIPE-01 | 20 | Filter config versioning |
+
+**Mapped: 20/20 requirements. No orphans.**
+
+## Milestone Success Criteria
+
+1. **Primary:** `klake process` on the audit's 34 sources produces <5% garbage chunks (down from 28%)
+2. **Gold:** RAG corpus export contains <2% junk rows (down from 33%)
+3. **Safety:** Must-not-reject fixtures pass — no clinical codes, dosage instructions, or normative statements dropped
+4. **Conservation:** `rejected + kept == considered` holds for every source
+5. **Lineage:** No cross-document artifact corruption (WR-05 extended to clean stage)
+6. **No regressions:** 971+ tests pass, `xfail_strict=true` holds, no tree-index fallback-rate increase
 
 ## Progress
 
@@ -137,4 +195,8 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
-| 17+ | v2.6 Data Quality & Enrichment | — | 📋 Planning | — |
+| 17 | v2.6 Close the Bypass + Measurement | 0/0 | Not started | - |
+| 18 | v2.6 Gate Decouple | 0/0 | Not started | - |
+| 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
+| 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |
+| 21 | v2.6 Index-Time Dedup | 0/0 | Not started | - |
