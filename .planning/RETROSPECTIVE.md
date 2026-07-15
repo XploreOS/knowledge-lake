@@ -107,6 +107,50 @@
 
 ---
 
+## Milestone: v2.5 — PageIndex Plugin Integration
+
+**Shipped:** 2026-07-15
+**Phases:** 4 (13-16) | **Plans:** 14
+
+### What Was Built
+
+Tree-based reasoning retrieval and compiled knowledge bases, added *alongside* the existing vector RAG pipeline rather than replacing it. A deterministic tree-index builder over `ParsedDoc.sections` (silver-zone JSON artifact, content-hash no-op, opt-in budget-capped LLM summaries), shipped behind an `IndexerPlugin` seam. Two-stage retrieval reusing chunk `search()` unchanged for the Qdrant shortlist, then concurrent tree traversal behind a `RetrieverPlugin` seam. A heuristic `classify_route()` + `routed_search()` dispatcher wired to all four surfaces. And `compile_wiki()`, compiling enrichment metadata into an IDF-cross-linked Markdown knowledge base with manifest-based incremental rebuild.
+
+### What Worked
+
+- **Mirroring an established seam costs almost nothing.** `RetrieverPlugin` (P14) was modeled directly on `IndexerPlugin` (P13) — same Protocol shape, same entry-point group pattern, same `_validate_swap_key` guard. The second seam took a fraction of the first.
+- **Heuristic-first with LLM opt-in, plus a guaranteed fallback.** Every LLM path (tree summaries, tree navigation, wiki summaries) shipped as an opt-in mode over a working deterministic default. `PageIndexRetriever` computes heuristic hits *before* LLM-nav regardless of mode, so the LLM can reorder but never degrade — and never raise.
+- **Reusing `search()` untouched for stage 1.** Two-stage retrieval added zero risk to the existing chunk path.
+- **Wave-0 RED scaffolds** continued to give every implementation task a concrete verify target before code was written.
+
+### What Was Inefficient
+
+- **The Dockerfile landmine wasted the most time and hid the most.** The base image had been bumped to `python:3.14-slim`, which cannot build (greenlet has no CPython 3.14 support). `docker compose up -d` silently kept a 13-day-old image alive, so every "live" check was testing stale code — for 13 days. This is the direct reason two API endpoint families returning 500s went unnoticed.
+- **Phase 14's VERIFICATION.md was missing at audit time**, forcing the audit to classify five RETR requirements as integration-verified rather than verified, then a retroactive `/gsd-verify-work 14` run.
+- **19 findings surfaced in an E2E gap analysis *after* all four phases had passed verification.** The remediation took six quick tasks — real work that phase-level gates should have caught.
+
+### Patterns Established
+
+- **Sidecar for derived structure.** `parse()` writes a JSON sections sidecar to silver; `chunk`/`tree-index` read it with a re-parse fallback for pre-sidecar artifacts. Sections carry full text, so they belong in S3, never Postgres.
+- **Thin-shell Dagster assets.** `tree_index_document` is a shell over `pipeline.tree_index.tree_index()` — no logic duplicated in the asset layer.
+- **Strict xfail as a build gate**, not a convention.
+
+### Key Lessons
+
+1. **"Verified" measured mechanism, not data.** All 4 phases passed, the milestone audit scored 19/19, 5/5 E2E flows were observable — and the pipeline was producing ~28% garbage chunks the whole time. Every gate asked "does the code do what the plan said?" None asked "is the output any good?" A pipeline can be fully correct and fully worthless simultaneously. **v2.6 exists because of this gap.**
+2. **A recorded lesson is not an enforced one.** v2.0's retrospective explicitly warned that `xfail(strict=False)` can mask a real failure. It then masked two API endpoints returning 500s for months. The lesson only became real when `xfail_strict = true` made it a build gate. Write lessons into CI, not into documents.
+3. **A stale container invalidates every live check, silently.** Pin the Docker base to `.python-version`, build the image in CI, and have `/health` report the running version — otherwise "I tested it live" means nothing.
+4. **Import-time binding defeats patching.** `pipeline/route.py` does `from ... import search`, so patching `pipeline.search.search` never affects `routed_search` — patch `pipeline.route.search`. This silently neutered 4 tests (KL-19).
+5. **An E2E run on real data is a different instrument than a test suite.** 971 green tests and a passing milestone audit did not surface what one real 34-source run made obvious in minutes.
+
+### Cost Observations
+
+- Model mix: Opus 4.8 for orchestration, planning, and quality gates; Sonnet for execution (`model_overrides.gsd-executor`)
+- 190 commits over 3 days; 14 plans across 4 phases; plus 6 remediation quick tasks
+- Notable: the plugin-seam mirroring (P13 → P14) was the cheapest phase-to-phase transition so far. The expensive work was not building features — it was the E2E remediation that phase gates should have prevented.
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -115,6 +159,7 @@
 |-----------|--------|-------|------------|
 | v1.0 | 6 | 25 | First milestone — GSD auto-chain established; TDD wave-0 pattern validated |
 | v2.0 | 6 | 38 | Plan-time threat models + validation contracts; single schema source across agent surfaces; quality gates run retroactively (lesson: run inline) |
+| v2.5 | 4 | 14 | Plugin seams mirrored at near-zero cost; heuristic-first + LLM-opt-in with guaranteed fallback became the default shape; `xfail_strict` promoted from lesson to build gate; first E2E run on real data exposed that all gates measured mechanism, not output quality |
 
 ### Cumulative Quality
 
@@ -122,6 +167,7 @@
 |-----------|------------|---------|-----------------|---------|---------|
 | v1.0 | 324 | 20 | ✓ all phases passed | — | — |
 | v2.0 | 522 | 39 | ✓ all phases passed | 6/6 (`threats_open: 0`) | 6/6 compliant |
+| v2.5 | 971 | 0 (`xfail_strict`) | ✓ all phases passed | 4/4 | 4/4 compliant |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -129,4 +175,6 @@
 2. **Shared test state causes false negatives.** Plan for isolation from the start. (v1.0)
 3. **Integration checker catches what unit tests and phase verifiers miss.** Always audit cross-phase wiring before milestone close. (v1.0)
 4. **Run quality gates (secure/validate) per-phase, not retroactively.** Plan-time threat models + validation contracts make them cheap — but only if run inline via `verify:post`. (v2.0)
-5. **`xfail(strict=False)` can mask a real failure.** Audit xfails at verification; a self-fulfilling stub is worse than no test. (v2.0)
+5. **`xfail(strict=False)` can mask a real failure.** Audit xfails at verification; a self-fulfilling stub is worse than no test. (v2.0 — **recurred in v2.5**; only fixed by making it a build gate, which is the real lesson)
+6. **Green gates prove the code matches the plan, not that the output is good.** Verification, audits, and E2E flow checks all measured mechanism. Data quality needs its own instrument, or a "complete" pipeline ships 28% garbage. (v2.5)
+7. **Anything that can silently serve stale code will eventually hide a real bug.** Pin base images, build them in CI, and make the running version observable. (v2.5)
