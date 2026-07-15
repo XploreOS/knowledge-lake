@@ -10,7 +10,7 @@ Classes:
                      get_object, exists, object_uri, and put_raw.
 
 Immutability contract (FOUND-04):
-    - Raw-zone keys are SHA256 content-addressed: raw/{source_id}/{sha256}.{ext}
+    - Raw-zone keys are SHA256 content-addressed: raw/{domain}/{source_id}/{sha256}.{ext}
     - put_raw checks the registry by hash BEFORE any S3 write (registry no-op)
     - head_object guard refuses overwrite of any existing raw key
     - No S3 If-None-Match:'*' conditional-write wildcard (MinIO gap — FOUND-04)
@@ -236,8 +236,8 @@ class StorageBackend:
         1. **Registry no-op:** SHA256 lookup before any S3 write.  If an
            artifact with this hash already exists, return it immediately —
            no S3 write, no new registry node (FOUND-04 verbatim).
-        2. **Content-addressed key:** ``raw/{source_id}/{sha256}.{ext}`` —
-           identity == content, so an overwrite is structurally impossible.
+        2. **Content-addressed key:** ``raw/{domain}/{source_id}/{sha256}.{ext}``
+           — identity == content, so an overwrite is structurally impossible.
         3. **head_object guard:** if the hash is new but the key somehow
            already exists (should not happen for SHA256), raise rather than
            overwriting.
