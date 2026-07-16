@@ -37,7 +37,6 @@ import tldextract
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.crawl.ratelimit import PerHostLimiter, resolve_delay
 from knowledge_lake.crawl.robots import fetch_robots
-from knowledge_lake.pipeline.clean import remove_boilerplate
 from knowledge_lake.pipeline.ingest import (
     ingest_url,
     normalize_url,
@@ -65,14 +64,14 @@ LINKED_DOC_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx"})
 
 
 # SCHED-02 (T-11-THRASH): gate-local volatile-token suppression. The change
-# gate normalizes MORE aggressively than the silver-stage remove_boilerplate:
+# gate normalizes MORE aggressively than the silver-stage _gate_normalize:
 # it neutralizes volatile machine-generated tokens so a dynamically-rendered
 # page whose only delta between crawls is a timestamp/nonce yields a stable
 # signature and does not thrash the WORM raw zone every tick. This is
-# deliberately GATE-ONLY — it must never alter remove_boilerplate, which the
-# clean stage shares and which must preserve human-meaningful dates. The ISO
-# pattern requires a TIME component so bare effective/publication dates are
-# preserved; over-suppression is bounded by max_staleness_days.
+# deliberately GATE-ONLY — it must never alter the clean stage, which must
+# preserve human-meaningful dates. The ISO pattern requires a TIME component
+# so bare effective/publication dates are preserved; over-suppression is
+# bounded by max_staleness_days.
 _VOLATILE_PLACEHOLDER = "\x00KLAKE_VOLATILE\x00"
 _VOLATILE_PATTERNS: list[re.Pattern] = [
     # ISO-8601 datetime (date + time; optional seconds, fraction, timezone)
@@ -96,23 +95,63 @@ def _suppress_volatile(text: str) -> str:
     Replaces ISO-8601 timestamps, clock times, UUIDs, and long hex nonces
     with a fixed placeholder so a page whose only inter-crawl delta is a
     dynamic timestamp/nonce yields a stable signature (SCHED-02 anti-thrash).
-    Gate-local: does not touch remove_boilerplate or the clean stage.
+    Gate-local: does not touch _gate_normalize or the clean stage.
     """
     for pattern in _VOLATILE_PATTERNS:
         text = pattern.sub(_VOLATILE_PLACEHOLDER, text)
     return text
 
 
+# GATE-01 — frozen point-in-time snapshot of BOILERPLATE_PATTERNS (clean.py)
+# at 2026-07-15. Deliberately NOT auto-synced — changes to BOILERPLATE_PATTERNS
+# in clean.py do not propagate here. This mirrors the _VOLATILE_PATTERNS pattern
+# in this same file. The gate uses this frozen copy so extending clean patterns
+# (Phase 19) does not change any source's stored signature and trigger spurious
+# re-crawls.
+_GATE_BOILERPLATE_PATTERNS: list[re.Pattern] = [
+    # Page headers/footers: "Page 1 of 5" or a bare page number on its own line
+    re.compile(r"^(?:Page \d+ of \d+|\d+)\s*$", re.MULTILINE),
+    # Cookie/privacy banners
+    re.compile(
+        r"(?i)(?:this site uses cookies|accept all cookies|cookie policy)[^\n]*$",
+        re.MULTILINE,
+    ),
+    # Navigation elements from HTML crawls (entire line only)
+    re.compile(
+        r"(?im)^(?:home|about us|contact|sitemap|skip to (?:main )?content)\s*$",
+    ),
+    # Repeated copyright/disclaimer lines
+    re.compile(r"(?i)^(?:disclaimer|copyright \d{4})[^\n]*$", re.MULTILINE),
+]
+
+
+def _gate_normalize(text: str) -> str:
+    """Gate-local normalization: frozen boilerplate patterns plus whitespace collapse.
+
+    GATE-01: deliberately decoupled from clean.py. Changes to BOILERPLATE_PATTERNS
+    in clean.py do NOT affect this function. Edit _GATE_BOILERPLATE_PATTERNS
+    explicitly if gate normalization must change.
+    """
+    for pattern in _GATE_BOILERPLATE_PATTERNS:
+        text = pattern.sub("", text)
+    # Inline whitespace normalization — verbatim copy of _normalize_whitespace()
+    # from clean.py (Pitfall 3: must match character-for-character).
+    lines = [line.rstrip() for line in text.split("\n")]
+    text = "\n".join(lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _signature(markdown: str) -> str:
     """Compute content signature: normalize, suppress volatile tokens, SHA256.
 
-    Reuses the silver-stage ``remove_boilerplate`` so the gate and the clean
-    stage agree on boilerplate (D-06), then applies gate-local volatile-token
-    suppression (ISO timestamps, clock times, UUIDs, hex nonces) so
-    dynamically-rendered pages do not thrash the WORM raw zone on every tick
-    (SCHED-02, T-11-THRASH).
+    Uses gate-local _gate_normalize() (frozen patterns, GATE-01) so changes to
+    clean.py BOILERPLATE_PATTERNS do not alter stored source signatures. Applies
+    gate-local volatile-token suppression (ISO timestamps, clock times, UUIDs,
+    hex nonces) so dynamically-rendered pages do not thrash the WORM raw zone
+    on every tick (SCHED-02, T-11-THRASH).
     """
-    normalized = remove_boilerplate(markdown or "")
+    normalized = _gate_normalize(markdown or "")
     return hashlib.sha256(
         _suppress_volatile(normalized).encode("utf-8")
     ).hexdigest()
@@ -147,7 +186,7 @@ async def recrawl_source(
     """Change-detection gate: probe the seed URL, compare signature, skip or crawl.
 
     SCHED-02: Probes the source's canonical URL, normalizes the markdown with
-    remove_boilerplate, SHA256s, and compares to Source.last_content_hash. If
+    _gate_normalize, SHA256s, and compares to Source.last_content_hash. If
     unchanged within the staleness window, skips (no put_raw, no crawl_source).
     Otherwise triggers a full crawl_source() and records the new hash.
 
