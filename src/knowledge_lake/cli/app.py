@@ -14,6 +14,7 @@ Commands:
   tree-search — two-stage tree retrieval over previously built tree indexes
   reindex     — zero-downtime reindex of a Qdrant alias (INDEX-02)
   lineage     — print ancestry tree (or JSON) for a given artifact ID
+  quality-audit — re-run parse+clean across a domain's sources and print a per-source garbage-rate table
   demo        — run the full spike end-to-end (ingest → search → lineage)
 """
 
@@ -968,6 +969,51 @@ def cmd_lineage(
         typer.echo(f"Chain depth: {len(nodes)} nodes")
         typer.echo()
         typer.echo(render_tree(nodes))
+
+
+@app.command(name="quality-audit")
+def cmd_quality_audit(
+    domain: str = typer.Option(
+        "healthcare", "--domain", "-d", help="Domain to audit (Source.domain filter)."
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Output machine-readable JSON instead of a table."
+    ),
+) -> None:
+    """Re-run parse+clean across a domain's sources and print a per-source garbage-rate table.
+
+    Read/measurement-only (MEAS-01): re-runs the real parse -> clean pipeline
+    stages for every source under Source.domain == domain, never embed() or
+    index() — no vector-store writes or embedding spend. garbage_rate uses
+    the D-10 frozen formula ``rejected / (rejected + kept)``; a source with
+    no considered sections prints "N/A", distinct from an explicit 0%.
+    """
+    from knowledge_lake.pipeline.quality_audit import run_quality_audit
+
+    rows = run_quality_audit(domain=domain)
+
+    if not rows:
+        typer.echo(f"No sources found for domain {domain!r}.")
+        return
+
+    if as_json:
+        typer.echo(json.dumps(rows))
+        return
+
+    header = (
+        f"{'source_name':<30} {'considered':>10} {'kept':>6} {'rejected':>8} "
+        f"{'errored':>8} {'garbage_rate':>12}"
+    )
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for row in rows:
+        rate = row["garbage_rate"]
+        rate_display = "N/A" if rate is None else f"{rate:.1%}"
+        typer.echo(
+            f"{row['source_name']:<30} {row['sections_considered']:>10} "
+            f"{row['sections_kept']:>6} {row['sections_rejected']:>8} "
+            f"{row['documents_errored']:>8} {rate_display:>12}"
+        )
 
 
 @app.command(name="demo")
