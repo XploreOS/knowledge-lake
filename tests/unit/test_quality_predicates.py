@@ -288,3 +288,46 @@ def test_run_predicates_exemption_predicate_fails_then_threshold_runs() -> None:
     )
     assert result.passed is False
     assert "below_token_floor" in result.reason
+
+
+def test_run_predicates_functools_partial_exemption_requires_explicit_param() -> None:
+    """WR-03 regression guard: a functools.partial-wrapped
+    check_domain_allowlist is NOT identity-matched against the hardcoded
+    module-level _EXEMPTION_PREDICATES set. Without passing
+    exemption_predicates explicitly, a non-matching allowlist result
+    (passed=False, "no_allowlist_match") is incorrectly treated as an
+    ordinary threshold predicate failure, which short-circuits the whole
+    call as an outright rejection — even though real substance content
+    (that would otherwise pass check_token_floor) follows it in the list."""
+    import functools
+
+    wrapped = functools.partial(check_domain_allowlist, allowlist_patterns=["ICD-10"])
+    text = "This is ordinary clinical prose with no allowlisted code in it."
+
+    # Without exemption_predicates, the non-matching wrapped allowlist check
+    # is treated as an ordinary threshold predicate: its passed=False result
+    # incorrectly short-circuits the whole call as a rejection, even though
+    # check_token_floor (which never runs) would have passed.
+    result = run_predicates(text, {}, [wrapped, check_token_floor])
+    assert result == PredicateResult(False, "no_allowlist_match")
+
+    # With exemption_predicates explicitly naming the exact wrapped callable,
+    # a non-matching allowlist result is correctly treated as a no-op
+    # fallthrough, and check_token_floor runs and passes.
+    result = run_predicates(
+        text,
+        {},
+        [wrapped, check_token_floor],
+        exemption_predicates={wrapped},
+    )
+    assert result == PredicateResult(True, "all_checks_passed")
+
+
+def test_run_predicates_default_exemption_predicates_unchanged() -> None:
+    """WR-03 regression guard: omitting exemption_predicates must preserve
+    the exact pre-existing default behavior for the bare check_table_exemption
+    function (backward compatibility)."""
+    result = run_predicates(
+        "", {"is_table": True}, [check_table_exemption, check_token_floor]
+    )
+    assert result == PredicateResult(True, "table_exempt")

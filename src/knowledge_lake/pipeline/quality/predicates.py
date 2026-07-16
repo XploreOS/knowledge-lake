@@ -240,12 +240,14 @@ def run_predicates(
     text: str,
     metadata: dict,
     predicates: list[Callable[..., PredicateResult]],
+    *,
+    exemption_predicates: set[Callable[..., PredicateResult]] | None = None,
 ) -> PredicateResult:
     """Evaluate ``predicates`` in list order, never reordered/sorted.
 
     For each predicate, in the exact order given:
-      - If it is an EXEMPTION predicate (``check_table_exemption`` or
-        ``check_domain_allowlist``) and it passed, return
+      - If it is an EXEMPTION predicate (identity-matched against
+        ``exemption_predicates``) and it passed, return
         ``PredicateResult(True, result.reason)`` immediately — an exemption
         match unconditionally overrides any prior or subsequent predicate.
       - If it is not an exemption predicate and it failed, return
@@ -264,11 +266,28 @@ def run_predicates(
     it evaluates whatever order it's given — but callers must place
     exemptions first for the override semantics to take effect before a
     threshold failure would otherwise return early.
+
+    Args:
+        exemption_predicates: Explicit set of predicate callables (drawn from
+            ``predicates``, by identity) to treat as exemption predicates.
+            Defaults to ``{check_table_exemption, check_domain_allowlist}``
+            for backward compatibility. WR-03: the module-level default only
+            matches the bare function objects — a caller that must wrap
+            ``check_domain_allowlist`` (e.g. via
+            ``functools.partial(check_domain_allowlist,
+            allowlist_patterns=patterns)`` to satisfy its required keyword-only
+            argument, since ``run_predicates`` calls every predicate as
+            ``predicate(text, metadata)`` with no extra args) MUST pass that
+            exact wrapped callable in ``exemption_predicates`` explicitly —
+            identity against the unwrapped module-level function will not
+            match a ``functools.partial`` object.
     """
+    if exemption_predicates is None:
+        exemption_predicates = _EXEMPTION_PREDICATES
     for predicate in predicates:
         result = predicate(text, metadata)
-        if predicate in _EXEMPTION_PREDICATES and result.passed:
+        if predicate in exemption_predicates and result.passed:
             return PredicateResult(True, result.reason)
-        if predicate not in _EXEMPTION_PREDICATES and not result.passed:
+        if predicate not in exemption_predicates and not result.passed:
             return PredicateResult(False, result.reason)
     return PredicateResult(True, "all_checks_passed")
