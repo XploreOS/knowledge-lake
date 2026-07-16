@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 19
-current_phase_name: Section Classifier + Patterns
+current_phase_name: section-classifier-patterns
 status: executing
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-07-16T17:07:37.823Z"
+stopped_at: Completed 19-01-PLAN.md
+last_updated: "2026-07-16T17:15:27.279Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 18 complete, transitioned to Phase 19
+last_activity_desc: Phase 19 execution started
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 40
+  total_plans: 9
+  completed_plans: 6
+  percent: 67
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 18 — Gate Decouple
+**Current focus:** Phase 19 — section-classifier-patterns
 
 ## Current Position
 
-Phase: 19 — Section Classifier + Patterns
-Plan: Not started
+Phase: 19 (section-classifier-patterns) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 18 complete, transitioned to Phase 19
+Last activity: 2026-07-16 — Phase 19 execution started
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Last activity: 2026-07-16 — Phase 18 complete, transitioned to Phase 19
 | Phase 17 P03 | 8min | 2 tasks | 2 files |
 | Phase 17 P04 | 6min | 2 tasks | 4 files |
 | Phase 18 P01 | 4min | 2 tasks | 2 files |
+| Phase 19 P01 | 6 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,9 @@ Last activity: 2026-07-16 — Phase 18 complete, transitioned to Phase 19
 - [Phase ?]: Split Task 1 (tdd=true) into true RED/GREEN commits and Task 2's boundary tests into a separate immediately-green commit, matching plan task boundaries
 - [Phase ?]: Patched source modules (pipeline.parse, pipeline.clean, pipeline.quality_audit) rather than the importer's namespace since quality_audit.py and cmd_quality_audit both use function-local imports — the mirror image of the route.py module-level-import gotcha
 - [Phase ?]: GATE-01: Gate boilerplate patterns frozen as static copy in crawl.py; Phase 19 BOILERPLATE_PATTERNS extensions will not alter stored source signatures or trigger spurious re-crawls
+- [Phase 19 P01]: pipeline/quality/ duplicates tiktoken token_count() locally instead of importing pipeline.chunk (which pulls registry.db/storage.s3 at module scope), mirroring crawl.py's GATE-01 duplication-for-isolation precedent — keeps QUAL-01's zero-I/O contract intact
+- [Phase 19 P01]: Added check_terminal_punct_ratio as a 7th predicate beyond D-11's named six, to satisfy D-03's explicit substance-threshold description; documented as a non-exhaustive reading of D-11 in predicates.py's module docstring
+- [Phase 19 P01]: Zero-I/O import-boundary test runs in a subprocess, not in-process sys.modules inspection — tests/conftest.py's autouse _clear_settings_cache fixture imports registry.db/sqlalchemy before every test body, which would always fail an in-process check regardless of pipeline.quality's actual behavior
 
 ### Pending Todos
 
@@ -161,8 +165,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T12:42:02.722Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-07-16T17:15:27.269Z
+Stopped at: Completed 19-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
