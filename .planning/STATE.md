@@ -5,16 +5,16 @@ milestone_name: Data Quality & Enrichment
 current_phase: 19
 current_phase_name: section-classifier-patterns
 status: executing
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-07-16T17:15:27.279Z"
+stopped_at: Completed 19-02-PLAN.md
+last_updated: "2026-07-16T17:30:00.000Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 19 execution started
+last_activity_desc: Phase 19 Plan 2 (DomainFilters + filters.yaml) executed
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 19 (section-classifier-patterns) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 19 execution started
+Last activity: 2026-07-16 — Completed 19-02-PLAN.md (DomainFilters model + optional filters.yaml loading + healthcare clinical-code allowlist, CLEAN-06)
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Last activity: 2026-07-16 — Phase 19 execution started
 | Phase 17 P04 | 6min | 2 tasks | 4 files |
 | Phase 18 P01 | 4min | 2 tasks | 2 files |
 | Phase 19 P01 | 6 min | 2 tasks | 4 files |
+| Phase 19 P02 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Last activity: 2026-07-16 — Phase 19 execution started
 - [Phase 19 P01]: pipeline/quality/ duplicates tiktoken token_count() locally instead of importing pipeline.chunk (which pulls registry.db/storage.s3 at module scope), mirroring crawl.py's GATE-01 duplication-for-isolation precedent — keeps QUAL-01's zero-I/O contract intact
 - [Phase 19 P01]: Added check_terminal_punct_ratio as a 7th predicate beyond D-11's named six, to satisfy D-03's explicit substance-threshold description; documented as a non-exhaustive reading of D-11 in predicates.py's module docstring
 - [Phase 19 P01]: Zero-I/O import-boundary test runs in a subprocess, not in-process sys.modules inspection — tests/conftest.py's autouse _clear_settings_cache fixture imports registry.db/sqlalchemy before every test body, which would always fail an in-process check regardless of pipeline.quality's actual behavior
+- [Phase 19 P02]: DomainLoader.filters (DomainFilters | None) added as an explicit optional-load branch (step 3b) that never raises FileNotFoundError for filters.yaml's absence — the one exception to the four mandatory-file raise-on-missing convention in DomainLoader.__init__
+- [Phase 19 P02]: DomainFilters.thresholds validated but intentionally unconsumed by classify_sections() in Phase 19 (RESEARCH.md Assumptions Log A3) — reserved field for a future phase's override-vs-compose semantics, avoiding a schema-breaking change later
 
 ### Pending Todos
 
@@ -165,8 +168,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T17:15:27.269Z
-Stopped at: Completed 19-01-PLAN.md
+Last session: 2026-07-16T17:30:00.000Z
+Stopped at: Completed 19-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
