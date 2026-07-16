@@ -134,7 +134,10 @@ Plans:
   1. Adding a new pattern to `BOILERPLATE_PATTERNS` does not change the content signature of any existing source
   2. A pinning test asserts gate-signature byte-stability across a clean-stage pattern change
 
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 18-01-PLAN.md — Freeze gate-local boilerplate patterns, add _gate_normalize(), remove remove_boilerplate import, add byte-stability pinning test (GATE-01)
 
 ### Phase 19: Section Classifier + Patterns
 
