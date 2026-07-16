@@ -390,7 +390,7 @@ def _clean_sections(
 
     classifications = classify_sections(sections, domain_filters=domain_filters)
 
-    for section, classification in zip(sections, classifications):
+    for section, classification in zip(sections, classifications, strict=True):
         cleaned_section_text = remove_boilerplate(section.text)
         if not cleaned_section_text.strip():
             sections_rejected += 1
