@@ -123,6 +123,66 @@ def test_boilerplate_removal_empty_string_no_raise() -> None:
     assert result == ""
 
 
+# ── classify_sections() tests (CLEAN-04, Plan 19-04 TDD RED) ─────────────────
+
+
+def test_classify_sections_distinguishes_boilerplate_from_clinical() -> None:
+    """classify_sections() marks a nav-menu section (zero DataTrove-stopword
+    hits) as is_boilerplate=True and a clinical prose section (normal
+    stopword density) as is_boilerplate=False — the core CLEAN-04 per-section
+    substance classification behavior."""
+    from knowledge_lake.pipeline.clean import classify_sections
+    from knowledge_lake.plugins.protocols import Section
+
+    sections = [
+        Section(
+            heading="Nav",
+            section_path="§1",
+            page=1,
+            text="Home About Us Contact Sitemap Search Toggle Navigation Back Top",
+        ),
+        Section(
+            heading="Clinical",
+            section_path="§2",
+            page=1,
+            text=(
+                "Administrative safeguards require documented risk analysis, "
+                "workforce training, and periodic review of access controls "
+                "to protect patient health information under HIPAA."
+            ),
+        ),
+    ]
+
+    results = classify_sections(sections)
+
+    assert len(results) == 2
+    assert results[0]["index"] == 0
+    assert results[0]["is_boilerplate"] is True
+    assert results[0]["allowlisted"] is False
+    assert results[1]["index"] == 1
+    assert results[1]["is_boilerplate"] is False
+    assert results[1]["allowlisted"] is False
+    assert results[1]["reason"] == "substance_ok"
+
+
+def test_classify_sections_allowlist_override() -> None:
+    """A domain_filters normative_allowlists match unconditionally overrides
+    is_boilerplate — even for a short, stopword-free clinical code string
+    that would otherwise fail check_token_floor (Pitfall 3 ordering,
+    CLEAN-06 integration)."""
+    from knowledge_lake.domains.models import DomainFilters
+    from knowledge_lake.pipeline.clean import classify_sections
+    from knowledge_lake.plugins.protocols import Section
+
+    sections = [Section(heading="Code", section_path="§1", page=1, text="ICD-10 E11.9")]
+    domain_filters = DomainFilters(normative_allowlists=["ICD-10"])
+
+    results = classify_sections(sections, domain_filters=domain_filters)
+
+    assert results[0]["is_boilerplate"] is False
+    assert results[0]["allowlisted"] is True
+
+
 def test_language_detection_english() -> None:
     """English healthcare text must be detected as 'en'."""
     text = "The patient requires immediate treatment for acute conditions and hypertension."
