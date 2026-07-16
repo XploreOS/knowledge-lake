@@ -123,6 +123,26 @@ def test_boilerplate_removal_empty_string_no_raise() -> None:
     assert result == ""
 
 
+def test_boilerplate_preserves_clinical_register_for_sentence() -> None:
+    """Regression guard for CR-01: a legitimate public-health enrollment
+    sentence starting with 'Register for' must survive `remove_boilerplate()`
+    unchanged — the marketing-CTA pattern's `register for` alternative must
+    be anchored to fixed marketing phrasing (e.g. 'register for updates'),
+    not an open wildcard that swallows any clinical enrollment sentence."""
+    text = "Register for the diabetes prevention program to receive personalized coaching."
+    result = remove_boilerplate(text)
+    assert text in result
+
+
+def test_boilerplate_removal_register_for_marketing_phrase() -> None:
+    """The narrowed `register for` alternative must still catch genuine
+    marketing CTAs like 'Register for our newsletter'."""
+    text = "Register for our newsletter\n\nEligibility requirements are described below."
+    result = remove_boilerplate(text)
+    assert "Register for our newsletter" not in result
+    assert "Eligibility requirements are described below." in result
+
+
 # ── classify_sections() tests (CLEAN-04, Plan 19-04 TDD RED) ─────────────────
 
 

@@ -89,9 +89,13 @@ BOILERPLATE_PATTERNS.extend(
         ),
         # Terms-of-service blocks: strip the whole line containing the phrase
         re.compile(r"(?im)^.*(?:terms of service|terms and conditions|terms of use)\b.*$"),
-        # Marketing/enrollment CTAs, full-line-anchored
+        # Marketing/enrollment CTAs, full-line-anchored. `register for` is
+        # deliberately NOT an open wildcard (CR-01): anchored to fixed marketing
+        # phrasing only, so legitimate clinical/public-health enrollment
+        # sentences (e.g. "Register for the diabetes prevention program...")
+        # are never matched.
         re.compile(
-            r"(?im)^(?:enroll now|sign up today|register for .*|subscribe now|get started for free|schedule a demo|contact sales)[^\n]*$"
+            r"(?im)^(?:enroll now|sign up today|register for (?:updates|our newsletter|a free (?:trial|demo|account))|subscribe now|get started for free|schedule a demo|contact sales)[^\n]*$"
         ),
         # Cookie consent (additional phrasing beyond the existing pattern)
         re.compile(r"(?im)^.*(?:we use cookies|manage cookie preferences|cookie settings)\b.*$"),
