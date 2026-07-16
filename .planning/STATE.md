@@ -5,8 +5,8 @@ milestone_name: Data Quality & Enrichment
 current_phase: 17
 current_phase_name: Close the Bypass + Measurement
 status: Planning complete — ready for execution
-stopped_at: Phase 20 context gathered
-last_updated: "2026-07-16T03:57:13.407Z"
+stopped_at: Phase 21 context gathered
+last_updated: "2026-07-16T04:03:21.174Z"
 last_activity: 2026-07-15
 last_activity_desc: v2.6 requirements defined, roadmap created
 progress:
@@ -143,9 +143,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T03:57:13.397Z
-Stopped at: Phase 20 context gathered
-Resume file: .planning/phases/20-chunk-substance-gate-export-gate/20-CONTEXT.md
+Last session: 2026-07-16T04:03:21.164Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-index-time-dedup/21-CONTEXT.md
 
 ## Operator Next Steps
 
