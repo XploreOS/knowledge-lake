@@ -205,6 +205,39 @@ class TestCleanParsedDocThreading:
 
         assert result_a["content_hash"] != result_b["content_hash"]
 
+    def test_distinct_content_hash_with_empty_cleaned_text(self, clean_engine, monkeypatch) -> None:
+        """Flagged assumption (17-01-PLAN.md CLEAN-03): even when cleaned_text
+        reduces to the empty string for two different parsed_artifact_ids, the
+        parsed_artifact_id prefix in hash_input alone guarantees distinct
+        content_hash values."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source_a = _seed_clean_source(session, "source-empty-a")
+            source_b = _seed_clean_source(session, "source-empty-b")
+            parsed_a = _seed_clean_parsed_artifact(session, source_a.id, "hashemptya")
+            parsed_b = _seed_clean_parsed_artifact(session, source_b.id, "hashemptyb")
+            source_a_id, source_b_id = source_a.id, source_b.id
+            parsed_a_id, parsed_b_id = parsed_a.id, parsed_b.id
+
+        settings = _make_clean_settings(clean_engine)
+        # Text that fully strips to empty via BOILERPLATE_PATTERNS.
+        doc = ParsedDoc(text="Page 1 of 5", sections=[])
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result_a = clean_module.clean(
+                parsed_a_id, source_a_id, parsed_doc=doc, settings=settings
+            )
+            result_b = clean_module.clean(
+                parsed_b_id, source_b_id, parsed_doc=doc, settings=settings
+            )
+
+        assert result_a["content_hash"] != result_b["content_hash"]
+
     def test_cleaned_doc_preserves_section_count(self, clean_engine, monkeypatch) -> None:
         """cleaned_doc must retain every section (list length preserved), even
         sections whose text becomes empty after boilerplate stripping — CLEAN-04
