@@ -166,6 +166,55 @@ def compute_minhash(text: str, num_perm: int = 128, shingle_size: int = 5) -> Mi
     return m
 
 
+# ── Per-section cleaning (CLEAN-01, QUAL-04, QUAL-05) ─────────────────────────
+
+
+def _clean_sections(
+    sections: list[Section],
+) -> tuple[list[Section], int, int, int, dict[str, int]]:
+    """Apply boilerplate removal to each section's text without dropping any.
+
+    Builds a new list of Section instances (via dataclasses.replace — never
+    mutates the caller's original Section objects, avoiding the mutation-
+    aliasing hazard called out in 17-RESEARCH.md Pitfall 3, since the same
+    cleaned ParsedDoc is later shared read-only across three Dagster
+    consumers). The returned list always has the same length as `sections` —
+    CLEAN-04's section *removal* is explicitly Phase 19's job, not this
+    plan's; a section whose text goes empty after stripping is still
+    returned, just counted as rejected.
+
+    Args:
+        sections: The parsed document's sections, as-is from the parser.
+
+    Returns:
+        Tuple of (cleaned_sections, sections_considered, sections_kept,
+        sections_rejected, rejection_reasons). `rejection_reasons` maps a
+        reason string to its count (e.g. {"empty_after_boilerplate_removal": 2})
+        — counts are additive so a caller accumulating across multiple
+        `_clean_sections()` calls (e.g. a quality-audit run) can sum them
+        rather than overwrite (QUAL-04 adjacency). An empty input returns
+        considered=kept=rejected=0 and does not raise — distinct from a gate
+        that rejected all N sections (QUAL-05 empty-input boundary).
+    """
+    cleaned_sections: list[Section] = []
+    rejection_reasons: dict[str, int] = {}
+    sections_kept = 0
+    sections_rejected = 0
+
+    for section in sections:
+        cleaned_section_text = remove_boilerplate(section.text)
+        cleaned_sections.append(replace(section, text=cleaned_section_text))
+        if cleaned_section_text.strip():
+            sections_kept += 1
+        else:
+            sections_rejected += 1
+            reason = "empty_after_boilerplate_removal"
+            rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+
+    sections_considered = len(sections)
+    return cleaned_sections, sections_considered, sections_kept, sections_rejected, rejection_reasons
+
+
 # ── Main clean() function ─────────────────────────────────────────────────────
 
 
@@ -186,20 +235,24 @@ def clean(
        supplied (CLEAN-01/02: avoids a redundant S3 round trip for load-
        bearing callers that already hold it), else from the silver zone
        (legacy/standalone path, unchanged S3-read behavior).
-    2b. When parsed_doc is supplied, clean each section's text in place
-        (dataclasses.replace — never mutating the caller's Section objects)
-        without dropping any section from the list.
+    2b. When parsed_doc is supplied, clean each section's text via
+        _clean_sections() (dataclasses.replace — never mutating the caller's
+        Section objects) without dropping any section from the list, and
+        count sections_considered/kept/rejected (QUAL-04/05).
     3. Apply boilerplate removal to the flattened text (before MinHash to
        avoid false near-dups).
     4. Compute WR-05 parent-scoped SHA256 for exact dedup (CLEAN-03) —
        `f"{parsed_artifact_id}:{cleaned_text}"` — so two documents whose
        cleaned text collides never share one cleaned_document artifact.
-    5. If exact dup found, return existing artifact (no new artifact created).
+    5. If exact dup found, return existing artifact (no new artifact created)
+       — still carries fresh cleaned_doc/sections counts (QUAL-04 adjacency,
+       never read stale counts off the existing artifact's metadata).
     6. Detect language via lingua (annotate-only).
     7. Compute MinHash signature.
     8. Build transient LSH from existing cleaned artifacts for near-dup check.
     9. Write cleaned text to silver zone.
-    10. Create cleaned_document artifact with metadata.
+    10. Create cleaned_document artifact with metadata (including
+        sections_considered/kept/rejected/rejection_reasons).
 
     Args:
         parsed_artifact_id: ID of the parsed_document artifact to clean.
@@ -213,10 +266,16 @@ def clean(
     Returns:
         dict with keys: artifact_id, content_hash, language, dedup_status,
         storage_uri, cleaned_doc (ParsedDoc | None — None unless parsed_doc
-        was supplied).
+        was supplied), sections_considered, sections_kept, sections_rejected,
+        rejection_reasons (dict[str, int] — all four are 0/{} when parsed_doc
+        was not supplied).
 
     Raises:
         ValueError: If the parsed artifact does not exist or has no storage_uri.
+        RuntimeError: If the QUAL-05 conservation invariant
+            (sections_rejected + sections_kept == sections_considered) is
+            violated — indicates a bug in _clean_sections, never expected in
+            normal operation.
     """
     s = settings or get_settings()
     storage = StorageBackend(s.storage)
@@ -243,19 +302,50 @@ def clean(
         parsed_text = parsed_doc.text
         # Step 2b: clean each section's text without dropping any section from
         # the list (CLEAN-04 section removal is Phase 19's job, not this
-        # plan's). Builds new Section instances via dataclasses.replace() —
-        # never mutates the caller's original Section objects in place, since
-        # the same cleaned ParsedDoc is later shared read-only across three
-        # Dagster consumers (RESEARCH.md Pitfall 3).
-        cleaned_sections: list[Section] = [
-            replace(section, text=remove_boilerplate(section.text)) for section in parsed_doc.sections
-        ]
+        # plan's) and count kept/rejected/considered (QUAL-04/05).
+        (
+            cleaned_sections,
+            sections_considered,
+            sections_kept,
+            sections_rejected,
+            rejection_reasons,
+        ) = _clean_sections(parsed_doc.sections)
     else:
         key = _uri_to_key(storage_uri)
         raw_bytes = storage.get_object(key)
         parsed_text = raw_bytes.decode("utf-8")
         cleaned_sections = []
+        sections_considered = 0
+        sections_kept = 0
+        sections_rejected = 0
+        rejection_reasons = {}
     log.info("clean.loaded_parsed", size=len(parsed_text))
+
+    # QUAL-05: conservation invariant — never a bare assert (this codebase's
+    # pipeline/*.py convention: structlog call immediately followed by a
+    # raised typed exception, e.g. the ValueError raises above).
+    if sections_rejected + sections_kept != sections_considered:
+        log.error(
+            "clean.conservation_invariant_violated",
+            parsed_artifact_id=parsed_artifact_id,
+            sections_considered=sections_considered,
+            sections_kept=sections_kept,
+            sections_rejected=sections_rejected,
+        )
+        raise RuntimeError(
+            f"clean: conservation invariant violated for {parsed_artifact_id!r}: "
+            f"{sections_rejected} + {sections_kept} != {sections_considered}"
+        )
+    # QUAL-05's other half — a broken parser (0 sections) must be distinguishable
+    # from a correct gate that rejected everything (N sections, 0 kept). Only
+    # meaningful when parsed_doc was supplied — the legacy S3 path has no
+    # per-section data at all, so it would trivially and noisily "zero" every call.
+    if parsed_doc is not None and sections_considered == 0:
+        log.warning(
+            "clean.zero_sections",
+            parsed_artifact_id=parsed_artifact_id,
+            msg="parser produced zero sections — distinct from a gate rejecting all sections",
+        )
 
     # Step 3: Apply boilerplate removal to the flattened text (CLEAN-01)
     # Must happen BEFORE MinHash computation (Pitfall 3 from RESEARCH.md)
@@ -364,6 +454,14 @@ def clean(
                 "dedup_status": "exact_dup",
                 "storage_uri": existing.storage_uri,
                 "cleaned_doc": cleaned_doc,
+                # QUAL-04: computed unconditionally above from the in-memory
+                # parsed_doc, never read off existing.metadata_ — a
+                # quality-audit re-run against an already-cleaned document
+                # must see live counts, not stale/absent ones.
+                "sections_considered": sections_considered,
+                "sections_kept": sections_kept,
+                "sections_rejected": sections_rejected,
+                "rejection_reasons": rejection_reasons,
             }
 
         # Step 9: Write cleaned text to silver zone (idempotent for same key)
@@ -388,6 +486,14 @@ def clean(
                 "language": language,
                 "dedup_status": dedup_status,
                 "minhash_num_perm": s.clean.minhash_num_perm,
+                # QUAL-04/QUAL-05: computed unconditionally above from the
+                # in-memory parsed_doc — see the exact-dup branch's identical
+                # keys for why this must never be conditional on this branch
+                # having fired.
+                "sections_considered": sections_considered,
+                "sections_kept": sections_kept,
+                "sections_rejected": sections_rejected,
+                "rejection_reasons": rejection_reasons,
             },
         )
         session.flush()
@@ -398,6 +504,10 @@ def clean(
             "dedup_status": dedup_status,
             "storage_uri": cleaned_uri,
             "cleaned_doc": cleaned_doc,
+            "sections_considered": sections_considered,
+            "sections_kept": sections_kept,
+            "sections_rejected": sections_rejected,
+            "rejection_reasons": rejection_reasons,
         }
 
     log.info(
