@@ -8,12 +8,12 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.5 shipped 2026-07-15)
+## Current State (v2.6-in-progress, Phase 17 complete 2026-07-16)
 
-- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export)
+- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement)
 - **Source lines:** ~26,000 Python (src) + ~24,300 (tests)
-- **Tests:** 971 passing, 0 failed, 0 xpassed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
-- **Pipeline:** ingest → parse → clean → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
+- **Tests:** 994 passing, 0 failed, 0 xpassed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Pipeline:** ingest → parse → **clean (now active on all paths)** → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
 - **Retrieval:** hybrid BM25 + dense (RRF), mode-switchable (`hybrid|dense|sparse`); two-stage tree retrieval; query router dispatching between chunk and tree paths (`chunk|tree|two_stage|auto`)
 - **Query routing:** `classify_route()` heuristic classifier (section/comparison/structural triggers) + `routed_search()` dispatcher with auto-fallback on empty tree results; KLAKE_ROUTER__DEFAULT_ROUTE env var
@@ -25,7 +25,7 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
 - **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; v2.5 milestone audit PASSED (19/19 requirements, 5/5 E2E flows); E2E gap analysis closed — all 19 findings resolved
 - **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets
-- **Known data quality gap (drives v2.6):** ~28% of chunks are garbage and 33% of the gold RAG corpus is unusable. Root cause: the clean stage is architecturally bypassed — `clean_document` forwards the *uncleaned* `parsed_doc` to chunk/tree/enrich, so boilerplate removal reaches only the pretrain path
+- **Phase 17 complete:** Clean-stage bypass closed on both Dagster and CLI paths; WR-05 content hash scoping applied; conservation invariant (`rejected+kept==sections_considered`) wired; `klake quality-audit` harness ships a reproducible per-source garbage-rate table. 25/25 must-haves verified passed 2026-07-16.
 
 ## Next Milestone: v2.6 Data Quality & Enrichment
 
@@ -231,4 +231,4 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-15 after v2.5 milestone (PageIndex Plugin Integration) shipped and archived*
+*Last updated: 2026-07-16 after Phase 17 (Close the Bypass + Measurement) verified passed*
