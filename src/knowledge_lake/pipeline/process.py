@@ -3,9 +3,12 @@
 Extracted from ``cli/app.py:cmd_process_crawled`` so the CLI, API, and MCP tool
 can all call one implementation (one function, many callers — D-03).
 
-The body is functionally identical to the original CLI implementation; rows are
-materialized to tuples inside the ``get_session()`` block (DetachedInstanceError
-guard, PAYLOAD-01).
+Rows are materialized to tuples inside the ``get_session()`` block
+(DetachedInstanceError guard, PAYLOAD-01).
+
+CLEAN-02: runs a ``clean()`` stage between ``parse()`` and ``chunk()`` so this
+CLI/API/MCP-shared path produces chunks from cleaned text, matching the
+Dagster ``clean_document -> chunk_document`` path (no shortcut/bypass).
 """
 from __future__ import annotations
 
@@ -20,7 +23,7 @@ def process_crawled(
     limit: int = 100,
     collection: str = "klake_chunks",
 ) -> dict:
-    """Process crawled raw_document artifacts through parse→chunk→embed→index.
+    """Process crawled raw_document artifacts through parse→clean→chunk→embed→index.
 
     Finds all ``raw_document`` artifacts that have no corresponding
     ``parsed_document`` child and runs the full pipeline on each.  Useful
@@ -50,6 +53,7 @@ def process_crawled(
     from sqlalchemy.orm import aliased
 
     from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.pipeline.clean import clean
     from knowledge_lake.pipeline.embed import embed
     from knowledge_lake.pipeline.index import index
     from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
@@ -103,7 +107,10 @@ def process_crawled(
             parse_result, parsed_doc = parse(raw_id, src_id, mime_type=mime)
             parsed_id = parse_result["artifact_id"]
 
-            chunks_list = chunk(parsed_id, src_id, parsed_doc)
+            clean_result = clean(parsed_id, src_id, parsed_doc=parsed_doc)
+            cleaned_doc = clean_result["cleaned_doc"]
+
+            chunks_list = chunk(parsed_id, src_id, cleaned_doc)
             if not chunks_list:
                 processed += 1
                 continue
