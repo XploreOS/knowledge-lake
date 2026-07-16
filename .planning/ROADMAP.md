@@ -152,7 +152,18 @@ Plans:
   3. A chunk containing `ICD-10 E11.9` or `Metformin 500 mg PO BID` is never dropped by any gate — healthcare-pack domain-code allowlist enforced via `DomainLoader`
   4. Quality predicates in `pipeline/quality/` are independently importable with zero I/O, S3, or Dagster dependencies — deterministic and 100% branch coverage
 
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 19-01-PLAN.md — Pure quality predicate module (pipeline/quality/) with 100% branch coverage (QUAL-01)
+- [ ] 19-02-PLAN.md — DomainFilters model + optional filters.yaml loading + healthcare clinical-code allowlist (CLEAN-06)
+- [ ] 19-03-PLAN.md — Extend BOILERPLATE_PATTERNS with 5 new audit garbage categories (CLEAN-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 19-04-PLAN.md — classify_sections() wired into clean()/_clean_sections(), dropping boilerplate sections and persisting section_annotations (CLEAN-04)
 
 ### Phase 20: Chunk Substance Gate + Export Gate
 
@@ -230,6 +241,6 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17 | v2.6 Close the Bypass + Measurement | 4/4 | Complete    | 2026-07-16 |
 | 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
-| 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
+| 19 | v2.6 Section Classifier + Patterns | 0/4 | Not started | - |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |
 | 21 | v2.6 Index-Time Dedup | 0/0 | Not started | - |
