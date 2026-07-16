@@ -285,3 +285,110 @@ class TestCleanParsedDocThreading:
 
         assert result["cleaned_doc"] is None
         assert mock_storage.get_object.call_count == 1
+
+
+class TestCleanConservationInvariant:
+    """Tests for _clean_sections() and clean()'s QUAL-04/QUAL-05 conservation
+    invariant and unconditional rejection-count recording."""
+
+    def test_clean_sections_empty_input_no_raise(self) -> None:
+        """_clean_sections([]) must return considered=kept=rejected=0 and an
+        empty rejection_reasons dict without raising (QUAL-05 empty-input
+        boundary — distinct from a gate that rejected all N sections)."""
+        from knowledge_lake.pipeline.clean import _clean_sections
+
+        cleaned_sections, considered, kept, rejected, rejection_reasons = _clean_sections([])
+
+        assert cleaned_sections == []
+        assert considered == 0
+        assert kept == 0
+        assert rejected == 0
+        assert rejection_reasons == {}
+
+    def test_clean_sections_rejection_reasons_sum_across_sections(self) -> None:
+        """Two sections that both fully strip to empty text must produce
+        rejection_reasons == {"empty_after_boilerplate_removal": 2} — counts
+        sum rather than overwrite (QUAL-04 adjacency)."""
+        from knowledge_lake.pipeline.clean import _clean_sections
+        from knowledge_lake.plugins.protocols import Section
+
+        sections = [
+            Section(heading="H1", section_path="§1", page=1, text="Page 1 of 5"),
+            Section(heading="H2", section_path="§2", page=1, text="Page 2 of 5"),
+        ]
+
+        cleaned_sections, considered, kept, rejected, rejection_reasons = _clean_sections(sections)
+
+        assert considered == 2
+        assert kept == 0
+        assert rejected == 2
+        assert rejection_reasons == {"empty_after_boilerplate_removal": 2}
+        assert len(cleaned_sections) == 2
+
+    def test_conservation_invariant_raises_runtime_error(self, clean_engine, monkeypatch) -> None:
+        """clean()'s conservation check must raise RuntimeError (never a bare
+        assert) if sections_rejected + sections_kept != sections_considered."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-invariant")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashinvariant")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="Body text.",
+            sections=[Section(heading="H", section_path="§1", page=1, text="Body text.")],
+        )
+
+        # Deliberately break the invariant: _clean_sections claims 1 section was
+        # considered, but reports 0 kept + 0 rejected (1 != 0 + 0).
+        def _broken_clean_sections(sections):
+            return [], 1, 0, 0, {}
+
+        monkeypatch.setattr(clean_module, "_clean_sections", _broken_clean_sections)
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            with pytest.raises(RuntimeError, match="conservation invariant violated"):
+                clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+
+    def test_unconditional_counting_on_exact_dup_branch(self, clean_engine, monkeypatch) -> None:
+        """Calling clean() twice with the same parsed_artifact_id + parsed_doc
+        (second call hits the exact-dup early-return branch) must return
+        correct sections_considered/kept/rejected in BOTH calls' dicts, not
+        just the first (QUAL-04: never read stale counts off existing
+        artifact metadata)."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-dup-counts")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashdupcounts")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="Body text.",
+            sections=[
+                Section(heading="Real", section_path="§1", page=1, text="Real content."),
+                Section(heading="Boilerplate", section_path="§2", page=1, text="Page 1 of 5"),
+            ],
+        )
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            first = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+            second = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+
+        assert second["dedup_status"] == "exact_dup"
+        for result in (first, second):
+            assert result["sections_considered"] == 2
+            assert result["sections_kept"] == 1
+            assert result["sections_rejected"] == 1
+            assert result["rejection_reasons"] == {"empty_after_boilerplate_removal": 1}
