@@ -20,6 +20,7 @@ which confirms the asset graph is correct without needing the Dagster webserver.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -369,6 +370,46 @@ class TestAssetMaterialization:
         )
         assert ingest_output["raw_artifact_id"].startswith("doc_"), (
             f"raw_artifact_id must start with 'doc_', got: {ingest_output['raw_artifact_id']!r}"
+        )
+
+        # CLEAN-01 (17-02): clean_document must forward the CLEANED parsed_doc,
+        # not the raw uncleaned object it received from parsed_document — proves
+        # the clean-stage bypass is closed rather than merely that a "parsed_doc"
+        # key exists.
+        clean_output = result.output_for_node("clean_document")
+        parsed_output = result.output_for_node("parsed_document")
+        assert clean_output["parsed_doc"] is not parsed_output["parsed_doc"], (
+            "clean_document must forward a distinct (cleaned) ParsedDoc object, "
+            "not the same uncleaned parsed_doc instance produced by parsed_document "
+            "(CLEAN-01 regression: the clean-stage bypass would reopen if this ever "
+            "becomes the same object again)."
+        )
+
+        # Defensive content check: page-footer boilerplate ("Page N of M") is one
+        # of clean()'s existing BOILERPLATE_PATTERNS entries. If the cleaned
+        # parsed_doc is genuinely reaching chunk_document, no chunk's text should
+        # contain a full trimmed line that is nothing but page-footer boilerplate.
+        page_footer_pattern = re.compile(r"^(?:Page \d+ of \d+)\s*$")
+        chunk_output = result.output_for_node("chunk_document")
+        for chunk in chunk_output["chunks"]:
+            for line in chunk["text"].splitlines():
+                assert not page_footer_pattern.match(line.strip()), (
+                    f"chunk text contains unremoved page-footer boilerplate line "
+                    f"{line.strip()!r} — the cleaned parsed_doc is not reaching "
+                    f"chunk_document (CLEAN-01 regression)."
+                )
+
+        # D-03 regression: curate_document_asset must remain fully functional
+        # with the now-cleaned clean_document input, with zero code changes to
+        # curate.py — it re-fetches cleaned text from S3 independently of the
+        # in-memory dict-value swap this plan makes.
+        curate_output = result.output_for_node("curate_document_asset")
+        assert curate_output.get("quality_score") is not None, (
+            f"curate_document_asset must produce a non-None quality_score, got: "
+            f"{curate_output.get('quality_score')!r} (full output: {curate_output.keys()})"
+        )
+        assert "status" in curate_output, (
+            f"curate_document_asset output must include a status key, got: {curate_output.keys()}"
         )
 
     def test_lineage_resolves_after_dagster_materialize(self, inprocess_result: dict) -> None:
