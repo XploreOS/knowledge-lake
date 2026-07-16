@@ -44,6 +44,14 @@ _SILVER_PREFIX = "silver"
 # All patterns are line-level and only match entire lines of boilerplate.
 # Inline citations like "(HHS, 2023)", "[1]", or "see §3.2" appear mid-sentence
 # and will not match these patterns (T-03-07).
+#
+# 9 entries total (CLEAN-05): the original 4 (page headers, cookie/privacy
+# banners, navigation, copyright/disclaimer) plus 5 added in Phase 19 covering
+# navigation menus, terms-of-service blocks, marketing/enrollment CTAs, cookie
+# consent (additional phrasing), and government disclaimer boilerplate. The
+# extension is additive-only via .extend() — indices 0-3 are byte-identical to
+# their pre-Phase-19 form so the Phase 18 gate signature (crawl.py's frozen
+# _GATE_BOILERPLATE_PATTERNS copy) remains unaffected (GATE-01, D-06).
 
 BOILERPLATE_PATTERNS: list[re.Pattern] = [
     # Page headers/footers: "Page 1 of 5" or a bare page number on its own line
@@ -60,6 +68,29 @@ BOILERPLATE_PATTERNS: list[re.Pattern] = [
     # Repeated copyright/disclaimer lines
     re.compile(r"(?i)^(?:disclaimer|copyright \d{4})[^\n]*$", re.MULTILINE),
 ]
+
+BOILERPLATE_PATTERNS.extend(
+    [
+        # Navigation (extended): additional nav-chrome phrases, full-line-only
+        re.compile(
+            r"(?im)^(?:main menu|breadcrumbs?|skip to footer|jump to navigation|back to top|search this site|toggle navigation)\s*$"
+        ),
+        # Terms-of-service blocks: strip the whole line containing the phrase
+        re.compile(r"(?im)^.*(?:terms of service|terms and conditions|terms of use)\b.*$"),
+        # Marketing/enrollment CTAs, full-line-anchored
+        re.compile(
+            r"(?im)^(?:enroll now|sign up today|register for .*|subscribe now|get started for free|schedule a demo|contact sales)[^\n]*$"
+        ),
+        # Cookie consent (additional phrasing beyond the existing pattern)
+        re.compile(r"(?im)^.*(?:we use cookies|manage cookie preferences|cookie settings)\b.*$"),
+        # Government disclaimer: anchored to specific multi-word phrases only
+        # (deliberately NOT a generic "disclaimer"/"warning" keyword match — this
+        # narrowness is what keeps genuine clinical safety text intact).
+        re.compile(
+            r"(?im)^(?:this website is not a substitute for professional medical advice|for official use only|privacy policy|accessibility statement|no fear act|foia)[^\n]*$"
+        ),
+    ]
+)
 
 
 # ── Text cleaning helpers ─────────────────────────────────────────────────────
