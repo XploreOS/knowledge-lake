@@ -23,12 +23,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import replace
 
 import structlog
 from datasketch import MinHash, MinHashLSH
 
 from knowledge_lake.config.settings import Settings, get_settings
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
+from knowledge_lake.plugins.protocols import ParsedDoc, Section
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
 from knowledge_lake.storage.s3 import _UNCLASSIFIED_DOMAIN, StorageBackend
@@ -171,15 +173,27 @@ def clean(
     parsed_artifact_id: str,
     source_id: str,
     *,
+    parsed_doc: ParsedDoc | None = None,
     settings: Settings | None = None,
 ) -> dict:
     """Clean a parsed_document artifact and create a cleaned_document artifact.
 
     Flow:
-    1. Fetch parsed artifact from registry to get storage_uri.
-    2. Retrieve parsed markdown bytes from silver zone.
-    3. Apply boilerplate removal (before MinHash to avoid false near-dups).
-    4. Compute SHA256 for exact dedup.
+    1. Fetch parsed artifact from registry to get storage_uri (always — even
+       when parsed_doc is supplied, parsed_artifact_id is still used as the
+       parent_artifact_id for the cleaned artifact).
+    2. Retrieve parsed text — from the caller's in-memory `parsed_doc` when
+       supplied (CLEAN-01/02: avoids a redundant S3 round trip for load-
+       bearing callers that already hold it), else from the silver zone
+       (legacy/standalone path, unchanged S3-read behavior).
+    2b. When parsed_doc is supplied, clean each section's text in place
+        (dataclasses.replace — never mutating the caller's Section objects)
+        without dropping any section from the list.
+    3. Apply boilerplate removal to the flattened text (before MinHash to
+       avoid false near-dups).
+    4. Compute WR-05 parent-scoped SHA256 for exact dedup (CLEAN-03) —
+       `f"{parsed_artifact_id}:{cleaned_text}"` — so two documents whose
+       cleaned text collides never share one cleaned_document artifact.
     5. If exact dup found, return existing artifact (no new artifact created).
     6. Detect language via lingua (annotate-only).
     7. Compute MinHash signature.
@@ -190,11 +204,16 @@ def clean(
     Args:
         parsed_artifact_id: ID of the parsed_document artifact to clean.
         source_id:          Source ID (used for silver zone key path).
+        parsed_doc:         Optional in-memory ParsedDoc. When supplied, skips
+                             the S3 re-fetch and cleans parsed_doc.sections at
+                             section granularity without dropping any section
+                             (CLEAN-04 section removal is Phase 19's job).
         settings:           Settings override (for testing).
 
     Returns:
         dict with keys: artifact_id, content_hash, language, dedup_status,
-        storage_uri.
+        storage_uri, cleaned_doc (ParsedDoc | None — None unless parsed_doc
+        was supplied).
 
     Raises:
         ValueError: If the parsed artifact does not exist or has no storage_uri.
@@ -217,19 +236,46 @@ def clean(
                 f"clean: parsed_artifact {parsed_artifact_id!r} has no storage_uri"
             )
 
-    # Step 2: Retrieve parsed markdown from silver zone
-    key = _uri_to_key(storage_uri)
-    raw_bytes = storage.get_object(key)
-    parsed_text = raw_bytes.decode("utf-8")
+    # Step 2: Retrieve parsed text — in-memory parsed_doc (CLEAN-01/02) or,
+    # for the legacy/standalone caller, the silver zone (unchanged S3-read
+    # behavior; single get_object() call, matching test_clean_silver_key.py).
+    if parsed_doc is not None:
+        parsed_text = parsed_doc.text
+        # Step 2b: clean each section's text without dropping any section from
+        # the list (CLEAN-04 section removal is Phase 19's job, not this
+        # plan's). Builds new Section instances via dataclasses.replace() —
+        # never mutates the caller's original Section objects in place, since
+        # the same cleaned ParsedDoc is later shared read-only across three
+        # Dagster consumers (RESEARCH.md Pitfall 3).
+        cleaned_sections: list[Section] = [
+            replace(section, text=remove_boilerplate(section.text)) for section in parsed_doc.sections
+        ]
+    else:
+        key = _uri_to_key(storage_uri)
+        raw_bytes = storage.get_object(key)
+        parsed_text = raw_bytes.decode("utf-8")
+        cleaned_sections = []
     log.info("clean.loaded_parsed", size=len(parsed_text))
 
-    # Step 3: Apply boilerplate removal (CLEAN-01)
+    # Step 3: Apply boilerplate removal to the flattened text (CLEAN-01)
     # Must happen BEFORE MinHash computation (Pitfall 3 from RESEARCH.md)
     cleaned_text = remove_boilerplate(parsed_text)
 
-    # Step 4: Compute SHA256 for exact dedup (CLEAN-03)
-    cleaned_bytes = cleaned_text.encode("utf-8")
-    content_hash = hashlib.sha256(cleaned_bytes).hexdigest()
+    # Step 4: WR-05 parent-scoped content hash (CLEAN-03) — prevents
+    # cross-document lineage corruption when two documents' cleaned text
+    # collides (mirrors chunk.py's already-shipped WR-05 convention).
+    hash_input = f"{parsed_artifact_id}:{cleaned_text}"
+    content_hash = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
+    cleaned_bytes = cleaned_text.encode("utf-8")  # still needed for the S3 put_object body
+
+    # cleaned_doc: forwarded in-memory to Dagster/CLI callers so they never
+    # need to re-read the flattened silver blob to recover sections
+    # (RESEARCH.md Primary recommendation). None unless parsed_doc was supplied.
+    cleaned_doc = (
+        ParsedDoc(text=cleaned_text, sections=cleaned_sections, metadata=parsed_doc.metadata)
+        if parsed_doc is not None
+        else None
+    )
 
     # Step 6: Language detection (CLEAN-02 — annotate only)
     # Done before the session block so no I/O happens inside the critical section.
@@ -317,6 +363,7 @@ def clean(
                 else "unknown",
                 "dedup_status": "exact_dup",
                 "storage_uri": existing.storage_uri,
+                "cleaned_doc": cleaned_doc,
             }
 
         # Step 9: Write cleaned text to silver zone (idempotent for same key)
@@ -350,6 +397,7 @@ def clean(
             "language": language,
             "dedup_status": dedup_status,
             "storage_uri": cleaned_uri,
+            "cleaned_doc": cleaned_doc,
         }
 
     log.info(
