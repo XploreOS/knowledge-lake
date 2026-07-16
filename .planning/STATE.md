@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 17
 current_phase_name: Close the Bypass + Measurement
 status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-07-16T04:59:14.815Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-07-16T05:07:33.593Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 17 execution started
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 17 (Close the Bypass + Measurement) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-16 — Phase 17 execution started
 
@@ -78,6 +78,7 @@ Last activity: 2026-07-16 — Phase 17 execution started
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 17 P01 | 13min | 2 tasks | 2 files |
+| Phase 17 P02 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Last activity: 2026-07-16 — Phase 17 execution started
 | D-5 | 30-char floor rejected | Wrong unit (token-based system), wrong target (kills ICD codes, dosage instructions); use composite predicate with domain allowlist | 2026-07-15 |
 
 - [Phase ?]: Split plan's two tightly-coupled tasks (WR-05 hash + parsed_doc forwarding vs conservation invariant) into 4 TDD commits instead of 1 combined commit, while still shipping CLEAN-01/CLEAN-03 together in Task 1 per RESEARCH.md Pitfall 1
+- [Phase ?]: Task 2 (tdd=true) proves behavior Task 1 already implemented — test passed on first run by plan design, not a stale/no-op test (see 17-02-SUMMARY.md TDD Gate Compliance)
 
 ### Pending Todos
 
@@ -150,8 +152,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T04:59:14.804Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-07-16T05:07:33.582Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
