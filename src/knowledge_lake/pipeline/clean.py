@@ -29,6 +29,18 @@ import structlog
 from datasketch import MinHash, MinHashLSH
 
 from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.domains.models import DomainFilters
+from knowledge_lake.pipeline.quality import (
+    check_alpha_ratio,
+    check_domain_allowlist,
+    check_link_density,
+    check_stopword_ratio,
+    check_table_exemption,
+    check_terminal_punct_ratio,
+    check_token_floor,
+    compute_substance_signals,
+    run_predicates,
+)
 from knowledge_lake.pipeline.utils import uri_to_key as _uri_to_key
 from knowledge_lake.plugins.protocols import ParsedDoc, Section
 from knowledge_lake.registry import repo as registry_repo
@@ -197,53 +209,207 @@ def compute_minhash(text: str, num_perm: int = 128, shingle_size: int = 5) -> Mi
     return m
 
 
-# ── Per-section cleaning (CLEAN-01, QUAL-04, QUAL-05) ─────────────────────────
+# ── Section classification (CLEAN-04, QUAL-01 integration) ───────────────────
+
+
+def classify_sections(
+    sections: list[Section],
+    *,
+    domain_filters: DomainFilters | None = None,
+) -> list[dict]:
+    """Compute a per-section substance classification (CLEAN-04, D-01).
+
+    A NEW, standalone, pure function — never mutates or drops sections. For
+    each section, operates on `section.text` (the ORIGINAL/raw section text,
+    NOT the boilerplate-stripped text — classification runs independently of
+    and prior to `remove_boilerplate()`'s line-level stripping).
+
+    Precedence per section:
+      1. `check_domain_allowlist()` against `domain_filters.normative_allowlists`
+         (plus any framework-contributed patterns) — an UNCONDITIONAL override
+         (Pitfall 3): if it passes, the section is never classified as
+         boilerplate regardless of substance signals or pattern match, e.g. a
+         3-token clinical code like "ICD-10 E11.9" must never be rejected.
+      2. Else, a `BOILERPLATE_PATTERNS` (+ `domain_filters.boilerplate_patterns`)
+         regex match against the raw text.
+      3. Else, `run_predicates()` over the substance-threshold predicates
+         (token floor, alpha ratio, link density, stopword ratio, terminal
+         punctuation ratio), with `check_table_exemption` listed first so an
+         `is_table=True` section short-circuits before any threshold runs.
+
+    Args:
+        sections: The parsed document's sections, as-is from the parser.
+        domain_filters: Optional domain-pack filter overrides (CLEAN-06) —
+            `normative_allowlists` feeds `check_domain_allowlist()`,
+            `boilerplate_patterns` extends the framework's `BOILERPLATE_PATTERNS`
+            list for the pattern-match check. `thresholds` is not consumed here
+            (reserved, per 19-02-SUMMARY.md).
+
+    Returns:
+        A list of dicts, same length/order as `sections`, each carrying
+        `index`, `signals` (from `compute_substance_signals()`),
+        `is_boilerplate`, `allowlisted`, and `reason`. `reason` is
+        `"boilerplate_pattern_match"` when a pattern matched,
+        `predicate_result.reason` when a threshold predicate failed,
+        `"substance_ok"` when the section passed all checks, or the
+        allowlist's own match reason when `allowlisted` is True.
+    """
+    results: list[dict] = []
+    for idx, section in enumerate(sections):
+        signals = compute_substance_signals(section.text)
+        metadata = {"is_table": section.is_table}
+        allowlist_patterns = list(domain_filters.normative_allowlists) if domain_filters else []
+        extra_patterns = [
+            re.compile(p) for p in (domain_filters.boilerplate_patterns if domain_filters else [])
+        ]
+
+        allowlist_result = check_domain_allowlist(
+            section.text, metadata, allowlist_patterns=allowlist_patterns
+        )
+        if allowlist_result.passed:
+            # Unconditional override (Pitfall 3) — skip all further checks.
+            results.append(
+                {
+                    "index": idx,
+                    "signals": signals,
+                    "is_boilerplate": False,
+                    "allowlisted": True,
+                    "reason": allowlist_result.reason,
+                }
+            )
+            continue
+
+        matches_pattern = any(
+            p.search(section.text) for p in (BOILERPLATE_PATTERNS + extra_patterns)
+        )
+        predicate_result = run_predicates(
+            section.text,
+            metadata,
+            predicates=[
+                check_table_exemption,
+                check_token_floor,
+                check_alpha_ratio,
+                check_link_density,
+                check_stopword_ratio,
+                check_terminal_punct_ratio,
+            ],
+        )
+        is_boilerplate = matches_pattern or not predicate_result.passed
+        if matches_pattern:
+            reason = "boilerplate_pattern_match"
+        elif is_boilerplate:
+            reason = predicate_result.reason
+        else:
+            reason = "substance_ok"
+
+        results.append(
+            {
+                "index": idx,
+                "signals": signals,
+                "is_boilerplate": is_boilerplate,
+                "allowlisted": False,
+                "reason": reason,
+            }
+        )
+    return results
+
+
+# ── Per-section cleaning (CLEAN-01, CLEAN-04, QUAL-04, QUAL-05) ──────────────
 
 
 def _clean_sections(
     sections: list[Section],
-) -> tuple[list[Section], int, int, int, dict[str, int]]:
-    """Apply boilerplate removal to each section's text without dropping any.
+    *,
+    domain_filters: DomainFilters | None = None,
+) -> tuple[list[Section], int, int, int, dict[str, int], list[dict]]:
+    """Classify and clean each section, dropping sections classified as
+    boilerplate (CLEAN-04) — supersedes Phase 17's placeholder "annotate all,
+    drop none" behavior.
 
-    Builds a new list of Section instances (via dataclasses.replace — never
-    mutates the caller's original Section objects, avoiding the mutation-
-    aliasing hazard called out in 17-RESEARCH.md Pitfall 3, since the same
-    cleaned ParsedDoc is later shared read-only across three Dagster
-    consumers). The returned list always has the same length as `sections` —
-    CLEAN-04's section *removal* is explicitly Phase 19's job, not this
-    plan's; a section whose text goes empty after stripping is still
-    returned, just counted as rejected.
+    Calls `classify_sections()` once, upfront, for the whole list (D-01: the
+    classifier only annotates; this function makes the keep/reject decision).
+    Then, in sync with the classifications, computes `remove_boilerplate()`
+    on each section's text and applies this precedence (an empty-after-strip
+    section has no content to keep regardless of allowlist status, so it is
+    checked first):
+
+      1. If the boilerplate-stripped text is empty: reject, reason
+         `"empty_after_boilerplate_removal"`.
+      2. Elif `classify_sections()` marked the section `is_boilerplate`:
+         reject, reason `"classified_as_boilerplate"`.
+      3. Else: keep — builds a new Section instance (via dataclasses.replace
+         — never mutates the caller's original Section objects, avoiding the
+         mutation-aliasing hazard called out in 17-RESEARCH.md Pitfall 3,
+         since the same cleaned ParsedDoc is later shared read-only across
+         three Dagster consumers).
+
+    A `section_annotations` entry is recorded for EVERY section regardless of
+    outcome (kept and rejected alike) — CLEAN-04's auditability requirement.
 
     Args:
         sections: The parsed document's sections, as-is from the parser.
+        domain_filters: Optional domain-pack filter overrides (CLEAN-06),
+            forwarded to `classify_sections()`.
 
     Returns:
         Tuple of (cleaned_sections, sections_considered, sections_kept,
-        sections_rejected, rejection_reasons). `rejection_reasons` maps a
-        reason string to its count (e.g. {"empty_after_boilerplate_removal": 2})
-        — counts are additive so a caller accumulating across multiple
-        `_clean_sections()` calls (e.g. a quality-audit run) can sum them
-        rather than overwrite (QUAL-04 adjacency). An empty input returns
-        considered=kept=rejected=0 and does not raise — distinct from a gate
-        that rejected all N sections (QUAL-05 empty-input boundary).
+        sections_rejected, rejection_reasons, section_annotations).
+        `rejection_reasons` maps a reason string to its count (e.g.
+        {"empty_after_boilerplate_removal": 2}) — counts are additive so a
+        caller accumulating across multiple `_clean_sections()` calls (e.g.
+        a quality-audit run) can sum them rather than overwrite (QUAL-04
+        adjacency). `section_annotations` is a list of dicts (one per input
+        section) with keys `index`, `signals`, `allowlisted`, `decision`
+        ("kept" | "rejected"), and `reason`. An empty input returns
+        considered=kept=rejected=0, empty rejection_reasons/section_annotations,
+        and does not raise — distinct from a gate that rejected all N
+        sections (QUAL-05 empty-input boundary).
     """
     cleaned_sections: list[Section] = []
     rejection_reasons: dict[str, int] = {}
+    section_annotations: list[dict] = []
     sections_kept = 0
     sections_rejected = 0
 
-    for section in sections:
+    classifications = classify_sections(sections, domain_filters=domain_filters)
+
+    for section, classification in zip(sections, classifications):
         cleaned_section_text = remove_boilerplate(section.text)
-        cleaned_sections.append(replace(section, text=cleaned_section_text))
-        if cleaned_section_text.strip():
-            sections_kept += 1
-        else:
+        if not cleaned_section_text.strip():
             sections_rejected += 1
             reason = "empty_after_boilerplate_removal"
             rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+            decision = "rejected"
+        elif classification["is_boilerplate"]:
+            sections_rejected += 1
+            reason = "classified_as_boilerplate"
+            rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
+            decision = "rejected"
+        else:
+            sections_kept += 1
+            cleaned_sections.append(replace(section, text=cleaned_section_text))
+            reason = classification["reason"]
+            decision = "kept"
+
+        section_annotations.append(
+            {
+                "index": classification["index"],
+                "signals": classification["signals"],
+                "allowlisted": classification["allowlisted"],
+                "decision": decision,
+                "reason": reason,
+            }
+        )
 
     sections_considered = len(sections)
-    return cleaned_sections, sections_considered, sections_kept, sections_rejected, rejection_reasons
+    return (
+        cleaned_sections,
+        sections_considered,
+        sections_kept,
+        sections_rejected,
+        rejection_reasons,
+        section_annotations,
+    )
 
 
 # ── Main clean() function ─────────────────────────────────────────────────────
@@ -255,6 +421,7 @@ def clean(
     *,
     parsed_doc: ParsedDoc | None = None,
     settings: Settings | None = None,
+    domain_filters: DomainFilters | None = None,
 ) -> dict:
     """Clean a parsed_document artifact and create a cleaned_document artifact.
 
@@ -266,10 +433,12 @@ def clean(
        supplied (CLEAN-01/02: avoids a redundant S3 round trip for load-
        bearing callers that already hold it), else from the silver zone
        (legacy/standalone path, unchanged S3-read behavior).
-    2b. When parsed_doc is supplied, clean each section's text via
+    2b. When parsed_doc is supplied, classify and clean each section via
         _clean_sections() (dataclasses.replace — never mutating the caller's
-        Section objects) without dropping any section from the list, and
-        count sections_considered/kept/rejected (QUAL-04/05).
+        Section objects), ACTUALLY DROPPING sections classified as
+        boilerplate from cleaned_doc.sections (CLEAN-04 — supersedes Phase
+        17's placeholder "annotate all, drop none" behavior), and count
+        sections_considered/kept/rejected/section_annotations (QUAL-04/05).
     3. Apply boilerplate removal to the flattened text (before MinHash to
        avoid false near-dups).
     4. Compute WR-05 parent-scoped SHA256 for exact dedup (CLEAN-03) —
@@ -283,23 +452,39 @@ def clean(
     8. Build transient LSH from existing cleaned artifacts for near-dup check.
     9. Write cleaned text to silver zone.
     10. Create cleaned_document artifact with metadata (including
-        sections_considered/kept/rejected/rejection_reasons).
+        sections_considered/kept/rejected/rejection_reasons/section_annotations).
 
     Args:
         parsed_artifact_id: ID of the parsed_document artifact to clean.
         source_id:          Source ID (used for silver zone key path).
         parsed_doc:         Optional in-memory ParsedDoc. When supplied, skips
-                             the S3 re-fetch and cleans parsed_doc.sections at
-                             section granularity without dropping any section
-                             (CLEAN-04 section removal is Phase 19's job).
+                             the S3 re-fetch and classifies+cleans
+                             parsed_doc.sections at section granularity,
+                             dropping sections classified as boilerplate
+                             (CLEAN-04).
         settings:           Settings override (for testing).
+        domain_filters:     Optional domain-pack filter overrides (CLEAN-06)
+                             forwarded to classify_sections() via
+                             _clean_sections(). Defaults to None — "no
+                             domain-pack override" — meaning existing callers
+                             (process.py, dagster_defs/assets.py,
+                             quality_audit.py) are unaffected by this new
+                             parameter and continue to omit it. Wiring an
+                             automatic DomainLoader-based resolution into
+                             those call sites is out of scope for this phase
+                             (Phase 19 builds the mechanism; a later phase
+                             wires it into the pipeline, matching D-12's
+                             framing for the domain-allowlist mechanism).
 
     Returns:
         dict with keys: artifact_id, content_hash, language, dedup_status,
         storage_uri, cleaned_doc (ParsedDoc | None — None unless parsed_doc
-        was supplied), sections_considered, sections_kept, sections_rejected,
-        rejection_reasons (dict[str, int] — all four are 0/{} when parsed_doc
-        was not supplied).
+        was supplied; sections contains ONLY the kept sections — boilerplate
+        sections are dropped, CLEAN-04), sections_considered, sections_kept,
+        sections_rejected, rejection_reasons (dict[str, int]), and
+        section_annotations (list[dict] — one entry per input section,
+        including rejected ones, for auditability). All of these are
+        0/{}/[] when parsed_doc was not supplied.
 
     Raises:
         ValueError: If the parsed artifact does not exist or has no storage_uri.
@@ -331,16 +516,18 @@ def clean(
     # behavior; single get_object() call, matching test_clean_silver_key.py).
     if parsed_doc is not None:
         parsed_text = parsed_doc.text
-        # Step 2b: clean each section's text without dropping any section from
-        # the list (CLEAN-04 section removal is Phase 19's job, not this
-        # plan's) and count kept/rejected/considered (QUAL-04/05).
+        # Step 2b: classify and clean each section, DROPPING sections
+        # classified as boilerplate (CLEAN-04 — supersedes Phase 17's
+        # placeholder "annotate all, drop none" behavior) and count
+        # kept/rejected/considered/section_annotations (QUAL-04/05).
         (
             cleaned_sections,
             sections_considered,
             sections_kept,
             sections_rejected,
             rejection_reasons,
-        ) = _clean_sections(parsed_doc.sections)
+            section_annotations,
+        ) = _clean_sections(parsed_doc.sections, domain_filters=domain_filters)
     else:
         key = _uri_to_key(storage_uri)
         raw_bytes = storage.get_object(key)
@@ -350,6 +537,7 @@ def clean(
         sections_kept = 0
         sections_rejected = 0
         rejection_reasons = {}
+        section_annotations = []
     log.info("clean.loaded_parsed", size=len(parsed_text))
 
     # QUAL-05: conservation invariant — never a bare assert (this codebase's
@@ -493,6 +681,7 @@ def clean(
                 "sections_kept": sections_kept,
                 "sections_rejected": sections_rejected,
                 "rejection_reasons": rejection_reasons,
+                "section_annotations": section_annotations,
             }
 
         # Step 9: Write cleaned text to silver zone (idempotent for same key)
@@ -525,6 +714,7 @@ def clean(
                 "sections_kept": sections_kept,
                 "sections_rejected": sections_rejected,
                 "rejection_reasons": rejection_reasons,
+                "section_annotations": section_annotations,
             },
         )
         session.flush()
@@ -539,6 +729,7 @@ def clean(
             "sections_kept": sections_kept,
             "sections_rejected": sections_rejected,
             "rejection_reasons": rejection_reasons,
+            "section_annotations": section_annotations,
         }
 
     log.info(
