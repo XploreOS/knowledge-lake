@@ -4,17 +4,17 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 17
 current_phase_name: Close the Bypass + Measurement
-status: executing
-stopped_at: Completed 17-03-PLAN.md
-last_updated: "2026-07-16T05:15:29.823Z"
+status: verifying
+stopped_at: Completed 17-04-PLAN.md
+last_updated: "2026-07-16T05:24:04.464Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 17 execution started
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 20
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 17 (Close the Bypass + Measurement) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-16 — Phase 17 execution started
 
 ## Performance Metrics
@@ -80,6 +80,7 @@ Last activity: 2026-07-16 — Phase 17 execution started
 | Phase 17 P01 | 13min | 2 tasks | 2 files |
 | Phase 17 P02 | 6min | 2 tasks | 2 files |
 | Phase 17 P03 | 8min | 2 tasks | 2 files |
+| Phase 17 P04 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,7 @@ Last activity: 2026-07-16 — Phase 17 execution started
 - [Phase ?]: Task 2 (tdd=true) proves behavior Task 1 already implemented — test passed on first run by plan design, not a stale/no-op test (see 17-02-SUMMARY.md TDD Gate Compliance)
 - [Phase ?]: Patched source modules (parse/clean/chunk/embed/index) not the consuming process.py namespace, since process_crawled uses function-local imports — the route.py module-level-import gotcha doesn't apply here
 - [Phase ?]: Split Task 1 (tdd=true) into true RED/GREEN commits and Task 2's boundary tests into a separate immediately-green commit, matching plan task boundaries
+- [Phase ?]: Patched source modules (pipeline.parse, pipeline.clean, pipeline.quality_audit) rather than the importer's namespace since quality_audit.py and cmd_quality_audit both use function-local imports — the mirror image of the route.py module-level-import gotcha
 
 ### Pending Todos
 
@@ -155,8 +157,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T05:15:29.812Z
-Stopped at: Completed 17-03-PLAN.md
+Last session: 2026-07-16T05:24:04.454Z
+Stopped at: Completed 17-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
