@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SourceEntry(BaseModel):
@@ -21,6 +21,8 @@ class SourceEntry(BaseModel):
     sources.yaml is malformed. All fields that have defaults are optional
     in the YAML.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     """Human-readable source name (e.g. 'HL7 FHIR R4 Specification')."""
@@ -53,6 +55,8 @@ class SourceEntry(BaseModel):
 class DomainManifest(BaseModel):
     """Top-level metadata from domain.yaml (DOMAIN-01 schema)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     """Domain pack name (e.g. 'healthcare'). Must match the directory name."""
 
@@ -79,6 +83,8 @@ class DomainFilters(BaseModel):
     explicit, visible choice that must be deliberate, not a stray default.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     boilerplate_patterns: list[str] = []
     """Additional regex pattern strings identifying domain-specific boilerplate. Compiled by
     the caller (e.g. classify_sections()), not by this model."""
@@ -98,6 +104,8 @@ class DomainFilters(BaseModel):
 
 class TaxonomyManifest(BaseModel):
     """Structured taxonomy from taxonomy.yaml."""
+
+    model_config = ConfigDict(extra="forbid")
 
     entity_types: list[str]
     """Ordered list of entity type names (e.g. Condition, Medication, ...)."""

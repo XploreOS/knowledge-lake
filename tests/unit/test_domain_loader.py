@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 try:
     from knowledge_lake.domains.loader import DomainLoader
 except ImportError:
@@ -16,6 +18,11 @@ try:
     from knowledge_lake.domains.models import DomainFilters
 except ImportError:
     DomainFilters = None  # type: ignore[assignment, misc]
+
+try:
+    from pydantic import ValidationError
+except ImportError:
+    ValidationError = None  # type: ignore[assignment, misc]
 
 # Project root → domains/healthcare/ directory
 DOMAINS_ROOT = Path(__file__).parent.parent.parent  # project root
@@ -103,3 +110,26 @@ def test_domain_filters_model_defaults() -> None:
     assert filters.boilerplate_patterns == []
     assert filters.normative_allowlists == []
     assert filters.thresholds == {}
+
+
+def test_domain_filters_rejects_unknown_key() -> None:
+    """CR-02 regression guard: a misspelled/unknown filters.yaml key (e.g.
+    'normative_alowlists' typo for 'normative_allowlists') must raise
+    pydantic.ValidationError instead of silently being dropped, which would
+    otherwise leave the ICD-10/LOINC/RxNorm allowlist empty with no error."""
+    assert DomainFilters is not None
+    assert ValidationError is not None
+    with pytest.raises(ValidationError):
+        DomainFilters.model_validate({"normative_alowlists": ["ICD-10"]})
+
+
+def test_domain_loader_healthcare_and_aviation_still_load_with_forbid_extra() -> None:
+    """CR-02 regression guard: adding extra='forbid' to the domain-pack schema
+    models must not break loading the existing healthcare/aviation packs —
+    their domain.yaml/sources.yaml/filters.yaml must contain no unrecognized
+    keys."""
+    assert DomainLoader is not None
+    hc_loader = DomainLoader.from_name("healthcare", root=DOMAINS_ROOT)
+    assert hc_loader.filters is not None
+    av_loader = DomainLoader.from_name("aviation", root=DOMAINS_ROOT)
+    assert av_loader.filters is None
