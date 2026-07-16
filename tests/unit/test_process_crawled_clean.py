@@ -11,6 +11,12 @@ the exact code path the original 28%-garbage audit ran. These tests prove:
      argument, never the raw parsed_doc.
   3. chunk()'s first positional argument (parsed_artifact_id) is unchanged —
      chunks are never re-parented to the cleaned artifact.
+  4. A clean() failure (ValueError, matching clean()'s documented Raises) is
+     absorbed by the existing except Exception block into result["failed"] —
+     no new failure mode, no new except-branch.
+  5. A document whose cleaned sections produce zero chunks still increments
+     result["processed"] via the existing empty-chunks-continue branch, and
+     embed()/index() are not called for that document.
 
 Mocking note (deviation from the plan's literal read_first pointer): process_crawled
 imports parse/clean/chunk/embed/index as FUNCTION-LOCAL imports
@@ -199,3 +205,73 @@ class TestProcessCrawledCleanWiring:
         # as its first positional argument.
         clean_args, _ = mock_clean.call_args
         assert clean_args[0] == "parsed-fixed-id"
+
+
+# ── Task 2: error-handling parity and empty-sections boundary tests ───────────
+
+
+class TestProcessCrawledCleanBoundaries:
+    """clean()'s new failure mode and empty-sections case are absorbed by
+    process_crawled's existing except/continue branches — no new branch."""
+
+    def test_clean_failure_counted_as_failed_not_processed(self, session, source):
+        """A clean() ValueError lands in result['failed'], not result['processed'],
+        and does not propagate out of process_crawled()."""
+        from knowledge_lake.pipeline.process import process_crawled
+
+        _seed_raw_document(session, source.id)
+
+        mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
+        mock_clean = MagicMock(
+            side_effect=ValueError("clean: parsed_artifact not found")
+        )
+        mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_embed = MagicMock(return_value=([[0.1]], 1))
+        mock_index = MagicMock(return_value=None)
+
+        with (
+            patch("knowledge_lake.pipeline.parse.parse", mock_parse),
+            patch("knowledge_lake.pipeline.clean.clean", mock_clean),
+            patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.embed.embed", mock_embed),
+            patch("knowledge_lake.pipeline.index.index", mock_index),
+        ):
+            # Must not raise: process_crawled() absorbs clean()'s ValueError via
+            # the existing except Exception block.
+            result = process_crawled()
+
+        assert result["failed"] == 1
+        assert result["processed"] == 0
+        mock_chunk.assert_not_called()
+        mock_embed.assert_not_called()
+        mock_index.assert_not_called()
+
+    def test_empty_chunks_still_counted_processed_no_embed_index(self, session, source):
+        """An all-empty-section cleaned_doc that yields zero chunks still hits
+        the existing 'if not chunks_list: processed += 1; continue' branch."""
+        from knowledge_lake.pipeline.process import process_crawled
+
+        _seed_raw_document(session, source.id)
+
+        cleaned_doc_sentinel = object()
+        mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
+        mock_clean = MagicMock(return_value={"cleaned_doc": cleaned_doc_sentinel})
+        mock_chunk = MagicMock(return_value=[])
+        mock_embed = MagicMock(return_value=([], 0))
+        mock_index = MagicMock(return_value=None)
+
+        with (
+            patch("knowledge_lake.pipeline.parse.parse", mock_parse),
+            patch("knowledge_lake.pipeline.clean.clean", mock_clean),
+            patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.embed.embed", mock_embed),
+            patch("knowledge_lake.pipeline.index.index", mock_index),
+        ):
+            result = process_crawled()
+
+        assert result["failed"] == 0
+        assert result["processed"] == 1
+        assert result["chunks_indexed"] == 0
+        mock_chunk.assert_called_once()
+        mock_embed.assert_not_called()
+        mock_index.assert_not_called()
