@@ -69,16 +69,19 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 **Root cause:** The clean stage is architecturally bypassed — `clean_document` forwards the uncleaned `parsed_doc` to all downstream consumers.
 
 **Scope decisions:**
+
 - D-1 Crawler extraction: DEFERRED (section classifier covers superset)
 - D-2 Forward-only: CONFIRMED (test data wiped; fresh stack for production)
 - D-3 Index-time dedup: CONFIRMED (after substance gate — L3 before L4)
 
 **References:**
+
 - Requirements: [.planning/REQUIREMENTS.md](.planning/REQUIREMENTS.md) (20 requirements)
 - Research: [.planning/research/SUMMARY.md](.planning/research/SUMMARY.md) (4 parallel researchers)
 - Context: [.planning/MILESTONE-CONTEXT.md](.planning/MILESTONE-CONTEXT.md) (audit evidence, root causes)
 
 **Hard Ordering Constraints:**
+
 1. Phase 17 first — the only phase whose defects corrupt data rather than degrade it
 2. Measurement before filtering — or v2.6 repeats v2.5's failure
 3. Phase 18 before 19 — or extending patterns triggers a 34-source re-crawl storm
@@ -96,63 +99,83 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 ## Phase Details
 
 ### Phase 17: Close the Bypass + Measurement
+
 **Goal**: The cleaned text reaches all downstream consumers and garbage is measurable against a frozen baseline
 **Depends on**: Nothing (first phase — highest risk, hard prerequisite for all others)
 **Requirements**: CLEAN-01, CLEAN-02, CLEAN-03, QUAL-04, QUAL-05, MEAS-01
 **Success Criteria** (what must be TRUE):
+
   1. After processing a source with known boilerplate, `chunk_document` receives sections with boilerplate removed — the uncleaned `parsed_doc` is no longer forwarded by `clean_document`
   2. `klake process <source>` produces chunks from cleaned text — identical output whether processed via Dagster or via `klake process`
   3. Two documents with identical cleaned text produce distinct `cleaned_document` artifacts with different content hashes (parent-scoped WR-05 convention)
   4. `klake quality-audit` produces a per-source table (34 rows) showing total sections, kept, rejected, rejection reasons, and garbage rate — reproducible across runs and independent of any gate's heuristic
   5. Every gate asserts `rejected + kept == sections_considered` at runtime — a broken parser returning 0 sections is detected as distinct from a correct gate rejecting all sections
+
 **Plans:** 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 17-01-PLAN.md — Retrofit clean() with parsed_doc threading, per-section cleaning, WR-05 parent-scoped hash, and conservation invariant (CLEAN-01/02 substrate, CLEAN-03, QUAL-04, QUAL-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 17-02-PLAN.md — Wire the cleaned ParsedDoc through the Dagster clean_document asset; verify curate_document_asset regression-free (CLEAN-01)
 - [ ] 17-03-PLAN.md — Insert clean() into process_crawled between parse() and chunk() for CLI/API/MCP parity (CLEAN-02)
 - [ ] 17-04-PLAN.md — Build the klake quality-audit harness (pipeline/quality_audit.py + CLI command) (MEAS-01, QUAL-04)
 
 ### Phase 18: Gate Decouple
+
 **Goal**: Extending boilerplate patterns no longer triggers re-crawl of all sources
 **Depends on**: Nothing (parallelizable with Phase 17)
 **Requirements**: GATE-01
 **Success Criteria** (what must be TRUE):
+
   1. Adding a new pattern to `BOILERPLATE_PATTERNS` does not change the content signature of any existing source
   2. A pinning test asserts gate-signature byte-stability across a clean-stage pattern change
+
 **Plans**: TBD
 
 ### Phase 19: Section Classifier + Patterns
+
 **Goal**: Junk sections are identified and removed at section granularity with domain-aware exemptions protecting clinical content
 **Depends on**: Phase 17, Phase 18
 **Requirements**: CLEAN-04, CLEAN-05, CLEAN-06, QUAL-01
 **Success Criteria** (what must be TRUE):
+
   1. A parsed document with nav, footer, and clinical sections retains only clinical sections in the cleaned output — substance annotations (link_density, terminal_punct_ratio, stopword_ratio, token_count) are persisted in the cleaned sidecar
   2. Extended boilerplate patterns cover all 5 garbage categories from the audit (too-short, no-sentences, boilerplate, marketing, navigation) while existing Phase-3 test assertions continue to pass
   3. A chunk containing `ICD-10 E11.9` or `Metformin 500 mg PO BID` is never dropped by any gate — healthcare-pack domain-code allowlist enforced via `DomainLoader`
   4. Quality predicates in `pipeline/quality/` are independently importable with zero I/O, S3, or Dagster dependencies — deterministic and 100% branch coverage
+
 **Plans**: TBD
 
 ### Phase 20: Chunk Substance Gate + Export Gate
+
 **Goal**: Garbage chunks are rejected before embedding and the gold RAG export contains only quality content
 **Depends on**: Phase 17 (parallelizable with Phase 19)
 **Requirements**: QUAL-02, QUAL-03, MEAS-02, EXPORT-01, EXPORT-02, PIPE-01
 **Success Criteria** (what must be TRUE):
+
   1. `FineWebQualityFilter` rejects chunks matching the audit's "too short" and "no real sentences" categories while passing a clinical-prose control set — using chunk-scoped settings, not `CurateSettings`
   2. Chunks failing the composite substance predicate are rejected (in enforce mode) or flagged with recorded reason (in report mode) — `is_table=True` chunks are always exempt
   3. CI fails if any fixture in the ~20 hand-labeled must-not-reject set (ICD codes, dosage instructions, LOINC codes, HIPAA references) is dropped by the substance gate
   4. A document with mixed quality (clinical tables + cookie banners) exports only the clinical chunks to gold — the 33% junk in gold drops to near-zero
   5. Changing a filter threshold invalidates the cache for affected artifacts and triggers re-processing on next run (reuses `_curation_cache_key` versioning pattern)
+
 **Plans**: TBD
 
 ### Phase 21: Index-Time Dedup
+
 **Goal**: Duplicate text is embedded and indexed exactly once while preserving per-document chunk lineage
 **Depends on**: Phase 20 (L3 must precede L4 — dedup before filtering promotes garbage via IDF inversion)
 **Requirements**: DEDUP-01, DEDUP-02, DEDUP-03
 **Success Criteria** (what must be TRUE):
+
   1. Processing two documents containing identical boilerplate text produces one Qdrant point (not two) — the chunk registry still has both chunk artifacts with correct per-document lineage (WR-05 intact)
   2. Re-processing the same document produces the same point ID — re-index is idempotent by construction via `uuid5(NAMESPACE, sha256(normalized_text))`
   3. A deduplicated point is filterable by source_id, domain, and format — the `contributors[]` field lists all source documents that contained this text, with primary determined by earliest `created_at`
+
 **Plans**: TBD
 
 ## Coverage
