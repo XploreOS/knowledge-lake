@@ -63,6 +63,39 @@ class DomainManifest(BaseModel):
     """Human-readable description of this domain pack."""
 
 
+class DomainFilters(BaseModel):
+    """Optional clinical/domain-specific filter overrides from filters.yaml (CLEAN-06).
+
+    Unlike DomainManifest/SourceEntry/TaxonomyManifest, filters.yaml itself is OPTIONAL —
+    a domain pack with no filters.yaml loads with DomainLoader.filters = None. When present,
+    this model validates the pack's boilerplate/allowlist/threshold overrides.
+
+    WARNING to pack authors: a broad allowlist pattern (e.g. a bare '.*' or an empty-string
+    regex) in normative_allowlists will silently exempt ALL section content from boilerplate
+    classification for this domain, defeating the quality gate entirely — author narrow,
+    specific patterns only (e.g. 'ICD-10', not '.*'). Similarly, a thresholds override such as
+    {"min_token_count": 0} silently weakens the framework's substance-check floor to a
+    degenerate value; there is no framework-side clamping today, so any override here is an
+    explicit, visible choice that must be deliberate, not a stray default.
+    """
+
+    boilerplate_patterns: list[str] = []
+    """Additional regex pattern strings identifying domain-specific boilerplate. Compiled by
+    the caller (e.g. classify_sections()), not by this model."""
+
+    normative_allowlists: list[str] = []
+    """Regex patterns that must never be classified as boilerplate regardless of substance
+    signals (e.g. clinical codes like 'ICD-10', 'LOINC', 'RxNorm', dosage patterns)."""
+
+    thresholds: dict[str, float] = {}
+    """Domain-specific substance threshold overrides, keyed by the same names as
+    pipeline.quality.predicates's DEFAULT_* constants (e.g. 'min_token_count'). RESERVED,
+    NOT YET CONSUMED: validated and available here for pack authors to specify, but Plan
+    19-04's classify_sections() does not read this field as of Phase 19 — no acceptance
+    criterion requires per-domain threshold overrides yet. The field exists so a future phase
+    can wire override-vs-compose semantics without a schema-breaking change."""
+
+
 class TaxonomyManifest(BaseModel):
     """Structured taxonomy from taxonomy.yaml."""
 

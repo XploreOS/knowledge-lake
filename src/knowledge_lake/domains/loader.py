@@ -26,7 +26,7 @@ from typing import Any
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from knowledge_lake.domains.models import DomainManifest, SourceEntry
+from knowledge_lake.domains.models import DomainFilters, DomainManifest, SourceEntry
 
 # Domain name allow-list: alphanumeric + hyphen/underscore, 1-64 chars, start with letter.
 # Same regex as _SWAP_KEY_RE in settings.py — path traversal guard (T-06-01, ASVS V5).
@@ -40,6 +40,7 @@ class DomainLoader:
       - self.manifest  — DomainManifest (name, version, description)
       - self.sources   — list[SourceEntry] (from sources.yaml)
       - self.taxonomy  — dict (from taxonomy.yaml — raw for flexibility)
+      - self.filters   — DomainFilters | None (from optional filters.yaml; None when absent)
       - self.validator — the pack's *Validator instance (from validators/validate.py)
       - self.render_prompt(name, **kwargs) — renders a Jinja2 .j2 template from prompts/
 
@@ -88,6 +89,16 @@ class DomainLoader:
         if not taxonomy_yaml_path.exists():
             raise FileNotFoundError(f"taxonomy.yaml not found in domain pack: {domain_dir}")
         self.taxonomy: dict = yaml.safe_load(taxonomy_yaml_path.read_text(encoding="utf-8")) or {}
+
+        # 3b. Load filters.yaml (DomainFilters) — OPTIONAL, unlike the four mandatory files
+        # above. Never raise FileNotFoundError for this one's absence (CLEAN-06, D-07).
+        filters_yaml_path = domain_dir / "filters.yaml"
+        if filters_yaml_path.exists():
+            self.filters: DomainFilters | None = DomainFilters.model_validate(
+                yaml.safe_load(filters_yaml_path.read_text(encoding="utf-8"))
+            )
+        else:
+            self.filters = None
 
         # 4. Set up Jinja2 environment for prompts/ directory.
         # autoescape=False is mandatory — prompts are not HTML; autoescape would corrupt
