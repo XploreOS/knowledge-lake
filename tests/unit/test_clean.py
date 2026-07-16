@@ -358,9 +358,10 @@ class TestCleanParsedDocThreading:
         assert result_a["content_hash"] != result_b["content_hash"]
 
     def test_cleaned_doc_preserves_section_count(self, clean_engine, monkeypatch) -> None:
-        """cleaned_doc must retain every section (list length preserved), even
-        sections whose text becomes empty after boilerplate stripping — CLEAN-04
-        section removal is Phase 19's job, not this plan's."""
+        """cleaned_doc now DROPS junk sections (CLEAN-04 — supersedes Phase
+        17's placeholder "retain all sections" behavior): only the "Real"
+        section survives; the "Boilerplate" section ("Page 1 of 5") is fully
+        stripped to empty by the existing page-header pattern and dropped."""
         import knowledge_lake.registry.db as registry_db
         import knowledge_lake.pipeline.clean as clean_module
         from knowledge_lake.plugins.protocols import ParsedDoc, Section
@@ -385,7 +386,8 @@ class TestCleanParsedDocThreading:
             result = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
 
         assert result["cleaned_doc"] is not None
-        assert len(result["cleaned_doc"].sections) == len(doc.sections)
+        assert len(result["cleaned_doc"].sections) == 1
+        assert result["cleaned_doc"].sections[0].heading == "Real"
 
     def test_no_in_place_mutation_of_caller_sections(self, clean_engine, monkeypatch) -> None:
         """clean() must never mutate the caller's original Section objects in
@@ -444,23 +446,34 @@ class TestCleanConservationInvariant:
     invariant and unconditional rejection-count recording."""
 
     def test_clean_sections_empty_input_no_raise(self) -> None:
-        """_clean_sections([]) must return considered=kept=rejected=0 and an
-        empty rejection_reasons dict without raising (QUAL-05 empty-input
-        boundary — distinct from a gate that rejected all N sections)."""
+        """_clean_sections([]) must return considered=kept=rejected=0, an
+        empty rejection_reasons dict, and an empty section_annotations list
+        without raising (QUAL-05 empty-input boundary — distinct from a gate
+        that rejected all N sections)."""
         from knowledge_lake.pipeline.clean import _clean_sections
 
-        cleaned_sections, considered, kept, rejected, rejection_reasons = _clean_sections([])
+        (
+            cleaned_sections,
+            considered,
+            kept,
+            rejected,
+            rejection_reasons,
+            section_annotations,
+        ) = _clean_sections([])
 
         assert cleaned_sections == []
         assert considered == 0
         assert kept == 0
         assert rejected == 0
         assert rejection_reasons == {}
+        assert section_annotations == []
 
     def test_clean_sections_rejection_reasons_sum_across_sections(self) -> None:
         """Two sections that both fully strip to empty text must produce
         rejection_reasons == {"empty_after_boilerplate_removal": 2} — counts
-        sum rather than overwrite (QUAL-04 adjacency)."""
+        sum rather than overwrite (QUAL-04 adjacency). Both sections are now
+        DROPPED (CLEAN-04), not merely emptied-in-place, but annotations are
+        still recorded for both rejected sections."""
         from knowledge_lake.pipeline.clean import _clean_sections
         from knowledge_lake.plugins.protocols import Section
 
@@ -469,13 +482,21 @@ class TestCleanConservationInvariant:
             Section(heading="H2", section_path="§2", page=1, text="Page 2 of 5"),
         ]
 
-        cleaned_sections, considered, kept, rejected, rejection_reasons = _clean_sections(sections)
+        (
+            cleaned_sections,
+            considered,
+            kept,
+            rejected,
+            rejection_reasons,
+            section_annotations,
+        ) = _clean_sections(sections)
 
         assert considered == 2
         assert kept == 0
         assert rejected == 2
         assert rejection_reasons == {"empty_after_boilerplate_removal": 2}
-        assert len(cleaned_sections) == 2
+        assert len(cleaned_sections) == 0
+        assert len(section_annotations) == 2
 
     def test_conservation_invariant_raises_runtime_error(self, clean_engine, monkeypatch) -> None:
         """clean()'s conservation check must raise RuntimeError (never a bare
@@ -499,8 +520,8 @@ class TestCleanConservationInvariant:
 
         # Deliberately break the invariant: _clean_sections claims 1 section was
         # considered, but reports 0 kept + 0 rejected (1 != 0 + 0).
-        def _broken_clean_sections(sections):
-            return [], 1, 0, 0, {}
+        def _broken_clean_sections(sections, *, domain_filters=None):
+            return [], 1, 0, 0, {}, []
 
         monkeypatch.setattr(clean_module, "_clean_sections", _broken_clean_sections)
 
@@ -544,3 +565,180 @@ class TestCleanConservationInvariant:
             assert result["sections_kept"] == 1
             assert result["sections_rejected"] == 1
             assert result["rejection_reasons"] == {"empty_after_boilerplate_removal": 1}
+
+
+class TestClassifySectionsCleanIntegration:
+    """Tests for clean()'s end-to-end integration of classify_sections()
+    (CLEAN-04): nav/footer removal, domain-allowlist overrides, and
+    section_annotations persistence."""
+
+    def test_classify_sections_drops_nav_and_footer_keeps_clinical(
+        self, clean_engine, monkeypatch
+    ) -> None:
+        """A document with a nav section (pipe-separated nav-menu words, zero
+        DataTrove-stopword hits), a footer section (privacy/TOS/disclaimer
+        phrases embedded in one messy line), and a clinical prose section
+        (normal stopword density) must retain ONLY the clinical section in
+        cleaned_doc.sections after clean()."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-classify-nav-footer")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashclassifynavfooter")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="Full doc text.",
+            sections=[
+                Section(
+                    heading="Nav",
+                    section_path="§1",
+                    page=1,
+                    text="Home About Us Contact Sitemap Search Toggle Navigation Back Top",
+                ),
+                Section(
+                    heading="Footer",
+                    section_path="§2",
+                    page=1,
+                    text=(
+                        "Privacy Policy | Terms of Service | Accessibility Statement | "
+                        "For Official Use Only | (c) 2026 HealthOrg. All rights reserved."
+                    ),
+                ),
+                Section(
+                    heading="Clinical",
+                    section_path="§3",
+                    page=1,
+                    text=(
+                        "Administrative safeguards require documented risk analysis, "
+                        "workforce training, and periodic review of access controls "
+                        "to protect patient health information under HIPAA."
+                    ),
+                ),
+            ],
+        )
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+
+        assert len(result["cleaned_doc"].sections) == 1
+        assert result["cleaned_doc"].sections[0].heading == "Clinical"
+
+    def test_classify_sections_allowlist_overrides_short_clinical_code(
+        self, clean_engine, monkeypatch
+    ) -> None:
+        """A section containing 'ICD-10 E11.9' must survive when a matching
+        domain_filters.normative_allowlists entry is supplied, even though
+        this short, stopword-free string would otherwise fail
+        check_token_floor (CLEAN-06 integration)."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.domains.models import DomainFilters
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-allowlist-icd10")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashallowlisticd10")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="ICD-10 E11.9",
+            sections=[Section(heading="Code", section_path="§1", page=1, text="ICD-10 E11.9")],
+        )
+        domain_filters = DomainFilters(normative_allowlists=["ICD-10"])
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result = clean_module.clean(
+                parsed_id,
+                source_id,
+                parsed_doc=doc,
+                settings=settings,
+                domain_filters=domain_filters,
+            )
+
+        assert len(result["cleaned_doc"].sections) == 1
+
+    def test_classify_sections_allowlist_overrides_dosage_pattern(
+        self, clean_engine, monkeypatch
+    ) -> None:
+        """A section containing 'Metformin 500 mg PO BID' must survive when a
+        matching dosage-pattern normative_allowlists entry is supplied."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.domains.models import DomainFilters
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-allowlist-dosage")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashallowlistdosage")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="Metformin 500 mg PO BID",
+            sections=[
+                Section(
+                    heading="Dosage", section_path="§1", page=1, text="Metformin 500 mg PO BID"
+                )
+            ],
+        )
+        domain_filters = DomainFilters(normative_allowlists=[r"\d+\s*mg"])
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result = clean_module.clean(
+                parsed_id,
+                source_id,
+                parsed_doc=doc,
+                settings=settings,
+                domain_filters=domain_filters,
+            )
+
+        assert len(result["cleaned_doc"].sections) == 1
+
+    def test_section_annotations_persisted_for_all_sections(
+        self, clean_engine, monkeypatch
+    ) -> None:
+        """section_annotations must be persisted in clean()'s result for
+        EVERY input section (kept and rejected alike), each entry carrying
+        index/signals/allowlisted/decision/reason (CLEAN-04 auditability)."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-annotations")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashannotations")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(
+            text="Full doc text.",
+            sections=[
+                Section(heading="Real", section_path="§1", page=1, text="Real content here."),
+                Section(heading="Boilerplate", section_path="§2", page=1, text="Page 1 of 5"),
+            ],
+        )
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+
+        section_annotations = result["section_annotations"]
+        assert len(section_annotations) == 2
+        rejected_entries = []
+        for entry in section_annotations:
+            assert set(entry.keys()) == {"index", "signals", "allowlisted", "decision", "reason"}
+            if entry["decision"] == "rejected":
+                rejected_entries.append(entry)
+        assert len(rejected_entries) == 1
