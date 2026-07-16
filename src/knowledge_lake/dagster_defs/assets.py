@@ -282,10 +282,11 @@ def clean_document(
 
     Receives the parsed_document output dict and returns a dict with:
       artifact_id (cleaned), source_id, collection, parsed_artifact_id,
-      parsed_doc (forwarded in-memory for chunk stage), language, dedup_status.
+      parsed_doc (the CLEANED ParsedDoc, forwarded in-memory for chunk/tree/enrich
+      stages — CLEAN-01), language, dedup_status.
 
-    The parsed_doc object is forwarded in-memory (not via S3 / IO manager) to avoid
-    re-parsing in chunk_document (Pitfall 7: no IO managers for bytes).
+    The cleaned parsed_doc object is forwarded in-memory (not via S3 / IO manager)
+    to avoid re-parsing in chunk_document (Pitfall 7: no IO managers for bytes).
 
     Args:
         parsed_document: Output dict from the parsed_document asset.
@@ -315,14 +316,14 @@ def clean_document(
 
     log.info("dagster.clean_document.start", parsed_artifact_id=parsed_artifact_id)
 
-    clean_result = clean(parsed_artifact_id, source_id, settings=settings)
+    clean_result = clean(parsed_artifact_id, source_id, parsed_doc=parsed_doc, settings=settings)
 
     result = {
         "artifact_id": clean_result["artifact_id"],
         "source_id": source_id,
         "collection": collection,
         "parsed_artifact_id": parsed_artifact_id,
-        "parsed_doc": parsed_doc,  # forwarded in-memory to chunk_document (Pitfall 7)
+        "parsed_doc": clean_result["cleaned_doc"],  # CLEANED parsed_doc forwarded in-memory to chunk_document/tree_index_document/enrich_document (CLEAN-01, Pitfall 7)
         "language": clean_result["language"],
         "dedup_status": clean_result["dedup_status"],
     }
