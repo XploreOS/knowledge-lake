@@ -111,12 +111,12 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   4. `klake quality-audit` produces a per-source table (34 rows) showing total sections, kept, rejected, rejection reasons, and garbage rate — reproducible across runs and independent of any gate's heuristic
   5. Every gate asserts `rejected + kept == sections_considered` at runtime — a broken parser returning 0 sections is detected as distinct from a correct gate rejecting all sections
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 17-01-PLAN.md — Retrofit clean() with parsed_doc threading, per-section cleaning, WR-05 parent-scoped hash, and conservation invariant (CLEAN-01/02 substrate, CLEAN-03, QUAL-04, QUAL-05)
+- [x] 17-01-PLAN.md — Retrofit clean() with parsed_doc threading, per-section cleaning, WR-05 parent-scoped hash, and conservation invariant (CLEAN-01/02 substrate, CLEAN-03, QUAL-04, QUAL-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -224,7 +224,7 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
-| 17 | v2.6 Close the Bypass + Measurement | 0/0 | Not started | - |
+| 17 | v2.6 Close the Bypass + Measurement | 1/4 | In Progress|  |
 | 18 | v2.6 Gate Decouple | 0/0 | Not started | - |
 | 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |

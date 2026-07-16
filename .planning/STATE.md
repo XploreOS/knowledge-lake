@@ -4,16 +4,16 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 17
 current_phase_name: Close the Bypass + Measurement
-status: Planning complete — ready for execution
-stopped_at: Phase 21 context gathered
-last_updated: "2026-07-16T04:03:21.174Z"
-last_activity: 2026-07-15
-last_activity_desc: v2.6 requirements defined, roadmap created
+status: executing
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-07-16T04:59:14.815Z"
+last_activity: 2026-07-16
+last_activity_desc: Phase 17 execution started
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** v2.6 — Data Quality & Enrichment (Phases 17–21). Requirements: `.planning/REQUIREMENTS.md`. Ready for `/gsd-plan-phase 17`.
+**Current focus:** Phase 17 — Close the Bypass + Measurement
 
 ## Current Position
 
-Phase: 17 — Close the Bypass + Measurement
-Plan: —
-Status: Planning complete — ready for execution
-Last activity: 2026-07-15 — v2.6 requirements defined, roadmap created
+Phase: 17 (Close the Bypass + Measurement) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-16 — Phase 17 execution started
 
 ## Performance Metrics
 
@@ -73,6 +73,11 @@ Last activity: 2026-07-15 — v2.6 requirements defined, roadmap created
 | Phase 14 P03 | 25min | 2 tasks | 4 files |
 | Phase 14 P04 | 8min | 2 tasks | 2 files |
 | Phase 16 P02 | 5min | 2 tasks | 5 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 17 P01 | 13min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -85,6 +90,8 @@ Last activity: 2026-07-15 — v2.6 requirements defined, roadmap created
 | D-3 | Dedup at index time (after L3) | Dedup before substance gate makes BM25 worse (IDF inversion); most duplicates are boilerplate removed by L3 anyway | 2026-07-15 |
 | D-4 | No FilterPlugin seam | DataTrove called directly (precedent: `curate.py:119`); variability is by domain not tool — use domain-pack rail | 2026-07-15 |
 | D-5 | 30-char floor rejected | Wrong unit (token-based system), wrong target (kills ICD codes, dosage instructions); use composite predicate with domain allowlist | 2026-07-15 |
+
+- [Phase ?]: Split plan's two tightly-coupled tasks (WR-05 hash + parsed_doc forwarding vs conservation invariant) into 4 TDD commits instead of 1 combined commit, while still shipping CLEAN-01/CLEAN-03 together in Task 1 per RESEARCH.md Pitfall 1
 
 ### Pending Todos
 
@@ -143,9 +150,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T04:03:21.164Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-index-time-dedup/21-CONTEXT.md
+Last session: 2026-07-16T04:59:14.804Z
+Stopped at: Completed 17-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

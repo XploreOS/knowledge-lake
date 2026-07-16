@@ -3,6 +3,7 @@
 **Milestone Goal:** Stop garbage content from reaching the silver zone, chunking, tree index, and gold export — so the RAG corpus is trustworthy rather than merely populated.
 
 **Scope Decisions:**
+
 - D-1: Crawler extraction **DEFERRED** (no-op today; section classifier covers superset)
 - D-2: Forward-only **CONFIRMED** (existing data is test data; fresh stack before production)
 - D-3: Index-time dedup **CONFIRMED** (after substance gate)
@@ -203,9 +204,9 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEAN-01 | Phase 17 | Pending |
-| CLEAN-02 | Phase 17 | Pending |
-| CLEAN-03 | Phase 17 | Pending |
+| CLEAN-01 | Phase 17 | Complete |
+| CLEAN-02 | Phase 17 | Complete |
+| CLEAN-03 | Phase 17 | Complete |
 | CLEAN-04 | Phase 19 | Pending |
 | CLEAN-05 | Phase 19 | Pending |
 | CLEAN-06 | Phase 19 | Pending |
@@ -213,8 +214,8 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 | QUAL-01 | Phase 19 | Pending |
 | QUAL-02 | Phase 20 | Pending |
 | QUAL-03 | Phase 20 | Pending |
-| QUAL-04 | Phase 17 | Pending |
-| QUAL-05 | Phase 17 | Pending |
+| QUAL-04 | Phase 17 | Complete |
+| QUAL-05 | Phase 17 | Complete |
 | DEDUP-01 | Phase 21 | Pending |
 | DEDUP-02 | Phase 21 | Pending |
 | DEDUP-03 | Phase 21 | Pending |
