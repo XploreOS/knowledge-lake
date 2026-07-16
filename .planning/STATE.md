@@ -4,17 +4,17 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 19
 current_phase_name: section-classifier-patterns
-status: executing
-stopped_at: Completed 19-03-PLAN.md
-last_updated: "2026-07-16T17:24:58.646Z"
+status: verifying
+stopped_at: Completed 19-04-PLAN.md (Phase 19 complete)
+last_updated: "2026-07-16T17:40:06.703Z"
 last_activity: 2026-07-16
-last_activity_desc: Completed 19-03-PLAN.md (BOILERPLATE_PATTERNS extended from 4 to 9 entries covering 5 CLEAN-05 categories)
+last_activity_desc: Completed 19-04-PLAN.md (classify_sections() wired into clean.py — CLEAN-04 section-level boilerplate drop, Phase 19 complete)
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
-  percent: 40
+  completed_plans: 9
+  percent: 60
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 19 (section-classifier-patterns) — EXECUTING
+Phase: 19 (section-classifier-patterns) — COMPLETE
 Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-07-16 — Completed 19-03-PLAN.md (BOILERPLATE_PATTERNS extended from 4 to 9 entries covering 5 CLEAN-05 categories)
+Status: Phase complete — ready for verification
+Last activity: 2026-07-16 — Completed 19-04-PLAN.md (classify_sections() wired into clean.py — CLEAN-04 section-level boilerplate drop, Phase 19 complete)
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Last activity: 2026-07-16 — Completed 19-03-PLAN.md (BOILERPLATE_PATTERNS exte
 | Phase 19 P01 | 6 min | 2 tasks | 4 files |
 | Phase 19 P02 | 8min | 2 tasks | 4 files |
 | Phase 19 P03 | 6min | 2 tasks | 2 files |
+| Phase 19 P04 | 12 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,8 @@ Last activity: 2026-07-16 — Completed 19-03-PLAN.md (BOILERPLATE_PATTERNS exte
 - [Phase 19 P02]: DomainLoader.filters (DomainFilters | None) added as an explicit optional-load branch (step 3b) that never raises FileNotFoundError for filters.yaml's absence — the one exception to the four mandatory-file raise-on-missing convention in DomainLoader.__init__
 - [Phase 19 P02]: DomainFilters.thresholds validated but intentionally unconsumed by classify_sections() in Phase 19 (RESEARCH.md Assumptions Log A3) — reserved field for a future phase's override-vs-compose semantics, avoiding a schema-breaking change later
 - [Phase 19]: BOILERPLATE_PATTERNS extended additively via a single .extend() call (4->9 entries); gov-disclaimer pattern anchored to specific multi-word phrases only, not a bare disclaimer/warning keyword, to keep genuine clinical safety text intact — Preserves byte-identical indices 0-3 so the Phase 18 frozen gate signature (crawl.py) stays decoupled; regression-tested against a realistic clinical disclaimer sentence
+- [Phase 19]: [Phase 19 P04] Kept-section annotations reuse classification["reason"] (e.g. "substance_ok" or the allowlist match reason) rather than inventing a new literal for the kept branch — The plan's "reason string used for that branch" language only names explicit reason strings for the two rejection branches (empty_after_boilerplate_removal, classified_as_boilerplate) — reusing classify_sections()'s own computed reason for the kept branch keeps the annotation coherent and non-redundant.
+- [Phase 19]: [Phase 19 P04] TDD RED phase tested classify_sections() directly (pure-function contract) rather than duplicating Task 2's clean()-level acceptance tests — Keeps the RED/GREEN cycle focused on the new function's own contract (nav vs. clinical classification, allowlist override) while Task 2 separately adds the full clean()-level integration tests as ordinary test additions, per the plan's task split.
 
 ### Pending Todos
 
@@ -170,8 +173,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T17:24:53.655Z
-Stopped at: Completed 19-03-PLAN.md
+Last session: 2026-07-16T17:39:57.124Z
+Stopped at: Completed 19-04-PLAN.md (Phase 19 complete)
 Resume file: None
 
 ## Operator Next Steps

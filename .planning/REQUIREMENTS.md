@@ -207,7 +207,7 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 | CLEAN-01 | Phase 17 | Complete |
 | CLEAN-02 | Phase 17 | Complete |
 | CLEAN-03 | Phase 17 | Complete |
-| CLEAN-04 | Phase 19 | Pending |
+| CLEAN-04 | Phase 19 | Complete |
 | CLEAN-05 | Phase 19 | Pending |
 | CLEAN-06 | Phase 19 | Pending |
 | GATE-01 | Phase 18 | Complete |
