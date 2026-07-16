@@ -134,10 +134,11 @@ Plans:
   1. Adding a new pattern to `BOILERPLATE_PATTERNS` does not change the content signature of any existing source
   2. A pinning test asserts gate-signature byte-stability across a clean-stage pattern change
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans executed
 
 Plans:
-- [ ] 18-01-PLAN.md — Freeze gate-local boilerplate patterns, add _gate_normalize(), remove remove_boilerplate import, add byte-stability pinning test (GATE-01)
+
+- [x] 18-01-PLAN.md — Freeze gate-local boilerplate patterns, add _gate_normalize(), remove remove_boilerplate import, add byte-stability pinning test (GATE-01)
 
 ### Phase 19: Section Classifier + Patterns
 
@@ -228,7 +229,7 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17 | v2.6 Close the Bypass + Measurement | 4/4 | Complete    | 2026-07-16 |
-| 18 | v2.6 Gate Decouple | 0/0 | Not started | - |
+| 18 | v2.6 Gate Decouple | 1/1 | In Progress|  |
 | 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |
 | 21 | v2.6 Index-Time Dedup | 0/0 | Not started | - |
