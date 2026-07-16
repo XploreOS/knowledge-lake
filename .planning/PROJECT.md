@@ -26,6 +26,7 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; v2.5 milestone audit PASSED (19/19 requirements, 5/5 E2E flows); E2E gap analysis closed — all 19 findings resolved
 - **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets
 - **Phase 17 complete:** Clean-stage bypass closed on both Dagster and CLI paths; WR-05 content hash scoping applied; conservation invariant (`rejected+kept==sections_considered`) wired; `klake quality-audit` harness ships a reproducible per-source garbage-rate table. 25/25 must-haves verified passed 2026-07-16.
+- **Phase 18 complete:** Re-crawl change gate decoupled from `BOILERPLATE_PATTERNS` — `_GATE_BOILERPLATE_PATTERNS` frozen in `crawl.py`, `_gate_normalize()` added, `remove_boilerplate` import removed, byte-stability pinning test ships. 5/5 must-haves verified passed 2026-07-16.
 
 ## Next Milestone: v2.6 Data Quality & Enrichment
 
@@ -231,4 +232,4 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-16 after Phase 17 (Close the Bypass + Measurement) verified passed*
+*Last updated: 2026-07-16 after Phase 18 (Gate Decouple) verified passed*
