@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
-current_phase: 17
-current_phase_name: Close the Bypass + Measurement
-status: verifying
+current_phase: 18
+current_phase_name: Gate Decouple
+status: planning
 stopped_at: Completed 17-04-PLAN.md
-last_updated: "2026-07-16T05:24:04.464Z"
+last_updated: "2026-07-16T06:25:04.800Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 17 execution started
+last_activity_desc: Phase 17 complete, transitioned to Phase 18
 progress:
   total_phases: 5
   completed_phases: 1
@@ -28,16 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 17 (Close the Bypass + Measurement) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-07-16 — Phase 17 execution started
+Phase: 18 — Gate Decouple
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-16 — Phase 17 complete, transitioned to Phase 18
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 77 (v1.0: 25, v2.0: 38, v2.5: 14)
+- Total plans completed: 56 (v1.0: 25, v2.0: 38, v2.5: 14)
 - Average duration: ~10 min
 - Total execution time: --
 
@@ -55,6 +55,7 @@ Last activity: 2026-07-16 — Phase 17 execution started
 | 15 | 2 | - | - |
 | 16 | 2 | - | - |
 | 14 | 4 | - | - |
+| 17 | 4 | - | - |
 
 **Recent Trend:**
 

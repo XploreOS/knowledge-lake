@@ -90,7 +90,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 **Critical path:** 17 --> 19. Phases 18 and 20 are leaves/parallelizable.
 
-- [ ] **Phase 17: Close the Bypass + Measurement** - Wire cleaned text onto the load-bearing path (both Dagster and CLI), fix lineage hash, establish garbage-rate baseline
+- [x] **Phase 17: Close the Bypass + Measurement** - Wire cleaned text onto the load-bearing path (both Dagster and CLI), fix lineage hash, establish garbage-rate baseline (completed 2026-07-16)
 - [ ] **Phase 18: Gate Decouple** - Sever the re-crawl change gate from evolving clean patterns (parallelizable with 17)
 - [ ] **Phase 19: Section Classifier + Patterns** - Section-aware filtering with substance annotations, extended patterns, domain-pack allowlists
 - [ ] **Phase 20: Chunk Substance Gate + Export Gate** - Reject garbage at chunk scope, gate gold export on chunk-level quality signal
@@ -111,7 +111,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   4. `klake quality-audit` produces a per-source table (34 rows) showing total sections, kept, rejected, rejection reasons, and garbage rate — reproducible across runs and independent of any gate's heuristic
   5. Every gate asserts `rejected + kept == sections_considered` at runtime — a broken parser returning 0 sections is detected as distinct from a correct gate rejecting all sections
 
-**Plans:** 4/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -224,7 +224,7 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 1-6 | v1.0 MVP | 25/25 | ✅ Shipped | 2026-07-07 |
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
-| 17 | v2.6 Close the Bypass + Measurement | 4/4 | In Progress|  |
+| 17 | v2.6 Close the Bypass + Measurement | 4/4 | Complete    | 2026-07-16 |
 | 18 | v2.6 Gate Decouple | 0/0 | Not started | - |
 | 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |
