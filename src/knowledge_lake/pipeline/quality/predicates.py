@@ -193,10 +193,18 @@ def check_domain_allowlist(
     auto-includes this predicate. Callers (``classify_sections()`` in Plan
     19-04, and Phase 20's chunk substance gate) must place it in their own
     predicate list explicitly for allowlist protection to have any effect.
+
+    WR-01: a malformed regex string in ``allowlist_patterns`` (e.g. from a
+    domain pack's misconfigured filters.yaml) must not crash the caller —
+    ``re.error`` is caught per-pattern and treated as a non-match so the
+    remaining patterns are still evaluated.
     """
     for pattern in allowlist_patterns or []:
-        if re.search(pattern, text):
-            return PredicateResult(True, f"domain_allowlist_match:{pattern}")
+        try:
+            if re.search(pattern, text):
+                return PredicateResult(True, f"domain_allowlist_match:{pattern}")
+        except re.error:
+            continue
     return PredicateResult(False, "no_allowlist_match")
 
 

@@ -259,13 +259,26 @@ def classify_sections(
         allowlist's own match reason when `allowlisted` is True.
     """
     results: list[dict] = []
+    allowlist_patterns = list(domain_filters.normative_allowlists) if domain_filters else []
+    # WR-01: a malformed regex in a domain pack's filters.yaml must not crash
+    # the entire clean stage for every document. Compile once, up front (not
+    # per-section — domain_filters is invariant across the loop), skipping
+    # and logging any pattern that fails to compile rather than propagating
+    # re.error out of classify_sections().
+    extra_patterns: list[re.Pattern] = []
+    for raw_pattern in domain_filters.boilerplate_patterns if domain_filters else []:
+        try:
+            extra_patterns.append(re.compile(raw_pattern))
+        except re.error as exc:
+            log.warning(
+                "domain_boilerplate_pattern_invalid",
+                pattern=raw_pattern,
+                error=str(exc),
+            )
+
     for idx, section in enumerate(sections):
         signals = compute_substance_signals(section.text)
         metadata = {"is_table": section.is_table}
-        allowlist_patterns = list(domain_filters.normative_allowlists) if domain_filters else []
-        extra_patterns = [
-            re.compile(p) for p in (domain_filters.boilerplate_patterns if domain_filters else [])
-        ]
 
         allowlist_result = check_domain_allowlist(
             section.text, metadata, allowlist_patterns=allowlist_patterns

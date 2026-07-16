@@ -201,6 +201,25 @@ def test_check_domain_allowlist_non_matching_pattern() -> None:
     assert result == PredicateResult(False, "no_allowlist_match")
 
 
+def test_check_domain_allowlist_malformed_pattern_does_not_raise() -> None:
+    """WR-01 regression guard: a malformed regex string (unterminated group)
+    in allowlist_patterns must be skipped, not raise re.error, and later
+    valid patterns in the list must still be evaluated."""
+    result = check_domain_allowlist(
+        "ICD-10 E11.9", {}, allowlist_patterns=["(unterminated", "ICD-10"]
+    )
+    assert result == PredicateResult(True, "domain_allowlist_match:ICD-10")
+
+
+def test_check_domain_allowlist_only_malformed_pattern_falls_through() -> None:
+    """WR-01 regression guard: if every pattern is malformed, the predicate
+    falls through to no_allowlist_match instead of raising."""
+    result = check_domain_allowlist(
+        "just prose", {}, allowlist_patterns=["(unterminated"]
+    )
+    assert result == PredicateResult(False, "no_allowlist_match")
+
+
 # ── compute_substance_signals ─────────────────────────────────────────────────
 
 

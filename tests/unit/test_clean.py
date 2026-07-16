@@ -203,6 +203,36 @@ def test_classify_sections_allowlist_override() -> None:
     assert results[0]["allowlisted"] is True
 
 
+def test_classify_sections_malformed_domain_pattern_does_not_crash() -> None:
+    """WR-01 regression guard: a malformed regex in
+    domain_filters.boilerplate_patterns must not raise re.error out of
+    classify_sections() — the bad pattern is skipped (and logged), and
+    classification of every section still proceeds normally."""
+    from knowledge_lake.domains.models import DomainFilters
+    from knowledge_lake.pipeline.clean import classify_sections
+    from knowledge_lake.plugins.protocols import Section
+
+    sections = [
+        Section(
+            heading="Clinical",
+            section_path="§1",
+            page=1,
+            text=(
+                "Administrative safeguards require documented risk analysis, "
+                "workforce training, and periodic review of access controls "
+                "to protect patient health information under HIPAA."
+            ),
+        ),
+    ]
+    domain_filters = DomainFilters(boilerplate_patterns=["(unterminated"])
+
+    results = classify_sections(sections, domain_filters=domain_filters)
+
+    assert len(results) == 1
+    assert results[0]["is_boilerplate"] is False
+    assert results[0]["reason"] == "substance_ok"
+
+
 def test_language_detection_english() -> None:
     """English healthcare text must be detected as 'en'."""
     text = "The patient requires immediate treatment for acute conditions and hypertension."
