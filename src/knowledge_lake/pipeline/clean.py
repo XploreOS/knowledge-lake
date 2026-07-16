@@ -598,7 +598,15 @@ def clean(
     # need to re-read the flattened silver blob to recover sections
     # (RESEARCH.md Primary recommendation). None unless parsed_doc was supplied.
     cleaned_doc = (
-        ParsedDoc(text=cleaned_text, sections=cleaned_sections, metadata=parsed_doc.metadata)
+        ParsedDoc(
+            text=cleaned_text,
+            sections=cleaned_sections,
+            # WR-02: copy rather than alias — mirrors the mutation-aliasing
+            # guard already applied to `sections` above (dataclasses.replace),
+            # since cleaned_doc is later shared read-only across three Dagster
+            # consumers and metadata is a plain mutable dict.
+            metadata=dict(parsed_doc.metadata),
+        )
         if parsed_doc is not None
         else None
     )

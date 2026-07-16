@@ -465,6 +465,35 @@ class TestCleanParsedDocThreading:
 
         assert doc.sections == pre_call_copy
 
+    def test_cleaned_doc_metadata_is_not_aliased_to_parsed_doc(
+        self, clean_engine, monkeypatch
+    ) -> None:
+        """WR-02 regression guard: cleaned_doc.metadata must be a distinct
+        dict object, not the same object as parsed_doc.metadata — mutating
+        one must never affect the other."""
+        import knowledge_lake.registry.db as registry_db
+        import knowledge_lake.pipeline.clean as clean_module
+        from knowledge_lake.plugins.protocols import ParsedDoc
+
+        monkeypatch.setattr(registry_db, "get_engine", lambda: clean_engine)
+
+        with Session(clean_engine) as session:
+            source = _seed_clean_source(session, "source-metadata-alias")
+            parsed = _seed_clean_parsed_artifact(session, source.id, "hashmetadataalias")
+            source_id, parsed_id = source.id, parsed.id
+
+        settings = _make_clean_settings(clean_engine)
+        doc = ParsedDoc(text="Real content here.", sections=[], metadata={"a": 1})
+
+        with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+            result = clean_module.clean(parsed_id, source_id, parsed_doc=doc, settings=settings)
+
+        cleaned_doc = result["cleaned_doc"]
+        assert cleaned_doc is not None
+        assert cleaned_doc.metadata is not doc.metadata
+        cleaned_doc.metadata["b"] = 2
+        assert "b" not in doc.metadata
+
     def test_legacy_path_no_parsed_doc_returns_none_cleaned_doc(
         self, clean_engine, monkeypatch
     ) -> None:
