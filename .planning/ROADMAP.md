@@ -105,7 +105,13 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   3. Two documents with identical cleaned text produce distinct `cleaned_document` artifacts with different content hashes (parent-scoped WR-05 convention)
   4. `klake quality-audit` produces a per-source table (34 rows) showing total sections, kept, rejected, rejection reasons, and garbage rate — reproducible across runs and independent of any gate's heuristic
   5. Every gate asserts `rejected + kept == sections_considered` at runtime — a broken parser returning 0 sections is detected as distinct from a correct gate rejecting all sections
-**Plans**: TBD
+**Plans:** 4 plans
+
+Plans:
+- [ ] 17-01-PLAN.md — Retrofit clean() with parsed_doc threading, per-section cleaning, WR-05 parent-scoped hash, and conservation invariant (CLEAN-01/02 substrate, CLEAN-03, QUAL-04, QUAL-05)
+- [ ] 17-02-PLAN.md — Wire the cleaned ParsedDoc through the Dagster clean_document asset; verify curate_document_asset regression-free (CLEAN-01)
+- [ ] 17-03-PLAN.md — Insert clean() into process_crawled between parse() and chunk() for CLI/API/MCP parity (CLEAN-02)
+- [ ] 17-04-PLAN.md — Build the klake quality-audit harness (pipeline/quality_audit.py + CLI command) (MEAS-01, QUAL-04)
 
 ### Phase 18: Gate Decouple
 **Goal**: Extending boilerplate patterns no longer triggers re-crawl of all sources
