@@ -64,6 +64,65 @@ def test_whitespace_strips_trailing_spaces() -> None:
         assert line == line.rstrip(), f"Line has trailing whitespace: {line!r}"
 
 
+def test_boilerplate_removal_nav_menu_extended() -> None:
+    """'Main Menu' alone on a line must be removed; body text preserved."""
+    text = "Main Menu\n\nAdministrative safeguards are required."
+    result = remove_boilerplate(text)
+    assert "Main Menu" not in result
+    assert "Administrative safeguards are required." in result
+
+
+def test_boilerplate_removal_terms_of_service() -> None:
+    """A line containing 'Terms of Service' must be stripped in full."""
+    text = "By using this site you agree to our Terms of Service.\n\nBody text survives."
+    result = remove_boilerplate(text)
+    assert "Terms of Service" not in result
+    assert "Body text survives." in result
+
+
+def test_boilerplate_removal_marketing_cta() -> None:
+    """'Enroll Now' alone on a line must be removed."""
+    text = "Enroll Now\n\nEligibility requirements are described below."
+    result = remove_boilerplate(text)
+    assert "Enroll Now" not in result
+    assert "Eligibility requirements are described below." in result
+
+
+def test_boilerplate_removal_cookie_consent_extended() -> None:
+    """A line containing 'cookie settings' must be stripped in full."""
+    text = "Please review our cookie settings before continuing.\n\nClinical body text."
+    result = remove_boilerplate(text)
+    assert "cookie settings" not in result
+    assert "Clinical body text." in result
+
+
+def test_boilerplate_removal_gov_disclaimer() -> None:
+    """'For Official Use Only' alone on a line must be removed."""
+    text = "For Official Use Only\n\nGuidance for public health reporting."
+    result = remove_boilerplate(text)
+    assert "For Official Use Only" not in result
+    assert "Guidance for public health reporting." in result
+
+
+def test_boilerplate_preserves_clinical_disclaimer_sentence() -> None:
+    """A genuine clinical safety-warning sentence must survive unchanged —
+    regression guard for the must_haves.prohibitions entry (19-03-PLAN.md):
+    the new government-disclaimer pattern must not strip real disclaimer
+    text that merely contains the word 'disclaimer' mid-line."""
+    text = (
+        "Manufacturer disclaimer: consult your physician before combining "
+        "this medication with other drugs."
+    )
+    result = remove_boilerplate(text)
+    assert text in result
+
+
+def test_boilerplate_removal_empty_string_no_raise() -> None:
+    """remove_boilerplate('') must return '' without raising (edge-probe)."""
+    result = remove_boilerplate("")
+    assert result == ""
+
+
 def test_language_detection_english() -> None:
     """English healthcare text must be detected as 'en'."""
     text = "The patient requires immediate treatment for acute conditions and hypertension."
