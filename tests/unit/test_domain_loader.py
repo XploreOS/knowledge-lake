@@ -12,6 +12,11 @@ try:
 except ImportError:
     DomainLoader = None  # type: ignore[assignment, misc]
 
+try:
+    from knowledge_lake.domains.models import DomainFilters
+except ImportError:
+    DomainFilters = None  # type: ignore[assignment, misc]
+
 # Project root → domains/healthcare/ directory
 DOMAINS_ROOT = Path(__file__).parent.parent.parent  # project root
 HC_DIR = DOMAINS_ROOT / "domains" / "healthcare"
@@ -70,3 +75,31 @@ def test_domain_loader_render_enrich_prompt() -> None:
     assert isinstance(rendered, str)
     assert len(rendered) > 0
     assert "clinical_codes" in rendered
+
+
+def test_domain_loader_healthcare_has_filters() -> None:
+    """healthcare pack's filters.yaml loads into a DomainFilters instance with ICD-10."""
+    assert DomainLoader is not None
+    assert DomainFilters is not None
+    loader = DomainLoader.from_name("healthcare", root=DOMAINS_ROOT)
+    assert loader.filters is not None
+    assert isinstance(loader.filters, DomainFilters)
+    assert "ICD-10" in loader.filters.normative_allowlists
+
+
+def test_domain_loader_aviation_has_no_filters() -> None:
+    """Loading a domain pack WITHOUT filters.yaml (aviation) raises nothing and
+    yields filters is None — Pitfall-4 regression guard for the optional-file
+    convention (CLEAN-06, D-07)."""
+    assert DomainLoader is not None
+    loader = DomainLoader.from_name("aviation", root=DOMAINS_ROOT)
+    assert loader.filters is None
+
+
+def test_domain_filters_model_defaults() -> None:
+    """DomainFilters() with no args defaults all three fields to empty containers."""
+    assert DomainFilters is not None
+    filters = DomainFilters()
+    assert filters.boilerplate_patterns == []
+    assert filters.normative_allowlists == []
+    assert filters.thresholds == {}

@@ -1,0 +1,21 @@
+# Healthcare domain pack — clinical-code allowlist (CLEAN-06, D-08)
+#
+# normative_allowlists: regex patterns that must never be classified as boilerplate
+# regardless of substance signals — protects clinical codes and dosage references
+# (e.g. "ICD-10 E11.9" or "Metformin 500 mg PO BID") from the quality gate.
+#
+# WARNING: never use a broad pattern like ".*" here — see DomainFilters docstring
+# in src/knowledge_lake/domains/models.py for why that would silently disable
+# boilerplate classification for this entire domain pack.
+
+normative_allowlists:
+  - "ICD-10"
+  - "LOINC"
+  - "RxNorm"
+  - "§\\d+\\.\\d+"
+  - "\\d+\\s*mg"
+  - "PO\\s+BID"
+
+boilerplate_patterns: []
+
+thresholds: {}
