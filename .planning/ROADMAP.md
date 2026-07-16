@@ -91,7 +91,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 **Critical path:** 17 --> 19. Phases 18 and 20 are leaves/parallelizable.
 
 - [x] **Phase 17: Close the Bypass + Measurement** - Wire cleaned text onto the load-bearing path (both Dagster and CLI), fix lineage hash, establish garbage-rate baseline (completed 2026-07-16)
-- [ ] **Phase 18: Gate Decouple** - Sever the re-crawl change gate from evolving clean patterns (parallelizable with 17)
+- [x] **Phase 18: Gate Decouple** - Sever the re-crawl change gate from evolving clean patterns (parallelizable with 17) (completed 2026-07-16)
 - [ ] **Phase 19: Section Classifier + Patterns** - Section-aware filtering with substance annotations, extended patterns, domain-pack allowlists
 - [ ] **Phase 20: Chunk Substance Gate + Export Gate** - Reject garbage at chunk scope, gate gold export on chunk-level quality signal
 - [ ] **Phase 21: Index-Time Dedup** - Corpus-wide exact dedup between chunk and embed with idempotent point IDs
@@ -134,7 +134,7 @@ Plans:
   1. Adding a new pattern to `BOILERPLATE_PATTERNS` does not change the content signature of any existing source
   2. A pinning test asserts gate-signature byte-stability across a clean-stage pattern change
 
-**Plans:** 1/1 plans executed
+**Plans:** 1/1 plans complete
 
 Plans:
 
@@ -229,7 +229,7 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17 | v2.6 Close the Bypass + Measurement | 4/4 | Complete    | 2026-07-16 |
-| 18 | v2.6 Gate Decouple | 1/1 | In Progress|  |
+| 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
 | 19 | v2.6 Section Classifier + Patterns | 0/0 | Not started | - |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 0/0 | Not started | - |
 | 21 | v2.6 Index-Time Dedup | 0/0 | Not started | - |
