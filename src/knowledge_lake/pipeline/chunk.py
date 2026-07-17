@@ -27,13 +27,30 @@ Returns:
 
 from __future__ import annotations
 
+import functools
 import hashlib
+import importlib.metadata  # noqa: F401 — defensive: ensures FineWebQualityFilter's
+# lazy tokenizer probe (datatrove.utils.text.split_into_words) never hits the
+# "module 'importlib' has no attribute 'metadata'" AttributeError regardless
+# of future import-order changes elsewhere in the app (RESEARCH.md Pitfall 4).
 import re
 
 import structlog
 import tiktoken as _tiktoken
 
-from knowledge_lake.config.settings import Settings, get_settings
+from knowledge_lake.config.settings import ChunkQualitySettings, Settings, get_settings
+from knowledge_lake.domains.models import DomainFilters
+from knowledge_lake.pipeline.quality import (
+    PredicateResult,
+    check_alpha_ratio,
+    check_domain_allowlist,
+    check_link_density,
+    check_stopword_ratio,
+    check_table_exemption,
+    check_terminal_punct_ratio,
+    check_token_floor,
+    run_predicates,
+)
 from knowledge_lake.plugins.protocols import ParsedDoc
 from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
@@ -257,6 +274,157 @@ def _build_token_chunks(
     return raw_chunks
 
 
+# ── Chunk-level substance gate (QUAL-02, QUAL-03) ──────────────────────────────
+
+
+def _build_fineweb_filter(settings: ChunkQualitySettings):
+    """Factory returning a configured FineWebQualityFilter instance.
+
+    Deferred import — tests that don't exercise the real filter never need
+    datatrove installed at import time (mirrors curate.py::_build_filters()'s
+    Pitfall-1 avoidance).
+    """
+    from datatrove.pipeline.filters.fineweb_quality_filter import (  # noqa: PLC0415
+        FineWebQualityFilter,
+    )
+
+    return FineWebQualityFilter(
+        line_punct_thr=settings.fineweb_line_punct_thr,
+        short_line_thr=settings.fineweb_short_line_thr,
+        short_line_length=settings.fineweb_short_line_length,
+    )
+
+
+def _fineweb_predicate(text: str, metadata: dict, *, filter_instance) -> PredicateResult:
+    """Wraps FineWebQualityFilter.filter() as a run_predicates()-compatible predicate.
+
+    FineWebQualityFilter.filter() returns bool | tuple[bool, str] — mirrors
+    curate.py::score_document()'s isinstance(outcome, tuple) handling exactly.
+    """
+    from datatrove.data import Document  # noqa: PLC0415
+
+    doc = Document(text=text, id="chunk", metadata={})
+    outcome = filter_instance.filter(doc)
+    if isinstance(outcome, tuple):
+        passed, reason = outcome
+    else:
+        passed, reason = bool(outcome), "fineweb_ok"
+    return PredicateResult(passed, reason or "fineweb_reject")
+
+
+def _assert_chunk_conservation_invariant(
+    *,
+    kept_count: int,
+    rejected_count: int,
+    total_generated: int,
+    parsed_artifact_id: str,
+) -> None:
+    """QUAL-05 conservation invariant: rejected + kept == total_generated.
+
+    Mirrors clean.py's log-then-raise shape exactly — never a bare assert.
+    """
+    if kept_count + rejected_count != total_generated:
+        log.error(
+            "chunk.substance_gate.conservation_invariant_violated",
+            parsed_artifact_id=parsed_artifact_id,
+            total_generated=total_generated,
+            kept=kept_count,
+            rejected=rejected_count,
+        )
+        raise RuntimeError(
+            f"chunk: conservation invariant violated for {parsed_artifact_id!r}: "
+            f"{kept_count} + {rejected_count} != {total_generated}"
+        )
+
+
+def _apply_substance_gate(
+    raw_chunks: list[dict],
+    s: Settings,
+    domain_filters: DomainFilters | None,
+    parsed_artifact_id: str,
+) -> list[dict]:
+    """Run the composite substance gate over ``raw_chunks`` (QUAL-02, QUAL-03).
+
+    Pure w.r.t. I/O (no DB/S3 access) so it is independently unit-testable —
+    the only "impure" behavior is structlog logging. Annotates every entry in
+    ``raw_chunks`` with ``substance_passed``/``rejection_reason`` in place,
+    then returns either the full (annotated) list (report mode, D-13) or the
+    subset that passed (enforce mode, the default).
+
+    Predicate order [check_table_exemption, domain_allowlist, fineweb,
+    token_floor, alpha_ratio, link_density, stopword_ratio,
+    terminal_punct_ratio] mirrors classify_sections()'s established ordering
+    discipline: exemption predicates first so they short-circuit before any
+    threshold predicate ever runs (D-01).
+    """
+    allowlist_patterns = list(domain_filters.normative_allowlists) if domain_filters else []
+    allowlist_pred = functools.partial(check_domain_allowlist, allowlist_patterns=allowlist_patterns)
+    fineweb_pred = functools.partial(
+        _fineweb_predicate, filter_instance=_build_fineweb_filter(s.chunk_quality)
+    )
+    token_pred = functools.partial(check_token_floor, min_tokens=s.chunk_quality.min_token_count)
+    alpha_pred = functools.partial(check_alpha_ratio, min_ratio=s.chunk_quality.min_alpha_ratio)
+    link_pred = functools.partial(check_link_density, max_density=s.chunk_quality.max_link_density)
+    stopword_pred = functools.partial(
+        check_stopword_ratio, min_ratio=s.chunk_quality.min_stopword_ratio
+    )
+
+    preds = [
+        check_table_exemption,
+        allowlist_pred,
+        fineweb_pred,
+        token_pred,
+        alpha_pred,
+        link_pred,
+        stopword_pred,
+        check_terminal_punct_ratio,
+    ]
+    # WR-03: reuse the SAME allowlist_pred object reference in both the list
+    # and the exemption set — never construct two separate functools.partial
+    # instances (identity matching in run_predicates()).
+    exemptions = {check_table_exemption, allowlist_pred}
+
+    kept_count = 0
+    rejected_count = 0
+    rejection_reason_counts: dict[str, int] = {}
+
+    for raw in raw_chunks:
+        result = run_predicates(
+            raw["text"], {"is_table": raw["is_table"]}, preds, exemption_predicates=exemptions
+        )
+        raw["substance_passed"] = result.passed
+        raw["rejection_reason"] = None if result.passed else result.reason
+        if result.passed:
+            kept_count += 1
+        else:
+            rejected_count += 1
+            rejection_reason_counts[result.reason] = rejection_reason_counts.get(result.reason, 0) + 1
+
+    _assert_chunk_conservation_invariant(
+        kept_count=kept_count,
+        rejected_count=rejected_count,
+        total_generated=len(raw_chunks),
+        parsed_artifact_id=parsed_artifact_id,
+    )
+
+    # Log unconditionally (both modes) — closes the chunk-level rejection
+    # audit-trail gap, extending QUAL-04's Phase-17 "every rejected chunk
+    # must be recorded" contract to this new rejection path.
+    log.info(
+        "chunk.substance_gate.complete",
+        parsed_artifact_id=parsed_artifact_id,
+        total_generated=len(raw_chunks),
+        kept=kept_count,
+        rejected=rejected_count,
+        rejection_reasons=rejection_reason_counts,
+        gate_mode=s.chunk_quality.gate_mode,
+    )
+
+    if s.chunk_quality.gate_mode == "enforce":
+        return [r for r in raw_chunks if r["substance_passed"]]
+    return raw_chunks
+
+
 # ── Public pipeline function ──────────────────────────────────────────────────
 
 
@@ -266,6 +434,7 @@ def chunk(
     parsed_doc: ParsedDoc,
     *,
     settings: Settings | None = None,
+    domain_filters: DomainFilters | None = None,
 ) -> list[dict]:
     """Split a ParsedDoc into section-aware chunks and register artifact nodes.
 
@@ -277,6 +446,11 @@ def chunk(
         source_id:          Source ID (propagated to each chunk artifact).
         parsed_doc:         ParsedDoc returned by the parse stage.
         settings:           Settings override.
+        domain_filters:     Optional DomainFilters (normative_allowlists) used
+                             to exempt domain-specific clinical codes from the
+                             substance gate (QUAL-03). None = no exemption
+                             beyond is_table. Resolved and passed by callers
+                             (chunk_document/process_crawled) via DomainLoader.
 
     Returns:
         List of chunk dicts with keys:
@@ -294,6 +468,13 @@ def chunk(
         s.chunk.heading_breadcrumb_depth,
     )
     log.info("chunk.raw_chunks", count=len(raw_chunks))
+
+    # QUAL-02/QUAL-03: composite substance gate — rejects (enforce mode) or
+    # flags (report mode) garbage chunks before persistence/embedding. Each
+    # surviving/annotated raw dict carries substance_passed/rejection_reason,
+    # consumed by the per-chunk persistence loop below (PIPE-01 hash formula
+    # and metadata annotation).
+    raw_chunks = _apply_substance_gate(raw_chunks, s, domain_filters, parsed_artifact_id)
 
     results: list[dict] = []
 
