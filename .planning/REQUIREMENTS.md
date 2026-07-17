@@ -212,8 +212,8 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 | CLEAN-06 | Phase 19 | Complete |
 | GATE-01 | Phase 18 | Complete |
 | QUAL-01 | Phase 19 | Complete |
-| QUAL-02 | Phase 20 | Pending |
-| QUAL-03 | Phase 20 | Pending |
+| QUAL-02 | Phase 20 | Complete |
+| QUAL-03 | Phase 20 | Complete |
 | QUAL-04 | Phase 17 | Complete |
 | QUAL-05 | Phase 17 | Complete |
 | DEDUP-01 | Phase 21 | Pending |
@@ -223,4 +223,4 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 | EXPORT-02 | Phase 20 | Pending |
 | MEAS-01 | Phase 17 | Complete |
 | MEAS-02 | Phase 20 | Pending |
-| PIPE-01 | Phase 20 | Pending |
+| PIPE-01 | Phase 20 | Complete |

@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 20
-current_phase_name: Chunk Substance Gate + Export Gate
+current_phase_name: chunk-substance-gate-export-gate
 status: executing
-stopped_at: Completed 19-04-PLAN.md (Phase 19 complete)
-last_updated: "2026-07-17T02:45:08.489Z"
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-07-17T03:01:58.252Z"
 last_activity: 2026-07-17
-last_activity_desc: Phase 19 complete, transitioned to Phase 20
+last_activity_desc: Phase 20 execution started
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 10
   percent: 60
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 19 — section-classifier-patterns
+**Current focus:** Phase 20 — chunk-substance-gate-export-gate
 
 ## Current Position
 
-Phase: 20 — Chunk Substance Gate + Export Gate
-Plan: Not started
+Phase: 20 (chunk-substance-gate-export-gate) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-17 — Phase 19 complete, transitioned to Phase 20
+Last activity: 2026-07-17 — Phase 20 execution started
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Last activity: 2026-07-17 — Phase 19 complete, transitioned to Phase 20
 | Phase 19 P02 | 8min | 2 tasks | 4 files |
 | Phase 19 P03 | 6min | 2 tasks | 2 files |
 | Phase 19 P04 | 12 min | 2 tasks | 2 files |
+| Phase 20 P01 | 13min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,8 @@ Last activity: 2026-07-17 — Phase 19 complete, transitioned to Phase 20
 - [Phase 19]: BOILERPLATE_PATTERNS extended additively via a single .extend() call (4->9 entries); gov-disclaimer pattern anchored to specific multi-word phrases only, not a bare disclaimer/warning keyword, to keep genuine clinical safety text intact — Preserves byte-identical indices 0-3 so the Phase 18 frozen gate signature (crawl.py) stays decoupled; regression-tested against a realistic clinical disclaimer sentence
 - [Phase 19]: [Phase 19 P04] Kept-section annotations reuse classification["reason"] (e.g. "substance_ok" or the allowlist match reason) rather than inventing a new literal for the kept branch — The plan's "reason string used for that branch" language only names explicit reason strings for the two rejection branches (empty_after_boilerplate_removal, classified_as_boilerplate) — reusing classify_sections()'s own computed reason for the kept branch keeps the annotation coherent and non-redundant.
 - [Phase 19]: [Phase 19 P04] TDD RED phase tested classify_sections() directly (pure-function contract) rather than duplicating Task 2's clean()-level acceptance tests — Keeps the RED/GREEN cycle focused on the new function's own contract (nav vs. clinical classification, allowlist override) while Task 2 separately adds the full clean()-level integration tests as ordinary test additions, per the plan's task split.
+- [Phase ?]: 20-01: Extracted _apply_substance_gate() as a pure DB-free helper for independent unit-testability, rather than inlining gate logic directly in chunk()'s persistence loop
+- [Phase ?]: 20-01: ChunkQualitySettings.filter_config_version defaults to '1.0' (distinct from CurateSettings' 'v1') — chunk-gate cache is intentionally independent from document-level curation cache
 
 ### Pending Todos
 
@@ -174,8 +177,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-16T17:39:57.124Z
-Stopped at: Completed 19-04-PLAN.md (Phase 19 complete)
+Last session: 2026-07-17T03:01:58.235Z
+Stopped at: Completed 20-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
