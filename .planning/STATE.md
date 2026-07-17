@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 20
 current_phase_name: chunk-substance-gate-export-gate
 status: executing
-stopped_at: Completed 20-02-PLAN.md
-last_updated: "2026-07-17T03:09:37.797Z"
+stopped_at: Completed 20-03-PLAN.md
+last_updated: "2026-07-17T04:20:00.000Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 20 execution started
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 60
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 20 (chunk-substance-gate-export-gate) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 20 execution started
 
@@ -91,6 +91,7 @@ Last activity: 2026-07-17 — Phase 20 execution started
 | Phase 19 P04 | 12 min | 2 tasks | 2 files |
 | Phase 20 P01 | 13min | 3 tasks | 4 files |
 | Phase 20 P02 | 6min | 3 tasks | 4 files |
+| Phase 20 P03 | ~40min (session-interrupted, resumed) | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Last activity: 2026-07-17 — Phase 20 execution started
 - [Phase ?]: 20-01: ChunkQualitySettings.filter_config_version defaults to '1.0' (distinct from CurateSettings' 'v1') — chunk-gate cache is intentionally independent from document-level curation cache
 - [Phase ?]: 20-02: process.py resolves domain_filters via function-local get_settings() import (matching existing local-import convention) rather than adding a settings param to process_crawled()'s public signature
 - [Phase ?]: 20-02: New domain_filters wiring tests patch knowledge_lake.config.settings.get_settings and knowledge_lake.domains.loader.DomainLoader.from_name (source modules), mirroring this file's established interception pattern
+- [Phase ?]: 20-03: EXPORT-02 delivered as versioning-only (payload["version"] tag), not migration — pre-Phase-20 DatasetExample rows stay unversioned until an operator re-runs the existing, unmodified `klake generate-dataset` CLI against re-processed artifacts; documented in 20-03-PLAN.md's <operational_followup> per plan-checker review
+- [Phase ?]: 20-03: export_rag_corpus()'s substance_passed gate treats an explicit None the same as False (excluded) via meta.get('substance_passed', True) — deliberate, tested distinction from a missing key (defaults True/included)
+- [Phase ?]: 20-03: executor session was cut off by a Claude Code usage-limit reset mid-Task-2 (RED commit landed, GREEN uncommitted); recovered by verifying the in-progress working-tree diff against Task 2's own RED tests/acceptance criteria before committing — no plan content altered
 
 ### Pending Todos
 
@@ -180,8 +184,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T03:09:37.785Z
-Stopped at: Completed 20-02-PLAN.md
+Last session: 2026-07-17T04:20:00.000Z
+Stopped at: Completed 20-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
