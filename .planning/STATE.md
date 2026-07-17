@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
-current_phase: 19
-current_phase_name: section-classifier-patterns
-status: verifying
+current_phase: 20
+current_phase_name: Chunk Substance Gate + Export Gate
+status: planning
 stopped_at: Completed 19-04-PLAN.md (Phase 19 complete)
-last_updated: "2026-07-16T17:40:06.703Z"
-last_activity: 2026-07-16
-last_activity_desc: Completed 19-04-PLAN.md (classify_sections() wired into clean.py — CLEAN-04 section-level boilerplate drop, Phase 19 complete)
+last_updated: "2026-07-17T01:50:03.500Z"
+last_activity: 2026-07-17
+last_activity_desc: Phase 19 complete, transitioned to Phase 20
 progress:
   total_phases: 5
   completed_phases: 3
@@ -28,16 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 19 (section-classifier-patterns) — COMPLETE
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-07-16 — Completed 19-04-PLAN.md (classify_sections() wired into clean.py — CLEAN-04 section-level boilerplate drop, Phase 19 complete)
+Phase: 20 — Chunk Substance Gate + Export Gate
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-17 — Phase 19 complete, transitioned to Phase 20
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 57 (v1.0: 25, v2.0: 38, v2.5: 14)
+- Total plans completed: 61 (v1.0: 25, v2.0: 38, v2.5: 14)
 - Average duration: ~10 min
 - Total execution time: --
 
@@ -57,6 +57,7 @@ Last activity: 2026-07-16 — Completed 19-04-PLAN.md (classify_sections() wired
 | 14 | 4 | - | - |
 | 17 | 4 | - | - |
 | 18 | 1 | - | - |
+| 19 | 4 | - | - |
 
 **Recent Trend:**
 
