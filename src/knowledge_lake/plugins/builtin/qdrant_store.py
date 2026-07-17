@@ -555,6 +555,51 @@ class QdrantVectorStore:
             points=qdrant_points,
         )
 
+    def set_payload(self, collection: str, point_id: str, payload: dict) -> bool:
+        """Merge `payload` keys into an existing point without touching its
+        vector or other payload fields. Returns False if the point does not
+        exist (never raises for that case) — callers use the return value to
+        drive the duplicate-hit self-healing demote-to-new-path branch (D-24,
+        DEDUP-03).
+
+        qdrant-client 1.18.0's set_payload() raises
+        UnexpectedResponse(404) on a missing point ID rather than silently
+        no-op-ing — verified empirically against a live Qdrant v1.18.2 server
+        in RESEARCH.md. This is the ONE existence check in the entire
+        duplicate-routing flow (D-26) — no speculative retrieve() pre-check
+        is added.
+
+        Args:
+            collection: Alias or physical collection name.
+            point_id:   Bare-UUID or unsigned-int point ID.
+            payload:    Partial payload dict to merge in, e.g.
+                        {"contributors": [...], "contributor_count": n}.
+        """
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        try:
+            self._client.set_payload(
+                collection_name=collection,
+                payload=payload,
+                points=[point_id],
+            )
+        except UnexpectedResponse as e:
+            if e.status_code == 404:
+                log.warning(
+                    "qdrant_store.set_payload.point_missing",
+                    collection=collection,
+                    point_id=point_id,
+                )
+                return False
+            raise
+        log.info(
+            "qdrant_store.set_payload",
+            collection=collection,
+            point_id=point_id,
+            keys=list(payload.keys()),
+        )
+        return True
+
     def reembed_all_points(
         self,
         source: str,

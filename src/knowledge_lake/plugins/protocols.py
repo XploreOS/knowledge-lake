@@ -219,6 +219,7 @@ class VectorStorePlugin(Protocol):
       reindex(alias, dim, upsert_fn, distance)        — zero-downtime reindex via atomic alias swap
       copy_all_points(source, dest, batch_size)       — scroll+upsert all points between collections
       refresh_all_points_payload(source, dest, fn)    — scroll+re-derive payload (no re-embed) (KL-06)
+      set_payload(collection, point_id, payload) -> bool         — merge payload keys into an existing point, False if missing (D-24)
       get_collection_dim(alias)                       — read back a collection's configured vector size
       upsert(collection, points)                      — batch-upsert VectorPoint records
       search(collection, query, top_k, query_filter)  — ANN search returning Hits with citation payload
@@ -434,6 +435,21 @@ class VectorStorePlugin(Protocol):
 
         Returns:
             Total count of points refreshed (0 for an empty source collection).
+        """
+        ...
+
+    def set_payload(self, collection: str, point_id: str, payload: dict) -> bool:
+        """Merge `payload` keys into an existing point without touching its
+        vector or other payload fields. Returns False if the point does not
+        exist (never raises for that case) — callers use the return value to
+        drive the duplicate-hit self-healing demote-to-new-path branch (D-24,
+        DEDUP-03).
+
+        Args:
+            collection: Alias or physical collection name.
+            point_id:   Bare-UUID or unsigned-int point ID.
+            payload:    Partial payload dict to merge in, e.g.
+                        {"contributors": [...], "contributor_count": n}.
         """
         ...
 
