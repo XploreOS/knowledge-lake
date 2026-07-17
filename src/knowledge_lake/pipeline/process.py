@@ -9,6 +9,12 @@ Rows are materialized to tuples inside the ``get_session()`` block
 CLEAN-02: runs a ``clean()`` stage between ``parse()`` and ``chunk()`` so this
 CLI/API/MCP-shared path produces chunks from cleaned text, matching the
 Dagster ``clean_document -> chunk_document`` path (no shortcut/bypass).
+
+Resolves ``settings.domain.domain_name`` via ``DomainLoader`` once per call
+(not once per document) and threads the resulting ``.filters`` into every
+``chunk()`` call, mirroring the Dagster ``chunk_document`` asset's guard so
+the substance-gate domain allowlist exemption (QUAL-03) protects clinical
+codes on this path too.
 """
 from __future__ import annotations
 
@@ -52,6 +58,7 @@ def process_crawled(
     from sqlalchemy import and_, select
     from sqlalchemy.orm import aliased
 
+    from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.chunk import chunk
     from knowledge_lake.pipeline.clean import clean
     from knowledge_lake.pipeline.embed import embed
@@ -93,6 +100,12 @@ def process_crawled(
     if not raw_docs:
         return {"processed": 0, "chunks_indexed": 0, "failed": 0}
 
+    settings = get_settings()
+    domain_filters = None
+    if settings.domain.domain_name:
+        from knowledge_lake.domains.loader import DomainLoader
+        domain_filters = DomainLoader.from_name(settings.domain.domain_name).filters
+
     processed = 0
     failed = 0
     total_chunks = 0
@@ -110,7 +123,7 @@ def process_crawled(
             clean_result = clean(parsed_id, src_id, parsed_doc=parsed_doc)
             cleaned_doc = clean_result["cleaned_doc"]
 
-            chunks_list = chunk(parsed_id, src_id, cleaned_doc)
+            chunks_list = chunk(parsed_id, src_id, cleaned_doc, domain_filters=domain_filters)
             if not chunks_list:
                 processed += 1
                 continue

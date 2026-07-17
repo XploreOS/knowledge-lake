@@ -341,7 +341,10 @@ def clean_document(
         "Split ParsedDoc into section-aware chunk artifacts. "
         "Calls pipeline.chunk.chunk — no logic duplicated. "
         "Ordered after curate_document_asset via a non-data deps= edge (KL-06) — "
-        "curate's composite score must be settled before chunks are produced."
+        "curate's composite score must be settled before chunks are produced. "
+        "Resolves settings.domain.domain_name via DomainLoader and threads its "
+        ".filters into chunk() so the substance gate can exempt domain-specific "
+        "clinical codes (QUAL-03)."
     ),
     group_name="pipeline",
     retry_policy=_PIPELINE_RETRY,
@@ -380,7 +383,12 @@ def chunk_document(
 
     log.info("dagster.chunk_document.start", parsed_artifact_id=parsed_artifact_id)
 
-    chunks = chunk(parsed_artifact_id, source_id, doc, settings=settings)
+    domain_filters = None
+    if settings.domain.domain_name:
+        from knowledge_lake.domains.loader import DomainLoader
+        domain_filters = DomainLoader.from_name(settings.domain.domain_name).filters
+
+    chunks = chunk(parsed_artifact_id, source_id, doc, settings=settings, domain_filters=domain_filters)
 
     result = {
         "chunks": chunks,
