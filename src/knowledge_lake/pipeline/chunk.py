@@ -494,11 +494,18 @@ def chunk(
 
             # Include parsed_artifact_id in the hash so identical chunk text from
             # different documents creates distinct artifacts (WR-05: dedup key must
-            # include parent to prevent lineage corruption across documents)
-            hash_input = f"{parsed_artifact_id}:{text}"
+            # include parent to prevent lineage corruption across documents).
+            # PIPE-01: also fold in filter_config_version so a threshold-config
+            # bump produces a NEW content_hash — without this, the deterministic
+            # chunk text would hit the SAME hash and the no-op branch below would
+            # short-circuit re-evaluation of the gate (RESEARCH.md Pitfall 3).
+            hash_input = f"{parsed_artifact_id}:{s.chunk_quality.filter_config_version}:{text}"
             content_hash = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
 
-            # Registry no-op: if this chunk already exists for THIS parent, use existing node
+            # Registry no-op: if this chunk already exists for THIS parent, use existing node.
+            # substance_passed/rejection_reason are sourced from `raw` (this call's fresh gate
+            # computation), never from the existing artifact's persisted metadata — idempotency
+            # holds by construction regardless of which branch is taken.
             existing = registry_repo.get_artifact_by_hash(session, content_hash, "chunk")
             if existing is not None:
                 results.append({
@@ -510,6 +517,8 @@ def chunk(
                     "content_hash": content_hash,
                     "is_table": raw["is_table"],
                     "oversized": raw.get("oversized", False),
+                    "substance_passed": raw["substance_passed"],
+                    "rejection_reason": raw["rejection_reason"],
                 })
                 continue
 
@@ -543,6 +552,8 @@ def chunk(
                     "is_table": raw["is_table"],
                     "oversized": raw.get("oversized", False),
                     "heading_prefix": raw.get("heading_prefix", ""),
+                    "substance_passed": raw["substance_passed"],
+                    "rejection_reason": raw["rejection_reason"],
                 },
             )
             session.flush()
@@ -556,6 +567,8 @@ def chunk(
                 "content_hash": content_hash,
                 "is_table": raw["is_table"],
                 "oversized": raw.get("oversized", False),
+                "substance_passed": raw["substance_passed"],
+                "rejection_reason": raw["rejection_reason"],
             })
 
     log.info("chunk.complete", chunk_count=len(results))
