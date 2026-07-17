@@ -1,0 +1,96 @@
+# must_not_reject.yaml — MEAS-02 CI safety-net fixture set (D-15, D-16)
+#
+# SCOPE BOUNDARY: this is a REPRESENTATIVE SAMPLE of clinical-content shapes
+# across 5 categories (icd_code, dosage, loinc, hipaa_ref,
+# cardinality_constraint), hand-authored to exercise the healthcare domain
+# pack's normative_allowlists patterns in domains/healthcare/filters.yaml.
+# It is NOT an exhaustive enumeration of every protected clinical-code shape
+# that could appear in real documents — a passing CI run proves these ~25
+# samples survive the substance gate end-to-end, not that every possible
+# ICD-10/LOINC/dosage/HIPAA/cardinality-constraint phrasing is protected.
+#
+# Each entry has exactly three keys: label (unique slug), text (the exact
+# clinical string), category (one of the 5 MEAS-02 categories). Loaded and
+# parametrized by tests/unit/test_must_not_reject.py, which calls the real
+# chunk() substance gate with domain_filters resolved via
+# DomainLoader.from_name("healthcare").filters.
+
+- label: icd_diabetes_1
+  text: "ICD-10 E11.9"
+  category: icd_code
+- label: icd_hypertension_2
+  text: "Diagnosis code ICD-10 I10 for essential hypertension"
+  category: icd_code
+- label: icd_copd_3
+  text: "Primary diagnosis: ICD-10 J44.1 (COPD with acute exacerbation)."
+  category: icd_code
+- label: icd_back_pain_4
+  text: "ICD-10 code M54.5 documented for lower back pain."
+  category: icd_code
+- label: icd_ckd_5
+  text: "Secondary diagnosis coded as ICD-10 N18.3 (chronic kidney disease, stage 3)."
+  category: icd_code
+
+- label: dosage_metformin_1
+  text: "Metformin 500 mg PO BID"
+  category: dosage
+- label: dosage_iv_push_2
+  text: "Administer 10 mg IV push"
+  category: dosage
+- label: dosage_lisinopril_3
+  text: "Lisinopril 20 mg once daily for hypertension."
+  category: dosage
+- label: dosage_amoxicillin_4
+  text: "Amoxicillin 250 mg PO TID for 7 days."
+  category: dosage
+- label: dosage_metoprolol_5
+  text: "Prescribed Metoprolol 50 mg PO BID for atrial fibrillation."
+  category: dosage
+
+- label: loinc_glucose_1
+  text: "LOINC 2345-7 Glucose result"
+  category: loinc
+- label: loinc_hba1c_2
+  text: "LOINC code 4548-4 reports Hemoglobin A1c."
+  category: loinc
+- label: loinc_hemoglobin_3
+  text: "Lab result reported under LOINC 718-7 (Hemoglobin)."
+  category: loinc
+- label: loinc_creatinine_4
+  text: "LOINC 2160-0 Creatinine level documented in the chart."
+  category: loinc
+- label: loinc_bmp_5
+  text: "Basic metabolic panel ordered using LOINC 24323-8 profile code."
+  category: loinc
+
+- label: hipaa_disclosures_1
+  text: "See §164.502 for permitted disclosures."
+  category: hipaa_ref
+- label: hipaa_technical_safeguards_2
+  text: "Refer to §164.312 for technical safeguards requirements."
+  category: hipaa_ref
+- label: hipaa_privacy_rule_3
+  text: "The Privacy Rule at §164.508 requires patient authorization for certain disclosures."
+  category: hipaa_ref
+- label: hipaa_admin_safeguards_4
+  text: "Administrative safeguards are defined under §164.308 of the HIPAA Security Rule."
+  category: hipaa_ref
+- label: hipaa_deidentification_5
+  text: "§164.514 addresses de-identification standards for protected health information."
+  category: hipaa_ref
+
+- label: cardinality_sirs_1
+  text: "Meets 2 of 4 SIRS criteria"
+  category: cardinality_constraint
+- label: cardinality_duke_2
+  text: "3/5 Duke criteria present"
+  category: cardinality_constraint
+- label: cardinality_ranson_3
+  text: "Patient satisfies 2 of 3 Ranson's criteria on admission."
+  category: cardinality_constraint
+- label: cardinality_sofa_4
+  text: "4/6 SOFA score components elevated, consistent with sepsis."
+  category: cardinality_constraint
+- label: cardinality_metabolic_5
+  text: "Meets 3 of 5 metabolic syndrome criteria per ATP III guidelines."
+  category: cardinality_constraint
