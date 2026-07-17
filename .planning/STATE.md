@@ -4,16 +4,16 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 21
 status: completed
-stopped_at: Completed 21-08-PLAN.md
-last_updated: "2026-07-17T14:25:39.197Z"
+stopped_at: Phase 22 context gathered
+last_updated: "2026-07-17T16:10:49.417Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 complete
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
   total_plans: 21
   completed_plans: 21
-  percent: 100
+  percent: 83
 current_phase_name: index-time-dedup
 ---
 
@@ -195,6 +195,10 @@ None yet.
 | 260715-bgt | Fix KL-18 detached-session 500s, KL-08 stale container, KL-09 tree-index CLI | 2026-07-15 | b974337 | [260715-bgt-fix-kl-18-detached-session-500s-kl-08-st](./quick/260715-bgt-fix-kl-18-detached-session-500s-kl-08-st/) |
 | 260715-chy | Fix remaining low findings, CI image build guard, parse section persistence | 2026-07-15 | 1c0159f | [260715-chy-fix-remaining-low-findings-ci-image-buil](./quick/260715-chy-fix-remaining-low-findings-ci-image-buil/) |
 
+### Roadmap Evolution
+
+- Phase 22 added: Address tech debt: measure garbage/junk rates end-to-end, reconcile Nyquist validation
+
 ## Deferred Items
 
 Items acknowledged and carried forward:
@@ -211,9 +215,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T13:54:50.297Z
-Stopped at: Completed 21-08-PLAN.md
-Resume file: None
+Last session: 2026-07-17T16:10:49.400Z
+Stopped at: Phase 22 context gathered
+Resume file: .planning/phases/22-address-tech-debt-measure-garbage-junk-rates-end-to-end-reco/22-CONTEXT.md
 
 ## Operator Next Steps
 
