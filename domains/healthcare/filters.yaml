@@ -15,6 +15,7 @@ normative_allowlists:
   - "§\\d+\\.\\d+"
   - "\\d+\\s*mg"
   - "PO\\s+BID"
+  - "\\d+\\s*(?:of|/)\\s*\\d+"
 
 boilerplate_patterns: []
 
