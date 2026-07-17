@@ -49,6 +49,8 @@ Returns: list of chunk_ids indexed (same order as input chunks).
 
 from __future__ import annotations
 
+import datetime
+
 import structlog
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -137,6 +139,7 @@ def index(
     *,
     collection: str = "klake_chunks",
     settings: Settings | None = None,
+    duplicate_chunks: list[dict] | None = None,
 ) -> list[str]:
     """Upsert chunk vectors into the vector store with citation + enrichment payload.
 
@@ -153,11 +156,27 @@ def index(
         parsed_artifact_id:  ID of the parsed_document artifact (for 'document' payload).
         collection:          Qdrant alias name (default: 'klake_chunks').
         settings:            Settings override.
+        duplicate_chunks:    Chunks routed to ``dedup_chunks()``'s ``duplicates``
+                              bucket (DEDUP-02/03) — each already carries a
+                              ``point_id``/``text_sha256`` annotation and an
+                              existing Qdrant point. For each one, this appends
+                              a contributor to its ledger row (Postgres, source
+                              of truth, D-13) BEFORE mirroring a capped,
+                              primary-first ``contributors[]`` + exact
+                              ``contributor_count`` onto the existing Qdrant
+                              point via ``vstore.set_payload()`` — never a full
+                              payload overwrite (D-24). If the point has
+                              vanished out-of-band, self-heals by re-embedding
+                              and upserting a fresh point under the SAME
+                              deterministic ``point_id`` and repairing the
+                              ledger row's primary_* fields (D-24). Additive-
+                              default: omitting this parameter entirely
+                              preserves pre-existing behavior byte-for-byte.
 
     Returns:
         List of chunk_ids that were indexed (same order as input).
     """
-    if not chunks:
+    if not chunks and not duplicate_chunks:
         return []
 
     if len(chunks) != len(vectors):
@@ -210,7 +229,12 @@ def index(
     points: list[VectorPoint] = []
     for chunk, vector in zip(chunks, vectors, strict=True):
         full_chunk_id = chunk["chunk_id"]
-        qdrant_point_id = _strip_prefix(full_chunk_id)
+        # DEDUP-02: chunks routed through dedup_chunks() (Plan 21-04) carry a
+        # deterministic point_id (uuid5 of the normalized text's sha256, D-06);
+        # any caller that never went through dedup has no point_id key and
+        # falls back to the pre-existing _strip_prefix(chunk_id) scheme (D-07)
+        # unchanged.
+        qdrant_point_id = chunk.get("point_id") or _strip_prefix(full_chunk_id)
         payload = {
             "document": parsed_artifact_id,
             "section_path": chunk.get("section_path", ""),
@@ -241,12 +265,158 @@ def index(
             )
         )
 
-    log.info("index.upsert", collection=collection, count=len(points))
-    vstore.upsert(collection, points)
+    if points:
+        log.info("index.upsert", collection=collection, count=len(points))
+        vstore.upsert(collection, points)
+
+    if duplicate_chunks:
+        now = datetime.datetime.now(datetime.UTC)
+        self_healed: list[dict] = []
+
+        for dup_chunk in duplicate_chunks:
+            # One get_session() per duplicate chunk is acceptable here — this
+            # branch is not a hot loop over thousands of items per call,
+            # unlike the primary new-chunk path above.
+            with get_session() as session:
+                ledger_row = registry_repo.get_dedup_ledger_entry(
+                    session, collection=collection, text_sha256=dup_chunk["text_sha256"]
+                )
+                if ledger_row is None:
+                    raise RuntimeError(
+                        f"index: no dedup ledger row for "
+                        f"text_sha256={dup_chunk['text_sha256']!r} in collection "
+                        f"{collection!r} — dedup_chunks() must run before index()"
+                    )
+                registry_repo.append_dedup_contributor(
+                    session,
+                    ledger_row,
+                    chunk_id=dup_chunk["chunk_id"],
+                    document=parsed_artifact_id,
+                    source_id=fields["source_id"],
+                    created_at=now,
+                )
+                all_contributors = list(ledger_row.contributors)
+                total_count = ledger_row.contributor_count
+                primary_chunk_id = ledger_row.primary_chunk_id
+                # ORDERING INVARIANT: the session commits on clean exit HERE,
+                # before the vstore.set_payload call below — ledger durable
+                # before the Qdrant write, mirroring the alias-registration
+                # precedent documented above in this function.
+
+            capped = _build_capped_contributors_mirror(
+                all_contributors, primary_chunk_id, s.dedup.contributor_cap
+            )
+
+            ok = vstore.set_payload(
+                collection,
+                dup_chunk["point_id"],
+                {"contributors": capped, "contributor_count": total_count},
+            )
+            if not ok:
+                # The Qdrant point vanished out-of-band (e.g. a wiped
+                # collection) — demote to a fresh embed+upsert below (D-24).
+                self_healed.append(dup_chunk)
+
+        if self_healed:
+            log.warning("index.dedup.self_heal", collection=collection, count=len(self_healed))
+            # Function-local import — avoids a module-level circular-import
+            # risk between index.py and embed.py.
+            from knowledge_lake.pipeline.embed import embed
+
+            healed_vectors, _healed_dim = embed(self_healed, settings=s)
+            healed_points: list[VectorPoint] = []
+            for healed_chunk, healed_vector in zip(self_healed, healed_vectors, strict=True):
+                with get_session() as session:
+                    ledger_row = registry_repo.get_dedup_ledger_entry(
+                        session,
+                        collection=collection,
+                        text_sha256=healed_chunk["text_sha256"],
+                    )
+                    if ledger_row is None:
+                        raise RuntimeError(
+                            f"index: no dedup ledger row for text_sha256="
+                            f"{healed_chunk['text_sha256']!r} in collection "
+                            f"{collection!r} during self-heal — this should be "
+                            "unreachable since the row was already found once "
+                            "in the loop above"
+                        )
+                    # D-24: the ledger row is repaired to point at the
+                    # re-created point — direct ORM-attribute mutation on the
+                    # already-fetched tracked object, committed on clean exit.
+                    ledger_row.primary_chunk_id = healed_chunk["chunk_id"]
+                    ledger_row.primary_parsed_artifact_id = parsed_artifact_id
+                    ledger_row.primary_source_id = fields["source_id"]
+                    ledger_row.primary_created_at = now
+                    all_contributors = list(ledger_row.contributors)
+                    total_count = ledger_row.contributor_count
+
+                capped = _build_capped_contributors_mirror(
+                    all_contributors, healed_chunk["chunk_id"], s.dedup.contributor_cap
+                )
+                healed_payload = {
+                    "document": parsed_artifact_id,
+                    "section_path": healed_chunk.get("section_path", ""),
+                    "page": healed_chunk.get("page", 1),
+                    "chunk_id": healed_chunk["chunk_id"],
+                    "qdrant_id": healed_chunk["point_id"],
+                    "text": healed_chunk.get("text", ""),
+                    "domain": domain,
+                    "document_type": document_type,
+                    "keywords": keywords,
+                    "quality_score": quality_score,
+                    "source_id": source_id_val,
+                    "source_name": source_name,
+                    "source_url": source_url,
+                    "format": fmt,
+                    "tags": tags,
+                    "title": title,
+                    "organization": organization,
+                    "contributors": capped,
+                    "contributor_count": total_count,
+                }
+                healed_points.append(
+                    VectorPoint(
+                        id=healed_chunk["point_id"],
+                        vector=healed_vector,
+                        payload=healed_payload,
+                        sparse=embed_sparse_doc(healed_chunk.get("text", "")),
+                    )
+                )
+            vstore.upsert(collection, healed_points)
 
     indexed_ids = [c["chunk_id"] for c in chunks]
     log.info("index.complete", collection=collection, indexed=len(indexed_ids))
     return indexed_ids
+
+
+def _build_capped_contributors_mirror(
+    all_contributors: list[dict], primary_chunk_id: str, cap: int
+) -> list[dict]:
+    """Build the capped, primary-first Qdrant contributors mirror (D-23).
+
+    ``contributors[0]`` is ALWAYS the ledger row's current primary contributor
+    entry, regardless of insertion order or timestamp ties among the rest —
+    achieved by pulling the primary's own entry out first, then sorting only
+    the REMAINING entries by ``(created_at, chunk_id)`` for the rest of the
+    cap. A single global sort over all entries (primary included) could
+    displace the primary when timestamps tie or when a self-heal repair sets
+    ``primary_created_at`` to a later time than some existing contributor.
+    """
+    primary_entry: dict | None = None
+    remaining: list[dict] = []
+    for entry in all_contributors:
+        if primary_entry is None and entry["chunk_id"] == primary_chunk_id:
+            primary_entry = entry
+        else:
+            remaining.append(entry)
+    if primary_entry is None:
+        raise RuntimeError(
+            f"index: primary_chunk_id={primary_chunk_id!r} not found in this "
+            "ledger row's own contributors list — the primary is always "
+            "appended as contributors[0] at claim time and must be present"
+        )
+    remaining.sort(key=lambda e: (e["created_at"], e["chunk_id"]))
+    return [primary_entry, *remaining[: cap - 1]]
 
 
 def _build_payload_refresh_fn(settings: Settings | None = None):
@@ -325,6 +495,17 @@ def reindex_collection(
         ``refresh_payload`` is ignored when ``hybrid=True`` — the hybrid path
         does not currently also refresh the payload; reindex twice (hybrid
         first, refresh_payload second) if both are needed.
+
+    Dual-ID-scheme note (D-08, forward-only): points indexed before this
+    phase carry ``_strip_prefix(chunk_id)``-derived IDs; points indexed after
+    carry ``uuid5(KLAKE_DEDUP_NAMESPACE, text_sha256)``-derived IDs (Plan
+    21-02/21-04/21-05). ``copy_all_points()``/``refresh_all_points_payload()``
+    copy every point verbatim BY ITS EXISTING ID — this function must NEVER
+    attempt to re-key a legacy point to the new scheme. A transitional
+    collection legitimately holds both ID schemes simultaneously; this is
+    accepted, not a bug (see this phase's CONTEXT.md D-08). A future
+    ``reindex --rekey`` mode is the correct home for collapsing this, not a
+    change to this function.
 
     Args:
         collection:      Qdrant alias name to reindex (default: 'klake_chunks').
