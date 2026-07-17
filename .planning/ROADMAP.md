@@ -94,7 +94,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 - [x] **Phase 18: Gate Decouple** - Sever the re-crawl change gate from evolving clean patterns (parallelizable with 17) (completed 2026-07-16)
 - [x] **Phase 19: Section Classifier + Patterns** - Section-aware filtering with substance annotations, extended patterns, domain-pack allowlists (completed 2026-07-17)
 - [x] **Phase 20: Chunk Substance Gate + Export Gate** - Reject garbage at chunk scope, gate gold export on chunk-level quality signal (completed 2026-07-17)
-- [ ] **Phase 21: Index-Time Dedup** - Corpus-wide exact dedup between chunk and embed with idempotent point IDs
+- [x] **Phase 21: Index-Time Dedup** - Corpus-wide exact dedup between chunk and embed with idempotent point IDs (completed 2026-07-17)
 
 ## Phase Details
 
@@ -205,7 +205,7 @@ Plans:
   2. Re-processing the same document produces the same point ID — re-index is idempotent by construction via `uuid5(NAMESPACE, sha256(normalized_text))`
   3. A deduplicated point is filterable by source_id, domain, and format — the `contributors[]` field lists all source documents that contained this text, with primary determined by earliest `created_at`
 
-**Plans:** 8/8 plans executed
+**Plans:** 8/8 plans complete
 
 Plans:
 **Wave 1**
@@ -281,4 +281,4 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 4/4 | Complete    | 2026-07-17 |
-| 21 | v2.6 Index-Time Dedup | 8/8 | In Progress|  |
+| 21 | v2.6 Index-Time Dedup | 8/8 | Complete    | 2026-07-17 |
