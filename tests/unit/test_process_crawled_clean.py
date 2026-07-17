@@ -125,6 +125,9 @@ class TestProcessCrawledCleanWiring:
         )
         mock_clean = MagicMock(return_value={"cleaned_doc": object()})
         mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_dedup = MagicMock(
+            return_value={"new": [{"chunk_id": "c1"}], "duplicates": []}
+        )
         mock_embed = MagicMock(return_value=([[0.1]], 1))
         mock_index = MagicMock(return_value=None)
 
@@ -132,6 +135,7 @@ class TestProcessCrawledCleanWiring:
             patch("knowledge_lake.pipeline.parse.parse", mock_parse),
             patch("knowledge_lake.pipeline.clean.clean", mock_clean),
             patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.dedup.dedup_chunks", mock_dedup),
             patch("knowledge_lake.pipeline.embed.embed", mock_embed),
             patch("knowledge_lake.pipeline.index.index", mock_index),
         ):
@@ -155,6 +159,9 @@ class TestProcessCrawledCleanWiring:
         mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, raw_parsed_doc))
         mock_clean = MagicMock(return_value={"cleaned_doc": cleaned_doc_sentinel})
         mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_dedup = MagicMock(
+            return_value={"new": [{"chunk_id": "c1"}], "duplicates": []}
+        )
         mock_embed = MagicMock(return_value=([[0.1]], 1))
         mock_index = MagicMock(return_value=None)
 
@@ -162,6 +169,7 @@ class TestProcessCrawledCleanWiring:
             patch("knowledge_lake.pipeline.parse.parse", mock_parse),
             patch("knowledge_lake.pipeline.clean.clean", mock_clean),
             patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.dedup.dedup_chunks", mock_dedup),
             patch("knowledge_lake.pipeline.embed.embed", mock_embed),
             patch("knowledge_lake.pipeline.index.index", mock_index),
         ):
@@ -185,6 +193,9 @@ class TestProcessCrawledCleanWiring:
         mock_parse = MagicMock(return_value=({"artifact_id": "parsed-fixed-id"}, object()))
         mock_clean = MagicMock(return_value={"cleaned_doc": object()})
         mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_dedup = MagicMock(
+            return_value={"new": [{"chunk_id": "c1"}], "duplicates": []}
+        )
         mock_embed = MagicMock(return_value=([[0.1]], 1))
         mock_index = MagicMock(return_value=None)
 
@@ -192,6 +203,7 @@ class TestProcessCrawledCleanWiring:
             patch("knowledge_lake.pipeline.parse.parse", mock_parse),
             patch("knowledge_lake.pipeline.clean.clean", mock_clean),
             patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.dedup.dedup_chunks", mock_dedup),
             patch("knowledge_lake.pipeline.embed.embed", mock_embed),
             patch("knowledge_lake.pipeline.index.index", mock_index),
         ):
@@ -315,6 +327,9 @@ class TestProcessCrawledDomainFilters:
         mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
         mock_clean = MagicMock(return_value={"cleaned_doc": object()})
         mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_dedup = MagicMock(
+            return_value={"new": [{"chunk_id": "c1"}], "duplicates": []}
+        )
         mock_embed = MagicMock(return_value=([[0.1]], 1))
         mock_index = MagicMock(return_value=None)
 
@@ -327,6 +342,7 @@ class TestProcessCrawledDomainFilters:
             patch("knowledge_lake.pipeline.parse.parse", mock_parse),
             patch("knowledge_lake.pipeline.clean.clean", mock_clean),
             patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.dedup.dedup_chunks", mock_dedup),
             patch("knowledge_lake.pipeline.embed.embed", mock_embed),
             patch("knowledge_lake.pipeline.index.index", mock_index),
         ):
@@ -365,6 +381,9 @@ class TestProcessCrawledDomainFilters:
         mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
         mock_clean = MagicMock(return_value={"cleaned_doc": object()})
         mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_dedup = MagicMock(
+            return_value={"new": [{"chunk_id": "c1"}], "duplicates": []}
+        )
         mock_embed = MagicMock(return_value=([[0.1]], 1))
         mock_index = MagicMock(return_value=None)
 
@@ -377,6 +396,7 @@ class TestProcessCrawledDomainFilters:
             patch("knowledge_lake.pipeline.parse.parse", mock_parse),
             patch("knowledge_lake.pipeline.clean.clean", mock_clean),
             patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.dedup.dedup_chunks", mock_dedup),
             patch("knowledge_lake.pipeline.embed.embed", mock_embed),
             patch("knowledge_lake.pipeline.index.index", mock_index),
         ):
