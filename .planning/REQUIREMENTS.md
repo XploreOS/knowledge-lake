@@ -222,5 +222,5 @@ Quality filter settings must be versioned (reuse the proven `_curation_cache_key
 | EXPORT-01 | Phase 20 | Pending |
 | EXPORT-02 | Phase 20 | Pending |
 | MEAS-01 | Phase 17 | Complete |
-| MEAS-02 | Phase 20 | Pending |
+| MEAS-02 | Phase 20 | Complete |
 | PIPE-01 | Phase 20 | Complete |

@@ -178,7 +178,7 @@ Plans:
   4. A document with mixed quality (clinical tables + cookie banners) exports only the clinical chunks to gold — the 33% junk in gold drops to near-zero
   5. Changing a filter threshold invalidates the cache for affected artifacts and triggers re-processing on next run (reuses `_curation_cache_key` versioning pattern)
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -187,7 +187,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 20-02-PLAN.md — DomainLoader resolution threaded into chunk_document/process_crawled + healthcare filters.yaml cardinality pattern (QUAL-03, MEAS-02)
+- [x] 20-02-PLAN.md — DomainLoader resolution threaded into chunk_document/process_crawled + healthcare filters.yaml cardinality pattern (QUAL-03, MEAS-02)
 - [ ] 20-03-PLAN.md — Chunk-level export gate in export_rag_corpus() + eval dataset version tagging (EXPORT-01, EXPORT-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -256,5 +256,5 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 17 | v2.6 Close the Bypass + Measurement | 4/4 | Complete    | 2026-07-16 |
 | 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
-| 20 | v2.6 Chunk Substance Gate + Export Gate | 1/4 | In Progress|  |
+| 20 | v2.6 Chunk Substance Gate + Export Gate | 2/4 | In Progress|  |
 | 21 | v2.6 Index-Time Dedup | 0/0 | Not started | - |

@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 20
 current_phase_name: chunk-substance-gate-export-gate
 status: executing
-stopped_at: Completed 20-01-PLAN.md
-last_updated: "2026-07-17T03:01:58.252Z"
+stopped_at: Completed 20-02-PLAN.md
+last_updated: "2026-07-17T03:09:37.797Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 20 execution started
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 60
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 20 (chunk-substance-gate-export-gate) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 20 execution started
 
@@ -90,6 +90,7 @@ Last activity: 2026-07-17 — Phase 20 execution started
 | Phase 19 P03 | 6min | 2 tasks | 2 files |
 | Phase 19 P04 | 12 min | 2 tasks | 2 files |
 | Phase 20 P01 | 13min | 3 tasks | 4 files |
+| Phase 20 P02 | 6min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,8 @@ Last activity: 2026-07-17 — Phase 20 execution started
 - [Phase 19]: [Phase 19 P04] TDD RED phase tested classify_sections() directly (pure-function contract) rather than duplicating Task 2's clean()-level acceptance tests — Keeps the RED/GREEN cycle focused on the new function's own contract (nav vs. clinical classification, allowlist override) while Task 2 separately adds the full clean()-level integration tests as ordinary test additions, per the plan's task split.
 - [Phase ?]: 20-01: Extracted _apply_substance_gate() as a pure DB-free helper for independent unit-testability, rather than inlining gate logic directly in chunk()'s persistence loop
 - [Phase ?]: 20-01: ChunkQualitySettings.filter_config_version defaults to '1.0' (distinct from CurateSettings' 'v1') — chunk-gate cache is intentionally independent from document-level curation cache
+- [Phase ?]: 20-02: process.py resolves domain_filters via function-local get_settings() import (matching existing local-import convention) rather than adding a settings param to process_crawled()'s public signature
+- [Phase ?]: 20-02: New domain_filters wiring tests patch knowledge_lake.config.settings.get_settings and knowledge_lake.domains.loader.DomainLoader.from_name (source modules), mirroring this file's established interception pattern
 
 ### Pending Todos
 
@@ -177,8 +180,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T03:01:58.235Z
-Stopped at: Completed 20-01-PLAN.md
+Last session: 2026-07-17T03:09:37.785Z
+Stopped at: Completed 20-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
