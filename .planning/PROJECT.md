@@ -8,9 +8,9 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.6-in-progress, Phase 17 complete 2026-07-16)
+## Current State (v2.6-in-progress, Phase 19 complete 2026-07-17)
 
-- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement)
+- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement) · Phase 18 complete (Gate Decouple) · Phase 19 complete (Section Classifier + Patterns)
 - **Source lines:** ~26,000 Python (src) + ~24,300 (tests)
 - **Tests:** 994 passing, 0 failed, 0 xpassed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
 - **Pipeline:** ingest → parse → **clean (now active on all paths)** → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
@@ -24,9 +24,10 @@ Every domain resource ingested must be traceable from raw source through every t
 - **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search, `/export-wiki`
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
 - **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; v2.5 milestone audit PASSED (19/19 requirements, 5/5 E2E flows); E2E gap analysis closed — all 19 findings resolved
-- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets
+- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets; `check_table_exemption()` predicate is currently a no-op for real documents — no builtin parser ever sets `Section.is_table=True` yet, so the domain allowlist (not the table exemption) is what actually protects tabular clinical content today (Phase 19 research finding)
 - **Phase 17 complete:** Clean-stage bypass closed on both Dagster and CLI paths; WR-05 content hash scoping applied; conservation invariant (`rejected+kept==sections_considered`) wired; `klake quality-audit` harness ships a reproducible per-source garbage-rate table. 25/25 must-haves verified passed 2026-07-16.
 - **Phase 18 complete:** Re-crawl change gate decoupled from `BOILERPLATE_PATTERNS` — `_GATE_BOILERPLATE_PATTERNS` frozen in `crawl.py`, `_gate_normalize()` added, `remove_boilerplate` import removed, byte-stability pinning test ships. 5/5 must-haves verified passed 2026-07-16.
+- **Phase 19 complete:** Section-level boilerplate classification ships — `classify_sections()` computes substance signals (link_density, terminal_punct_ratio, stopword_ratio, token_count) and actually drops boilerplate sections in `clean()`; `BOILERPLATE_PATTERNS` extended 4→9 entries (5 new garbage categories); `pipeline/quality/` pure predicate module (7 predicates, zero I/O, 100% branch coverage) ships for reuse by Phase 20; `DomainFilters` + `domains/healthcare/filters.yaml` protect clinical codes (ICD-10/LOINC/RxNorm/dosage patterns) from removal. Post-merge code review found and fixed 2 critical issues (an overbroad marketing-CTA regex that would have dropped legitimate clinical enrollment text, and missing `extra="forbid"` on domain-pack Pydantic models). 15/15 must-haves verified passed 2026-07-17.
 
 ## Next Milestone: v2.6 Data Quality & Enrichment
 
@@ -141,7 +142,7 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 
 - [ ] Cleaned text consumed by chunk/tree/enrich (close the clean-stage bypass)
 - [ ] Crawler-level boilerplate stripping (forward-only; raw zone immutability preserved)
-- [ ] Section-level boilerplate classification (deterministic-first)
+- [x] Section-level boilerplate classification (deterministic-first) — Phase 19
 - [ ] Minimum-substance gate at chunk (no floor exists today — `ChunkSettings` has only max/overlap/tokenizer)
 - [ ] Index-time dedup preserving per-document chunk lineage (WR-05)
 - [ ] Quality gate on gold RAG corpus export
@@ -232,4 +233,4 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-16 after Phase 18 (Gate Decouple) verified passed*
+*Last updated: 2026-07-17 after Phase 19 (Section Classifier + Patterns) verified passed*
