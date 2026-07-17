@@ -169,7 +169,7 @@ Best:
 
 Task 1 (`Run the real measurement against the live 34-source healthcare corpus and record results`) declares `files_modified: []` in this plan's frontmatter — it performs a live measurement run and produces no source-code changes. Its sole artifact is this `22-03-SUMMARY.md`, committed as:
 
-1. **Task 1: Run the real measurement and record results** - captured in the `docs(22-03)` commit immediately following this file's creation (see `git log --oneline -1 -- .planning/phases/22-address-tech-debt-measure-garbage-junk-rates-end-to-end-reco/22-03-SUMMARY.md`)
+1. **Task 1: Run the real measurement and record results** - `acb8c84` (docs)
 
 **Plan metadata:** captured in the final `docs(22-03): complete` commit alongside STATE.md/ROADMAP.md/REQUIREMENTS.md updates.
 
@@ -234,3 +234,8 @@ to reconcile each phase's `VALIDATION.md` `status`/`nyquist_compliant` fields fr
 ---
 *Phase: 22-address-tech-debt-measure-garbage-junk-rates-end-to-end-reco*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+
+- FOUND: .planning/phases/22-address-tech-debt-measure-garbage-junk-rates-end-to-end-reco/22-03-SUMMARY.md
+- FOUND: commit acb8c84

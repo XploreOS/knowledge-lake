@@ -4,17 +4,17 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 22
 current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
-status: executing
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-07-17T18:25:36.462Z"
+status: verifying
+stopped_at: Completed 22-03-PLAN.md
+last_updated: "2026-07-17T19:45:33.108Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 22 execution started
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 24
-  completed_plans: 23
-  percent: 83
+  completed_plans: 24
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 22 (address-tech-debt-measure-garbage-junk-rates-end-to-end-reco) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17 — Phase 22 execution started
 
 ## Performance Metrics
@@ -105,6 +105,7 @@ Last activity: 2026-07-17 — Phase 22 execution started
 | Phase 21 P08 | 18min | 2 tasks | 2 files |
 | Phase 22 P01 | 16min | 2 tasks | 3 files |
 | Phase 22 P02 | 6min | 1 tasks | 2 files |
+| Phase 22 P03 | 73min | 1 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,7 @@ Last activity: 2026-07-17 — Phase 22 execution started
 - [Phase ?]: Phase 22 P01: export read-back uses export.py's _make_storage() factory (not a fresh StorageBackend) so tests can patch one storage double for both export_rag_corpus()'s write and the caller's read-back
 - [Phase ?]: Phase 22 P01: this_run_chunk_ids initialized once before the per-source loop (corpus-wide, not per-source) so D-04 scoping spans every source in a single export_rag_corpus() call
 - [Phase ?]: Phase 22 P02: run_full_pipeline_audit()'s actual committed return shape matched the plan's <interfaces> contract exactly (no drift from Plan 22-01) — CLI wiring needed no adjustment
+- [Phase ?]: Phase 22 P03: chunk_garbage_rate (45.64%) measures gate-rejection-rate of candidates, not garbage remaining in corpus -- export_junk_rate (0.0%, down from 33% baseline) is the direct successor metric to the milestone's original criteria and met its <2% target decisively
 
 ### Pending Todos
 
@@ -177,7 +179,7 @@ None yet.
 - [Phase 13]: PageIndex pinned to pre-release `0.3.0.dev3` — API may change; vendoring fallback plan exists but is untested.
 - [Phase 14]: Tree traversal prompt quality unvalidated — no ground-truth benchmarks for the healthcare domain.
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density.
-- [Wart, KL-01]: `_unclassified` still labels an all-domain export (`domain=None` means "no filter, all domains").
+- [Wart, KL-01]: `_unclassified` still labels an all-domain export (`domain=` means "no filter, all domains").
 
 **Standing gotchas — do not relearn these:**
 
@@ -188,6 +190,8 @@ None yet.
 - `docs/openapi.json` must be regenerated after adding any API endpoint (determinism gate: `test_openapi_export.py`).
 
 **Resolved in v2.5 (2026-07-15):** E2E gap analysis CLOSED — all 19 findings resolved (see `.planning/milestones/v2.5-E2E-GAP-ANALYSIS.md`). Includes KL-18 (three endpoints returning 500 via `DetachedInstanceError`), the Dockerfile landmine, and parse section persistence (the section-less path was collapsing 38 sections into 1 chunk; now 51 per-section chunks, ~30x faster). Suite: 971 passed, 0 failed.
+
+- Operator follow-up: run /gsd-validate-phase 17, 18, 19, 20, 21 to reconcile Nyquist validation status (D-08/D-09, per Phase 22-03-SUMMARY.md)
 
 ### Quick Tasks Completed
 
@@ -220,8 +224,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T18:25:36.445Z
-Stopped at: Completed 22-02-PLAN.md
+Last session: 2026-07-17T19:45:26.454Z
+Stopped at: Completed 22-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
