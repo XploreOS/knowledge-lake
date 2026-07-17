@@ -14,7 +14,7 @@ Commands:
   tree-search — two-stage tree retrieval over previously built tree indexes
   reindex     — zero-downtime reindex of a Qdrant alias (INDEX-02)
   lineage     — print ancestry tree (or JSON) for a given artifact ID
-  quality-audit — re-run parse+clean across a domain's sources and print a per-source garbage-rate table
+  quality-audit — re-run parse+clean across a domain's sources and print a per-source garbage-rate table (--full also measures chunk-level and export-level rates)
   demo        — run the full spike end-to-end (ingest → search → lineage)
 """
 
@@ -979,6 +979,14 @@ def cmd_quality_audit(
     as_json: bool = typer.Option(
         False, "--json", help="Output machine-readable JSON instead of a table."
     ),
+    full: bool = typer.Option(
+        False,
+        "--full",
+        help=(
+            "Also compute chunk-level and export-level measurements "
+            "(run_full_pipeline_audit) alongside the section-level table."
+        ),
+    ),
 ) -> None:
     """Re-run parse+clean across a domain's sources and print a per-source garbage-rate table.
 
@@ -987,7 +995,70 @@ def cmd_quality_audit(
     index() — no vector-store writes or embedding spend. garbage_rate uses
     the D-10 frozen formula ``rejected / (rejected + kept)``; a source with
     no considered sections prints "N/A", distinct from an explicit 0%.
+
+    With ``--full``, also re-runs chunk() and reads back export_rag_corpus()'s
+    output (D-04-scoped to this run's own chunks) to report chunk-level
+    garbage_rate and export-level junk_rate alongside the 28%/33% baselines
+    (MEAS-01 extended, Phase 22).
     """
+    if full:
+        from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
+
+        result = run_full_pipeline_audit(domain=domain)
+        rows = result["rows"]
+        summary = result["summary"]
+
+        if not rows:
+            typer.echo(f"No sources found for domain {domain!r}.")
+            return
+
+        if as_json:
+            typer.echo(json.dumps(result))
+            return
+
+        header = (
+            f"{'source_name':<30} {'considered':>10} {'kept':>6} {'rejected':>8} "
+            f"{'errored':>8} {'garbage_rate':>12} {'chunks_kept':>12} "
+            f"{'chunks_rej':>10} {'chunk_rate':>12}"
+        )
+        typer.echo(header)
+        typer.echo("-" * len(header))
+        for row in rows:
+            rate = row["garbage_rate"]
+            rate_display = "N/A" if rate is None else f"{rate:.1%}"
+            chunk_rate = row["chunk_garbage_rate"]
+            chunk_rate_display = "N/A" if chunk_rate is None else f"{chunk_rate:.1%}"
+            typer.echo(
+                f"{row['source_name']:<30} {row['sections_considered']:>10} "
+                f"{row['sections_kept']:>6} {row['sections_rejected']:>8} "
+                f"{row['documents_errored']:>8} {rate_display:>12} "
+                f"{row['chunks_kept']:>12} {row['chunks_rejected']:>10} "
+                f"{chunk_rate_display:>12}"
+            )
+
+        summary_chunk_rate = summary["chunk_garbage_rate"]
+        summary_chunk_rate_display = (
+            "N/A" if summary_chunk_rate is None else f"{summary_chunk_rate:.1%}"
+        )
+        baseline_chunk_rate_display = f"{summary['baseline_chunk_garbage_rate']:.1%}"
+        summary_junk_rate = summary["export_junk_rate"]
+        summary_junk_rate_display = (
+            "N/A" if summary_junk_rate is None else f"{summary_junk_rate:.1%}"
+        )
+        baseline_junk_rate_display = f"{summary['baseline_export_junk_rate']:.1%}"
+
+        typer.echo()
+        typer.echo(f"Corpus-wide summary for domain {summary['domain']!r}:")
+        typer.echo(
+            f"  chunk_garbage_rate: {summary_chunk_rate_display} "
+            f"(baseline: {baseline_chunk_rate_display})"
+        )
+        typer.echo(
+            f"  export_junk_rate:   {summary_junk_rate_display} "
+            f"(baseline: {baseline_junk_rate_display})"
+        )
+        return
+
     from knowledge_lake.pipeline.quality_audit import run_quality_audit
 
     rows = run_quality_audit(domain=domain)
