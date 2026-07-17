@@ -152,3 +152,82 @@ def test_chunk_without_domain_routes_under_unclassified(engine, fake_storage, te
     assert len(results) == 1
     key = fake_storage.put_object.call_args.args[0]
     assert key.startswith(f"chunks/{_UNCLASSIFIED_DOMAIN}/{source_id}/")
+
+
+# ── PIPE-01: filter_config_version cache versioning ──────────────────────────
+
+
+def test_chunk_different_filter_config_version_produces_different_content_hash(
+    engine, fake_storage, test_settings
+):
+    """Two chunk() calls on the identical ParsedDoc, one with
+    filter_config_version="1.0" and one with "2.0", produce DIFFERENT
+    content_hash values for the same chunk text (PIPE-01)."""
+    from knowledge_lake.config.settings import ChunkQualitySettings
+    from knowledge_lake.pipeline.chunk import chunk
+
+    source_id, parsed_id = _seed_source_and_parsed(engine, domain=None)
+    parsed_doc = ParsedDoc(
+        text="A generic paragraph with no domain classification whatsoever.",
+        sections=[],
+        metadata={},
+    )
+
+    v1_settings = test_settings.model_copy(
+        update={"chunk_quality": ChunkQualitySettings(filter_config_version="1.0")}
+    )
+    v2_settings = test_settings.model_copy(
+        update={"chunk_quality": ChunkQualitySettings(filter_config_version="2.0")}
+    )
+
+    results_v1 = chunk(parsed_id, source_id, parsed_doc, settings=v1_settings)
+    results_v2 = chunk(parsed_id, source_id, parsed_doc, settings=v2_settings)
+
+    assert results_v1[0]["content_hash"] != results_v2[0]["content_hash"]
+    assert results_v1[0]["artifact_id"] != results_v2[0]["artifact_id"]
+    # Different content_hash -> both are genuinely new writes, not a cache hit.
+    assert fake_storage.put_object.call_count == 2
+
+
+def test_chunk_same_filter_config_version_hits_existing_cache(engine, fake_storage, test_settings):
+    """Two chunk() calls with the SAME filter_config_version on the same input
+    still hit the pre-existing get_artifact_by_hash() cache (no duplicate S3
+    write, no duplicate artifact) — the PIPE-01 fix is additive to the hash
+    formula, not a new cache layer."""
+    from knowledge_lake.pipeline.chunk import chunk
+
+    source_id, parsed_id = _seed_source_and_parsed(engine, domain=None)
+    parsed_doc = ParsedDoc(
+        text="A generic paragraph with no domain classification whatsoever.",
+        sections=[],
+        metadata={},
+    )
+
+    results_1 = chunk(parsed_id, source_id, parsed_doc, settings=test_settings)
+    results_2 = chunk(parsed_id, source_id, parsed_doc, settings=test_settings)
+
+    assert results_1[0]["content_hash"] == results_2[0]["content_hash"]
+    assert results_1[0]["artifact_id"] == results_2[0]["artifact_id"]
+    assert fake_storage.put_object.call_count == 1
+
+
+def test_chunk_existing_hit_branch_carries_substance_gate_keys(engine, fake_storage, test_settings):
+    """Both the existing-hit branch and the new-artifact branch carry
+    substance_passed/rejection_reason keys sourced from the gate computation
+    (Task 2), not stale persisted metadata — the gate always recomputes fresh."""
+    from knowledge_lake.pipeline.chunk import chunk
+
+    source_id, parsed_id = _seed_source_and_parsed(engine, domain=None)
+    parsed_doc = ParsedDoc(
+        text="A generic paragraph with no domain classification whatsoever.",
+        sections=[],
+        metadata={},
+    )
+
+    results_new = chunk(parsed_id, source_id, parsed_doc, settings=test_settings)
+    assert results_new[0]["substance_passed"] is True
+    assert results_new[0]["rejection_reason"] is None
+
+    results_hit = chunk(parsed_id, source_id, parsed_doc, settings=test_settings)
+    assert results_hit[0]["substance_passed"] is True
+    assert results_hit[0]["rejection_reason"] is None
