@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: index-time-dedup
 status: executing
-stopped_at: Completed 21-05-PLAN.md
-last_updated: "2026-07-17T13:19:50.007Z"
+stopped_at: Completed 21-06-PLAN.md
+last_updated: "2026-07-17T13:28:46.954Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 21
-  completed_plans: 18
+  completed_plans: 19
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 21 (index-time-dedup) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 21 execution started
 
@@ -99,6 +99,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 | Phase 21 P03 | 8min | 2 tasks | 4 files |
 | Phase 21 P04 | 9min | 2 tasks | 2 files |
 | Phase 21 P05 | 11min | 2 tasks | 2 files |
+| Phase 21 P06 | 8min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 - [Phase ?]: 21-04: Conservation-invariant test calls _assert_dedup_conservation_invariant directly (mirrors chunk.py precedent) rather than monkeypatching claim_dedup_ledger_entry to desync counts, since the per-chunk loop structurally appends to exactly one bucket per successful claim
 - [Phase ?]: 21-05: Extended index()'s empty-input guard to (not chunks and not duplicate_chunks) so an all-duplicates document batch still runs the contributor-append branch
 - [Phase ?]: 21-05: Added explicit RuntimeError None-guards around get_dedup_ledger_entry() (self-heal loop) and _build_capped_contributors_mirror()'s primary-entry lookup, caught by mypy as new union-attr/list-item errors
+- [Phase ?]: 21-06: process_crawled() wires dedup_chunks() between chunk() and embed()/index(); 5 test_process_crawled_clean.py tests extended with pass-through dedup_chunks mocks to avoid KeyError('text') regression now that dedup_chunks() is a real required stage
 
 ### Pending Todos
 
@@ -202,8 +204,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T13:19:49.990Z
-Stopped at: Completed 21-05-PLAN.md
+Last session: 2026-07-17T13:28:46.942Z
+Stopped at: Completed 21-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
