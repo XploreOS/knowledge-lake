@@ -25,6 +25,9 @@ Functions:
     list_sources_for_crawl_all      — list all sources, optionally filtered by domain (CRAWL-02)
     register_vector_collection      — register/flip current physical collection for an alias (INDEX-02)
     get_current_vector_collection   — read the current physical collection for an alias (INDEX-02)
+    claim_dedup_ledger_entry        — atomically claim (collection, text_sha256) or return existing (DEDUP-01/02)
+    get_dedup_ledger_entry          — pure lookup of a dedup ledger row (DEDUP-01)
+    append_dedup_contributor        — append a contributor to a ledger row's contributors list (DEDUP-03)
 """
 
 from __future__ import annotations
@@ -34,11 +37,13 @@ from collections import namedtuple
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from knowledge_lake.ids import new_id
 from knowledge_lake.registry.models import (
     Artifact,
+    ChunkDedupLedger,
     CrawlState,
     Dataset,
     DatasetExample,
@@ -1139,6 +1144,134 @@ def get_current_vector_collection(
         .limit(1)
     )
     return session.execute(stmt).scalar_one_or_none()
+
+
+# ── Chunk dedup ledger (DEDUP-01..03) ──────────────────────────────────────────
+
+
+def claim_dedup_ledger_entry(
+    session: Session,
+    *,
+    collection: str,
+    text_sha256: str,
+    point_id: str,
+    chunk_id: str,
+    parsed_artifact_id: str,
+    source_id: str | None,
+    created_at: datetime.datetime,
+) -> tuple[ChunkDedupLedger, bool]:
+    """Atomically claim ``(collection, text_sha256)`` as a NEW primary, or
+    return the row that already won the race (D-14).
+
+    Uses ``INSERT ... ON CONFLICT (collection, text_sha256) DO NOTHING
+    ... RETURNING`` -- the only correct way to detect first-writer status on
+    this project's exact psycopg3 + SQLAlchemy 2.0.51 pin.
+    ``CursorResult``'s rowcount attribute returns -1 for this statement shape
+    regardless of outcome (empirically verified against live Postgres 16);
+    never branch on it.
+
+    Returns ``(row, True)`` if this call created the row (new primary), or
+    ``(row, False)`` if another caller already claimed this key first -- in
+    which case ``row`` is the pre-existing (winning) row, untouched by this
+    call. The losing caller does NOT become a contributor here; contributor
+    appending is a separate, later concern (see ``append_dedup_contributor``).
+    """
+    primary_contributor = {
+        "chunk_id": chunk_id,
+        "document": parsed_artifact_id,
+        "source_id": source_id,
+        "created_at": created_at.isoformat(),
+    }
+
+    stmt = (
+        pg_insert(ChunkDedupLedger)
+        .values(
+            id=new_id("artifact"),
+            collection=collection,
+            text_sha256=text_sha256,
+            point_id=point_id,
+            primary_chunk_id=chunk_id,
+            primary_parsed_artifact_id=parsed_artifact_id,
+            primary_source_id=source_id,
+            primary_created_at=created_at,
+            contributors=[primary_contributor],
+            contributor_count=1,
+        )
+        .on_conflict_do_nothing(index_elements=["collection", "text_sha256"])
+        .returning(ChunkDedupLedger.id)
+    )
+    won = session.execute(stmt).fetchall()
+
+    if won:
+        row = session.get(ChunkDedupLedger, won[0][0])
+        return row, True
+
+    # Lost the race -- re-select the existing (winning) row. Do NOT mutate it
+    # here; the losing caller only routes the chunk.
+    existing = session.execute(
+        select(ChunkDedupLedger)
+        .where(ChunkDedupLedger.collection == collection)
+        .where(ChunkDedupLedger.text_sha256 == text_sha256)
+    ).scalar_one()
+    return existing, False
+
+
+def get_dedup_ledger_entry(
+    session: Session,
+    *,
+    collection: str,
+    point_id: str | None = None,
+    text_sha256: str | None = None,
+) -> ChunkDedupLedger | None:
+    """Pure lookup of a dedup ledger row -- no insert, never raises for a miss
+    (mirrors ``get_artifact_by_hash``'s ``scalar_one_or_none()`` shape).
+
+    Exactly one of ``point_id``/``text_sha256`` must be given; raises
+    ``ValueError`` if both or neither are provided.
+    """
+    if (point_id is None) == (text_sha256 is None):
+        raise ValueError(
+            "get_dedup_ledger_entry requires exactly one of point_id or text_sha256"
+        )
+
+    stmt = select(ChunkDedupLedger).where(ChunkDedupLedger.collection == collection)
+    if text_sha256 is not None:
+        stmt = stmt.where(ChunkDedupLedger.text_sha256 == text_sha256)
+    else:
+        stmt = stmt.where(ChunkDedupLedger.point_id == point_id)
+
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def append_dedup_contributor(
+    session: Session,
+    ledger_row: ChunkDedupLedger,
+    *,
+    chunk_id: str,
+    document: str,
+    source_id: str | None,
+    created_at: datetime.datetime,
+) -> ChunkDedupLedger:
+    """Append one contributor to the ledger's UNBOUNDED ``contributors`` list
+    (D-13 -- the ledger never caps; only the Qdrant mirror caps, and that
+    capping is the caller's job).
+
+    ``contributor_count`` is derived from the new list's length -- never an
+    independent increment, so it cannot drift. The caller is responsible for
+    committing the session; this function only mutates the tracked ORM object.
+    """
+    new_contributors = list(ledger_row.contributors or [])
+    new_contributors.append(
+        {
+            "chunk_id": chunk_id,
+            "document": document,
+            "source_id": source_id,
+            "created_at": created_at.isoformat(),
+        }
+    )
+    ledger_row.contributors = new_contributors
+    ledger_row.contributor_count = len(new_contributors)
+    return ledger_row
 
 
 # ── Dataset registry (DATA-01..03) ────────────────────────────────────────────
