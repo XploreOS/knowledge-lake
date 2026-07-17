@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: index-time-dedup
 status: executing
-stopped_at: Completed 21-04-PLAN.md
-last_updated: "2026-07-17T13:07:55.095Z"
+stopped_at: Completed 21-05-PLAN.md
+last_updated: "2026-07-17T13:19:50.007Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 18
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 21 (index-time-dedup) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 21 execution started
 
@@ -98,6 +98,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 | Phase 21 P02 | 5min | 2 tasks | 3 files |
 | Phase 21 P03 | 8min | 2 tasks | 4 files |
 | Phase 21 P04 | 9min | 2 tasks | 2 files |
+| Phase 21 P05 | 11min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Last activity: 2026-07-17 — Phase 21 execution started
 - [Phase ?]: 21-03: No speculative retrieve() pre-check added before set_payload() — the try/except merge call IS the existence check, in one round trip (D-26)
 - [Phase ?]: 21-04: dedup_chunks() router atomically claims each chunk against the corpus-wide ChunkDedupLedger in a single get_session() transaction, satisfying D-14's ordering invariant (ledger durable before any subsequent Qdrant write)
 - [Phase ?]: 21-04: Conservation-invariant test calls _assert_dedup_conservation_invariant directly (mirrors chunk.py precedent) rather than monkeypatching claim_dedup_ledger_entry to desync counts, since the per-chunk loop structurally appends to exactly one bucket per successful claim
+- [Phase ?]: 21-05: Extended index()'s empty-input guard to (not chunks and not duplicate_chunks) so an all-duplicates document batch still runs the contributor-append branch
+- [Phase ?]: 21-05: Added explicit RuntimeError None-guards around get_dedup_ledger_entry() (self-heal loop) and _build_capped_contributors_mirror()'s primary-entry lookup, caught by mypy as new union-attr/list-item errors
 
 ### Pending Todos
 
@@ -199,8 +202,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T13:07:55.083Z
-Stopped at: Completed 21-04-PLAN.md
+Last session: 2026-07-17T13:19:49.990Z
+Stopped at: Completed 21-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
