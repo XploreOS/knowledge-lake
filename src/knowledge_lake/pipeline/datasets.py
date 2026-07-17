@@ -379,6 +379,7 @@ def generate_qa_example(
                 "answer": result.answer,
                 "citation_chunk_id": chunk_id,  # programmatic assignment
                 "_cache_key": synthetic_key,
+                "version": s.chunk_quality.filter_config_version,  # D-11
             },
         )
         session.flush()
@@ -543,6 +544,7 @@ def generate_instruction_example(
                 "input": result.input,
                 "output": result.output,
                 "_cache_key": synthetic_key,
+                "version": s.chunk_quality.filter_config_version,  # D-12
             },
         )
         session.flush()
