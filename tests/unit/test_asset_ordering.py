@@ -175,6 +175,61 @@ class TestCorePipelineE2eJobSelectionPreservesOrdering:
             f"core_pipeline_e2e_job. Parents within job: {chunk_parents}"
         )
 
+    def test_job_selection_contains_dedup_chunks(self) -> None:
+        """DEDUP-01: dedup_chunks must be present in the job's selection.
+
+        Omitting it would silently break the chunk_document -> embed_chunks
+        edge for this job — the same class of regression KL-06 fixed for
+        curate_document_asset (Pitfall 1, 21-07-PLAN.md).
+        """
+        job = self._resolved_job()
+        selected = set(job.asset_layer.executable_asset_keys)
+
+        assert AssetKey("dedup_chunks") in selected, (
+            "core_pipeline_e2e_job's selection must contain dedup_chunks "
+            "(DEDUP-01) — excluding it makes Dagster drop the "
+            "chunk_document -> embed_chunks ordering/data edge for this job, "
+            "the same class of regression KL-06 fixed for curate_document_asset. "
+            f"Selected: {sorted(k.to_user_string() for k in selected)}"
+        )
+
+    def test_dedup_chunks_is_ancestor_and_executable_for_index_chunks(self) -> None:
+        """Ancestry alone is NOT enough — dedup_chunks must also be EXECUTABLE
+        within the job (see test_index_chunks_ancestors_within_job_are_executable_in_the_job
+        for why a pure ancestry assertion is a vacuous guard on its own).
+        """
+        job = self._resolved_job()
+        job_asset_graph = job.asset_layer.asset_graph
+        ancestors = set(job_asset_graph.get_ancestor_asset_keys(AssetKey("index_chunks")))
+        executable = set(job.asset_layer.executable_asset_keys)
+
+        key = AssetKey("dedup_chunks")
+        assert key in ancestors, (
+            "Within core_pipeline_e2e_job, index_chunks must have dedup_chunks as an "
+            f"ancestor (DEDUP-01). Ancestors: {sorted(k.to_user_string() for k in ancestors)}"
+        )
+        assert key in executable, (
+            "dedup_chunks is an ancestor of index_chunks but is NOT executable in "
+            "core_pipeline_e2e_job — Dagster pulled it into the job graph as an "
+            "external node and will never materialize it, so the chunk_document -> "
+            "embed_chunks edge is not enforced and the KL-06-shaped race is live. Add "
+            f"it to the job's selection. Executable: {sorted(k.to_user_string() for k in executable)}"
+        )
+
+    def test_embed_chunks_ordering_edge_survives_inside_the_job(self) -> None:
+        """The specific edge that would silently vanish if dedup_chunks were
+        excluded from the selection (the exact KL-06-shaped failure mode this
+        guard exists to catch).
+        """
+        job = self._resolved_job()
+        job_asset_graph = job.asset_layer.asset_graph
+        embed_parents = job_asset_graph.get(AssetKey("embed_chunks")).parent_keys
+
+        assert AssetKey("dedup_chunks") in embed_parents, (
+            "embed_chunks' dedup_chunks data-dependency edge must survive inside "
+            f"core_pipeline_e2e_job. Parents within job: {embed_parents}"
+        )
+
     def test_generate_dataset_stays_excluded_from_the_job(self) -> None:
         """generate_dataset's exclusion IS legitimate — it needs source_artifact_id
         run config (Pitfall 6 / T-06-14), unlike curate_document_asset which takes
