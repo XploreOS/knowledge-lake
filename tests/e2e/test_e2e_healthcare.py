@@ -69,12 +69,13 @@ def _build_resources():
 
 
 def _materialize_one(fixture_path: Path, source_name: str, mime_type: str) -> Any:
-    """Materialize the 7-asset core pipeline for a single fixture document."""
+    """Materialize the 8-asset core pipeline for a single fixture document."""
     from dagster import materialize
 
     from knowledge_lake.dagster_defs.assets import (
         chunk_document,
         clean_document,
+        dedup_chunks,
         embed_chunks,
         enrich_document,
         index_chunks,
@@ -89,6 +90,7 @@ def _materialize_one(fixture_path: Path, source_name: str, mime_type: str) -> An
             clean_document,
             chunk_document,
             enrich_document,
+            dedup_chunks,
             embed_chunks,
             index_chunks,
         ],
