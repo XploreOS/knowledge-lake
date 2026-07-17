@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
-current_phase: 21
-status: completed
-stopped_at: Phase 22 context gathered
-last_updated: "2026-07-17T16:10:49.417Z"
+current_phase: 22
+current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
+status: executing
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-07-17T18:18:11.902Z"
 last_activity: 2026-07-17
-last_activity_desc: Phase 21 complete
+last_activity_desc: Phase 22 execution started
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 24
+  completed_plans: 22
   percent: 83
-current_phase_name: index-time-dedup
 ---
 
 # Project State
@@ -24,14 +24,14 @@ current_phase_name: index-time-dedup
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 21 — index-time-dedup
+**Current focus:** Phase 22 — address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-07-17 — Phase 21 complete
+Phase: 22 (address-tech-debt-measure-garbage-junk-rates-end-to-end-reco) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-07-17 — Phase 22 execution started
 
 ## Performance Metrics
 
@@ -103,6 +103,7 @@ Last activity: 2026-07-17 — Phase 21 complete
 | Phase 21 P06 | 8min | 1 tasks | 3 files |
 | Phase 21 P07 | 7min | 2 tasks | 3 files |
 | Phase 21 P08 | 18min | 2 tasks | 2 files |
+| Phase 22 P01 | 16min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,8 @@ Last activity: 2026-07-17 — Phase 21 complete
 - [Phase ?]: 21-07: dedup_chunks asset placed physically between tree_index_document and embed_chunks in assets.py (not immediately after chunk_document) to minimize diff churn — graph position (between chunk_document and embed_chunks), not file position, is what the plan/tests require
 - [Phase ?]: 21-08: Dagster path exercised via direct invocation of dedup_chunks/embed_chunks/index_chunks asset functions (materialize() lacks input_values in this Dagster version) with real PostgresResource/QdrantResource, rather than a full graph run from raw ingest
 - [Phase ?]: 21-08: Both new integration tests use fully synthetic parsed_artifact_id/source_id strings (no seeded Source/Artifact rows) after confirming index()'s payload-field resolution degrades gracefully for unknown artifact ids
+- [Phase ?]: Phase 22 P01: export read-back uses export.py's _make_storage() factory (not a fresh StorageBackend) so tests can patch one storage double for both export_rag_corpus()'s write and the caller's read-back
+- [Phase ?]: Phase 22 P01: this_run_chunk_ids initialized once before the per-source loop (corpus-wide, not per-source) so D-04 scoping spans every source in a single export_rag_corpus() call
 
 ### Pending Todos
 
@@ -215,9 +218,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T16:10:49.400Z
-Stopped at: Phase 22 context gathered
-Resume file: .planning/phases/22-address-tech-debt-measure-garbage-junk-rates-end-to-end-reco/22-CONTEXT.md
+Last session: 2026-07-17T18:18:11.890Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

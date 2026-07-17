@@ -282,7 +282,7 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 4/4 | Complete    | 2026-07-17 |
 | 21 | v2.6 Index-Time Dedup | 8/8 | Complete    | 2026-07-17 |
-| 22 | Address tech debt: measure garbage/junk rates end-to-end | 0/3 | Planned     | — |
+| 22 | Address tech debt: measure garbage/junk rates end-to-end | 1/3 | In Progress|  |
 
 ### Phase 22: Address tech debt: measure garbage/junk rates end-to-end, reconcile Nyquist validation
 
@@ -298,12 +298,12 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
   5. A real run against the live 34-source healthcare corpus produces actual before/after numbers reported against the 28%/33% baselines from `MILESTONE-CONTEXT.md`
   6. Nyquist reconciliation for phases 17-21 is documented as an operator follow-up (`/gsd-validate-phase {17..21}`), not implemented as phase-22 code
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 22-01-PLAN.md — run_full_pipeline_audit() chunk-level tally + D-04 export-scoping + domain_filters gap fix + D-07 docstring note (MEAS-01, QUAL-03, EXPORT-01)
+- [x] 22-01-PLAN.md — run_full_pipeline_audit() chunk-level tally + D-04 export-scoping + domain_filters gap fix + D-07 docstring note (MEAS-01, QUAL-03, EXPORT-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
