@@ -295,7 +295,7 @@ class TestRunQualityAuditErrorIsolation:
                 _stub_parsed_doc(),
             )
 
-        def clean_stub(parsed_artifact_id, source_id, *, parsed_doc=None, settings=None):
+        def clean_stub(parsed_artifact_id, source_id, *, parsed_doc=None, settings=None, domain_filters=None):
             if parsed_artifact_id == "art_parsed_1":
                 raise RuntimeError("boom")
             return _clean_result(considered=1, kept=1, rejected=0)
@@ -317,6 +317,153 @@ class TestRunQualityAuditErrorIsolation:
         assert row_b["documents_errored"] == 0
         assert row_b["sections_considered"] == 1
         assert row_b["sections_kept"] == 1
+
+
+class TestRunQualityAuditDomainFiltersGap:
+    def test_domain_filters_threaded_into_existing_clean_call(self, session, engine):
+        """run_quality_audit()'s existing clean() call site threads domain_filters
+        (Pitfall 1 fix) — resolved once via DomainLoader.from_name(...).filters."""
+        from knowledge_lake.config.settings import DomainSettings, Settings, StorageSettings
+        from knowledge_lake.domains.models import DomainFilters
+        from knowledge_lake.pipeline.quality_audit import run_quality_audit
+
+        src = _seed_source(session, name="Healthcare Source", domain="healthcare")
+        _seed_raw_artifact(session, src.id, "rawhash_domain_filters")
+
+        ss = StorageSettings(
+            endpoint_url="http://localhost:9000",
+            bucket="test-bucket",
+            access_key_id="test",
+            secret_access_key="test",
+        )
+        settings = Settings(
+            database_url=str(engine.url),
+            storage=ss,
+            domain=DomainSettings(domain_name="healthcare"),
+            _env_file=None,  # type: ignore[call-arg]
+        )
+
+        fake_filters = DomainFilters(normative_allowlists=["ICD-10"])
+
+        class _StubLoader:
+            filters = fake_filters
+
+        clean_stub_result = _clean_result(considered=1, kept=1, rejected=0)
+
+        with patch(
+            "knowledge_lake.pipeline.parse.parse",
+            return_value=(
+                {"artifact_id": "art_parsed_df", "content_hash": "h", "language": "en"},
+                _stub_parsed_doc(),
+            ),
+        ), patch(
+            "knowledge_lake.domains.loader.DomainLoader.from_name",
+            return_value=_StubLoader(),
+        ) as mock_from_name, patch(
+            "knowledge_lake.pipeline.clean.clean",
+            return_value=clean_stub_result,
+        ) as mock_clean:
+            run_quality_audit(domain="healthcare", settings=settings)
+
+        mock_from_name.assert_called_once_with("healthcare")
+        assert mock_clean.call_args.kwargs["domain_filters"] is fake_filters
+
+
+class TestRunFullPipelineAuditChunkTally:
+    def test_chunk_audit_tallies_kept_rejected_from_gate(self, session, engine):
+        """run_full_pipeline_audit() tallies chunk-level kept/rejected/reasons
+        purely from the in-memory _build_token_chunks()+_apply_substance_gate()
+        annotation — one clinical-prose section kept, one nav-junk section
+        rejected -> chunks_considered=2, chunks_kept=1, chunks_rejected=1,
+        chunk_garbage_rate=0.5 (frozen rejected/(rejected+kept) formula)."""
+        from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
+        from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+        src = _seed_source(session, name="Chunk Tally Source", domain="healthcare")
+        _seed_raw_artifact(session, src.id, "rawhash_chunk_tally")
+
+        settings = _make_settings(engine)
+
+        clinical_prose_text = (
+            "The patient presents with type 2 diabetes mellitus (ICD-10 E11.9) and was "
+            "prescribed Metformin 500 mg PO BID. Follow-up labs showed HbA1c of 7.2%."
+        )
+        nav_junk_text = "Home About Contact Sitemap Search"
+
+        cleaned_doc = ParsedDoc(
+            text="",
+            sections=[
+                Section(
+                    heading="Overview",
+                    section_path="§1",
+                    page=1,
+                    text=clinical_prose_text,
+                    is_table=False,
+                ),
+                Section(
+                    heading="Nav",
+                    section_path="§2",
+                    page=1,
+                    text=nav_junk_text,
+                    is_table=False,
+                ),
+            ],
+            metadata={},
+        )
+        clean_stub_result = _clean_result(considered=2, kept=2, rejected=0)
+        clean_stub_result["cleaned_doc"] = cleaned_doc
+
+        with patch(
+            "knowledge_lake.pipeline.parse.parse",
+            return_value=(
+                {"artifact_id": "art_parsed_chunk_tally", "content_hash": "h", "language": "en"},
+                _stub_parsed_doc(),
+            ),
+        ), patch(
+            "knowledge_lake.pipeline.clean.clean", return_value=clean_stub_result
+        ) as mock_clean:
+            result = run_full_pipeline_audit(domain="healthcare", settings=settings)
+
+        assert "domain_filters" in mock_clean.call_args.kwargs
+
+        assert len(result["rows"]) == 1
+        row = result["rows"][0]
+        assert row["chunks_considered"] == 2
+        assert row["chunks_kept"] == 1
+        assert row["chunks_rejected"] == 1
+        assert sum(row["chunk_rejection_reasons"].values()) == 1
+        assert row["chunk_garbage_rate"] == 0.5
+
+    def test_chunk_audit_zero_chunks_yields_none_rate(self, session, engine):
+        """A source whose cleaned_doc has empty sections and empty text ->
+        chunks_considered=0, chunk_garbage_rate=None (never 0.0, never
+        ZeroDivisionError) — mirrors the existing zero-docs section-level
+        test's contract."""
+        from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
+        from knowledge_lake.plugins.protocols import ParsedDoc
+
+        src = _seed_source(session, name="Zero Chunk Source", domain="healthcare")
+        _seed_raw_artifact(session, src.id, "rawhash_zero_chunk")
+
+        settings = _make_settings(engine)
+
+        cleaned_doc = ParsedDoc(text="   ", sections=[], metadata={})
+        clean_stub_result = _clean_result(considered=0, kept=0, rejected=0)
+        clean_stub_result["cleaned_doc"] = cleaned_doc
+
+        with patch(
+            "knowledge_lake.pipeline.parse.parse",
+            return_value=(
+                {"artifact_id": "art_parsed_zero_chunk", "content_hash": "h", "language": "en"},
+                _stub_parsed_doc(),
+            ),
+        ), patch("knowledge_lake.pipeline.clean.clean", return_value=clean_stub_result):
+            result = run_full_pipeline_audit(domain="healthcare", settings=settings)
+
+        assert len(result["rows"]) == 1
+        row = result["rows"][0]
+        assert row["chunks_considered"] == 0
+        assert row["chunk_garbage_rate"] is None
 
 
 class TestRunQualityAuditParsedDocReuse:
