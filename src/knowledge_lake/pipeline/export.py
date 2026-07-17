@@ -13,6 +13,15 @@ Design decisions:
               never a local filesystem path.
     T-05-08: _RAG_CORPUS_FIELDS explicit allow-list enforced — export rows are built
              key-by-key, never via dataclasses.asdict() or a raw metadata_ dump.
+    Phase-22-D-07: export_rag_corpus() is deliberately chunk-artifact-scoped
+             (citation-complete training data), not deduplicated-vector-index-scoped.
+             This is an accepted design boundary, not a defect: cross-document
+             chunks with identical normalized text may appear as separate export
+             rows here even though they collapse to one Qdrant point via the
+             chunk_dedup_ledger (Phase 21, index-time dedup). Making this export
+             dedup-aware was evaluated and explicitly deferred by the v2.6
+             milestone audit (.planning/v2.6-MILESTONE-AUDIT.md) — it would
+             redefine EXPORT-01's row semantics and is out of scope here.
 
 05-AI-SPEC Section 6/7 hard-block guardrail:
     check_train_eval_contamination() is called as the FIRST statement of every export

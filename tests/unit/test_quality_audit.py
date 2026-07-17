@@ -12,7 +12,7 @@ name` against the current module attribute, so patching the source module
 from __future__ import annotations
 
 import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -413,6 +413,28 @@ class TestRunFullPipelineAuditChunkTally:
         clean_stub_result = _clean_result(considered=2, kept=2, rejected=0)
         clean_stub_result["cleaned_doc"] = cleaned_doc
 
+        # run_full_pipeline_audit() also calls the REAL persisting chunk()
+        # and, since it produces a surviving chunk, the REAL export_rag_corpus()
+        # (Task 2) — a single in-memory-dict-backed fake storage (mirrors
+        # test_chunk_substance_gate.py's fake_storage fixture and
+        # test_export.py's mock_put_object/mock_get_object pattern) is shared
+        # across both chunk.py's StorageBackend and export.py's _make_storage
+        # patch points so neither write nor read-back ever touches real S3/MinIO.
+        import knowledge_lake.pipeline.export as export_module
+
+        written_data: dict[str, bytes] = {}
+
+        def mock_put_object(key, data, **kwargs):
+            written_data[key] = data
+
+        def mock_get_object(key):
+            return written_data[key]
+
+        fake_storage = MagicMock()
+        fake_storage.put_object.side_effect = mock_put_object
+        fake_storage.get_object.side_effect = mock_get_object
+        fake_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
         with patch(
             "knowledge_lake.pipeline.parse.parse",
             return_value=(
@@ -421,7 +443,12 @@ class TestRunFullPipelineAuditChunkTally:
             ),
         ), patch(
             "knowledge_lake.pipeline.clean.clean", return_value=clean_stub_result
-        ) as mock_clean:
+        ) as mock_clean, patch(
+            "knowledge_lake.pipeline.chunk.StorageBackend",
+            lambda *_a, **_k: fake_storage,
+        ), patch.object(
+            export_module, "_make_storage", return_value=fake_storage
+        ):
             result = run_full_pipeline_audit(domain="healthcare", settings=settings)
 
         assert "domain_filters" in mock_clean.call_args.kwargs
@@ -464,6 +491,134 @@ class TestRunFullPipelineAuditChunkTally:
         row = result["rows"][0]
         assert row["chunks_considered"] == 0
         assert row["chunk_garbage_rate"] is None
+
+
+class TestRunFullPipelineAuditExportScoping:
+    def test_dilution_regression_excludes_pre_v26_chunks(self, session, engine):
+        """summary['export_kept']/['export_junk']/['export_junk_rate'] reflect
+        only this run's own chunk IDs, never the domain's pre-v2.6 chunk
+        population that defaults substance_passed=True (D-04) — even though
+        the real, unmodified export_rag_corpus() legitimately includes both
+        chunks in its own domain-wide Parquet output."""
+        import knowledge_lake.pipeline.export as export_module
+        from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
+        from knowledge_lake.registry import repo as registry_repo
+
+        src = _seed_source(session, name="Dilution Source", domain="healthcare")
+        raw = _seed_raw_artifact(session, src.id, "rawhash_dilution")
+        parsed = _seed_parsed_artifact(session, src.id, raw.id, "parsedhash_dilution")
+
+        # "Old" pre-v2.6 chunk — deliberately NO substance_passed key,
+        # simulating one of the ~4,512 chunks that predate the v2.6 gate.
+        registry_repo.create_chunk_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="old_chunk_hash",
+            metadata={"text": "old boilerplate text"},
+        )
+        session.flush()
+        # "Fresh" gated chunk — simulates what a real enforce-mode chunk()
+        # call would have just persisted.
+        fresh_chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=src.id,
+            parent_artifact_id=parsed.id,
+            content_hash="fresh_chunk_hash",
+            metadata={"substance_passed": True, "text": "fresh clinical prose"},
+        )
+        session.flush()
+        session.commit()
+
+        settings = _make_settings(engine)
+
+        written_data: dict[str, bytes] = {}
+
+        def mock_put_object(key, data, **kwargs):
+            written_data[key] = data
+
+        def mock_get_object(key):
+            return written_data[key]
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = mock_put_object
+        mock_storage.get_object.side_effect = mock_get_object
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        canned_chunk_result = [{
+            "chunk_id": fresh_chunk.id,
+            "artifact_id": fresh_chunk.id,
+            "text": "fresh clinical prose",
+            "section_path": "§1",
+            "page": 1,
+            "content_hash": "fresh_chunk_hash",
+            "is_table": False,
+            "oversized": False,
+            "substance_passed": True,
+            "rejection_reason": None,
+        }]
+
+        with patch(
+            "knowledge_lake.pipeline.parse.load_parsed_doc",
+            return_value=_stub_parsed_doc(),
+        ), patch(
+            "knowledge_lake.pipeline.clean.clean",
+            return_value=_clean_result(considered=0, kept=0, rejected=0),
+        ), patch(
+            "knowledge_lake.pipeline.chunk.chunk", return_value=canned_chunk_result,
+        ), patch.object(
+            export_module, "_make_storage", return_value=mock_storage
+        ):
+            result = run_full_pipeline_audit(domain="healthcare", settings=settings)
+
+        summary = result["summary"]
+        assert summary["export_kept"] == 1
+        assert summary["export_junk"] == 0
+        assert summary["export_junk_rate"] == 0.0
+
+        # Independently prove the dilution risk was real: the actual exported
+        # Parquet (unmodified export_rag_corpus()) legitimately contains BOTH
+        # chunks — the old chunk's missing substance_passed key defaults True.
+        import io
+
+        import polars as pl
+
+        parquet_keys = [k for k in written_data if k.endswith(".parquet")]
+        assert len(parquet_keys) == 1, f"Expected 1 Parquet file, got {parquet_keys}"
+        df = pl.read_parquet(io.BytesIO(written_data[parquet_keys[0]]))
+        assert df.height == 2
+
+    def test_export_scoping_zero_chunks_yields_none_junk_rate(self, session, engine):
+        """When this run's own chunk() calls produce zero chunk_ids,
+        export_rag_corpus() is never called (D-04 — no wasted S3 write when
+        there is nothing to measure) and summary['export_junk_rate'] is None."""
+        from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
+
+        src = _seed_source(session, name="AllRejected Source", domain="healthcare")
+        _seed_raw_artifact(session, src.id, "rawhash_allrejected")
+
+        settings = _make_settings(engine)
+
+        with patch(
+            "knowledge_lake.pipeline.parse.parse",
+            return_value=(
+                {"artifact_id": "art_parsed_allrejected", "content_hash": "h", "language": "en"},
+                _stub_parsed_doc(),
+            ),
+        ), patch(
+            "knowledge_lake.pipeline.clean.clean",
+            return_value=_clean_result(considered=0, kept=0, rejected=0),
+        ), patch(
+            "knowledge_lake.pipeline.chunk.chunk", return_value=[]
+        ), patch(
+            "knowledge_lake.pipeline.export.export_rag_corpus"
+        ) as mock_export:
+            result = run_full_pipeline_audit(domain="healthcare", settings=settings)
+
+        assert mock_export.call_count == 0
+        assert result["summary"]["export_kept"] == 0
+        assert result["summary"]["export_junk"] == 0
+        assert result["summary"]["export_junk_rate"] is None
 
 
 class TestRunQualityAuditParsedDocReuse:

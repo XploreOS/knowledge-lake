@@ -31,6 +31,16 @@ import structlog
 
 log = structlog.get_logger(__name__)
 
+# Phase 22 D-06: the two originally-audited baselines from the milestone's
+# first end-to-end run against real healthcare data (.planning/MILESTONE-CONTEXT.md)
+# — reported side by side with this run's own measured rates for before/after
+# comparison. Not thresholds, not gates — pure reporting constants.
+_BASELINE_CHUNK_GARBAGE_RATE = 0.28
+"""28% garbage chunks (4,499 chunks) — .planning/MILESTONE-CONTEXT.md."""
+
+_BASELINE_EXPORT_JUNK_RATE = 0.33
+"""33% junk rows (357 gold rows) — .planning/MILESTONE-CONTEXT.md."""
+
 
 def _resolve_domain_filters(s):
     """Resolve DomainFilters for the currently-configured domain pack, or None.
@@ -204,12 +214,17 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
         ``rejected / (rejected + kept)`` formula, Phase 17 D-10 — ``None``
         when the source has no considered chunks, never an explicit
         ``0.0``). ``summary`` aggregates all rows' counts corpus-wide with
-        ``sections_garbage_rate``/``chunk_garbage_rate`` computed identically.
+        ``sections_garbage_rate``/``chunk_garbage_rate`` computed identically,
+        plus ``export_kept``/``export_junk``/``export_junk_rate`` (criterion
+        #2, D-04-safe — scoped to only this run's own chunk IDs, tracked from
+        the real persisting ``chunk()`` call's return value, never inferred
+        from registry timestamps) and ``baseline_chunk_garbage_rate``/
+        ``baseline_export_junk_rate`` (D-06 reporting constants).
     """
     from sqlalchemy import select
 
     from knowledge_lake.config.settings import Settings, get_settings  # noqa: F401
-    from knowledge_lake.pipeline.chunk import _apply_substance_gate, _build_token_chunks
+    from knowledge_lake.pipeline.chunk import _apply_substance_gate, _build_token_chunks, chunk
     from knowledge_lake.pipeline.clean import clean
     from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
     from knowledge_lake.pipeline.parse import load_parsed_doc, parse, reparse_from_raw
@@ -219,6 +234,9 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
 
     s = settings or get_settings()
     domain_filters = _resolve_domain_filters(s)
+    # Corpus-wide (not per-source/per-document) — initialized before the
+    # per-source loop so this run's chunk-ID set spans every source.
+    this_run_chunk_ids: set[str] = set()
 
     with get_session() as session:
         stmt = (
@@ -328,6 +346,20 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
                         chunk_rejection_reasons.get(reason, 0) + 1
                     )
 
+            # Real persisted chunk() call (criterion #2 groundwork). Enforce
+            # mode (the shipped default) never persists a rejected chunk in
+            # the first place (RESEARCH.md Pitfall 2) — every chunk_id this
+            # run tracks is, by construction, already substance_passed=True.
+            # Track chunk IDs from the RETURN VALUE only (RESEARCH.md
+            # Pitfall 4) — a content-hash no-op branch means a re-run of an
+            # already-chunked document is a legitimate reuse, not a bug, and
+            # the returned dict's substance_passed is always freshly
+            # computed by THIS call regardless of which branch fired.
+            chunk_results = chunk(
+                parsed_id, source_id, cleaned_doc, settings=s, domain_filters=domain_filters,
+            )
+            this_run_chunk_ids.update(r["chunk_id"] for r in chunk_results)
+
         total = sections_rejected + sections_kept
         garbage_rate = (sections_rejected / total) if total > 0 else None
 
@@ -376,6 +408,40 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
         (summary_chunks_rejected / chunks_total) if chunks_total > 0 else None
     )
 
+    # D-04-safe export-junk scoping (criterion #2): call the REAL
+    # export_rag_corpus() once, corpus-wide, strictly after the per-source
+    # loop (D-03 — never per-document/per-source) — then filter its output
+    # Parquet to only this run's own chunk-ID set. This proves the actual
+    # shipped export path behaves correctly on freshly-gated data without
+    # ever re-implementing export_rag_corpus()'s substance_passed filter as
+    # a second predicate (RESEARCH.md Anti-Pattern) and without a registry-
+    # wide list_artifacts_by_type() scan (RESEARCH.md Pattern 2).
+    if this_run_chunk_ids:
+        import io
+
+        import polars as pl
+
+        from knowledge_lake.pipeline.export import _make_storage, export_rag_corpus
+        from knowledge_lake.pipeline.utils import uri_to_key
+
+        export_result = export_rag_corpus(domain=domain, settings=s)
+
+        # _make_storage (not a fresh StorageBackend(s.storage)) is used
+        # deliberately — it is export.py's own test patch point, so a
+        # caller-side read-back of the exported Parquet goes through the
+        # same storage double as export_rag_corpus()'s own write in tests
+        # (patch.object(export_module, "_make_storage", ...)).
+        storage = _make_storage(s)
+        buf = io.BytesIO(storage.get_object(uri_to_key(export_result["storage_uri"])))
+        df = pl.read_parquet(buf)
+        export_kept = df.filter(pl.col("chunk_id").is_in(list(this_run_chunk_ids))).height
+        export_junk = len(this_run_chunk_ids) - export_kept
+        export_junk_rate = export_junk / len(this_run_chunk_ids)
+    else:
+        export_kept = 0
+        export_junk = 0
+        export_junk_rate = None
+
     summary = {
         "domain": domain,
         "sources_count": len(rows),
@@ -389,6 +455,11 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
         "chunks_rejected": summary_chunks_rejected,
         "chunk_rejection_reasons": summary_chunk_rejection_reasons,
         "chunk_garbage_rate": summary_chunk_garbage_rate,
+        "export_kept": export_kept,
+        "export_junk": export_junk,
+        "export_junk_rate": export_junk_rate,
+        "baseline_chunk_garbage_rate": _BASELINE_CHUNK_GARBAGE_RATE,
+        "baseline_export_junk_rate": _BASELINE_EXPORT_JUNK_RATE,
     }
 
     return {"rows": rows, "summary": summary}
