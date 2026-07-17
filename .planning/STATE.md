@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
-current_phase: 20
-current_phase_name: chunk-substance-gate-export-gate
-status: verifying
+current_phase: 21
+current_phase_name: Index-Time Dedup
+status: planning
 stopped_at: Completed 20-04-PLAN.md
-last_updated: "2026-07-17T06:55:50.407Z"
+last_updated: "2026-07-17T07:28:46.953Z"
 last_activity: 2026-07-17
-last_activity_desc: Phase 20 execution started
+last_activity_desc: Phase 20 complete, transitioned to Phase 21
 progress:
   total_phases: 5
   completed_phases: 4
@@ -28,16 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 20 (chunk-substance-gate-export-gate) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-07-17 — Phase 20 execution started
+Phase: 21 — Index-Time Dedup
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-17 — Phase 20 complete, transitioned to Phase 21
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 61 (v1.0: 25, v2.0: 38, v2.5: 14)
+- Total plans completed: 65 (v1.0: 25, v2.0: 38, v2.5: 14)
 - Average duration: ~10 min
 - Total execution time: --
 
@@ -58,6 +58,7 @@ Last activity: 2026-07-17 — Phase 20 execution started
 | 17 | 4 | - | - |
 | 18 | 1 | - | - |
 | 19 | 4 | - | - |
+| 20 | 4 | - | - |
 
 **Recent Trend:**
 
