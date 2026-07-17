@@ -152,3 +152,144 @@ class TestCliQualityAuditHelp:
         assert "--domain" in output
         assert "-d" in output
         assert "--json" in output
+
+    def test_help_lists_full_flag(self) -> None:
+        """`quality-audit --help` also lists the new --full flag (Phase 22 Plan 02)."""
+        assert _IMPORT_OK, "CliRunner or app import failed"
+        assert runner is not None
+
+        result = runner.invoke(app, ["quality-audit", "--help"])
+        assert result.exit_code == 0, (
+            f"'quality-audit --help' exited with {result.exit_code}: {result.output!r}"
+        )
+        output = _strip_ansi(result.output)
+        assert "--full" in output
+
+
+_FULL_RESULT = {
+    "rows": [
+        {
+            "source_id": "src_a",
+            "source_name": "Source A",
+            "sections_considered": 4,
+            "sections_kept": 3,
+            "sections_rejected": 1,
+            "rejection_reasons": {"empty_after_boilerplate_removal": 1},
+            "documents_errored": 0,
+            "garbage_rate": 0.25,
+            "chunks_considered": 4,
+            "chunks_kept": 3,
+            "chunks_rejected": 1,
+            "chunk_rejection_reasons": {"low_substance": 1},
+            "chunk_garbage_rate": 0.25,
+        },
+    ],
+    "summary": {
+        "domain": "healthcare",
+        "sources_count": 1,
+        "documents_errored": 0,
+        "sections_considered": 4,
+        "sections_kept": 3,
+        "sections_rejected": 1,
+        "sections_garbage_rate": 0.25,
+        "chunks_considered": 4,
+        "chunks_kept": 3,
+        "chunks_rejected": 1,
+        "chunk_rejection_reasons": {"low_substance": 1},
+        "chunk_garbage_rate": 0.25,
+        "export_kept": 3,
+        "export_junk": 0,
+        "export_junk_rate": 0.0,
+        "baseline_chunk_garbage_rate": 0.28,
+        "baseline_export_junk_rate": 0.33,
+    },
+}
+
+_FULL_RESULT_EMPTY = {
+    "rows": [],
+    "summary": {
+        "domain": "healthcare",
+        "sources_count": 0,
+        "documents_errored": 0,
+        "sections_considered": 0,
+        "sections_kept": 0,
+        "sections_rejected": 0,
+        "sections_garbage_rate": None,
+        "chunks_considered": 0,
+        "chunks_kept": 0,
+        "chunks_rejected": 0,
+        "chunk_rejection_reasons": {},
+        "chunk_garbage_rate": None,
+        "export_kept": 0,
+        "export_junk": 0,
+        "export_junk_rate": None,
+        "baseline_chunk_garbage_rate": 0.28,
+        "baseline_export_junk_rate": 0.33,
+    },
+}
+
+
+class TestCliQualityAuditFullFlag:
+    def test_full_table_output_contains_chunk_columns_and_baseline(self) -> None:
+        """`--full` prints chunk-level columns plus a summary block with both baselines."""
+        assert _IMPORT_OK, "CliRunner or app import failed"
+        assert runner is not None
+
+        with patch(
+            "knowledge_lake.pipeline.quality_audit.run_full_pipeline_audit",
+            return_value=_FULL_RESULT,
+        ):
+            result = runner.invoke(
+                app, ["quality-audit", "--domain", "healthcare", "--full"]
+            )
+
+        assert result.exit_code == 0, (
+            f"Expected exit 0, got {result.exit_code}. Output: {result.output!r}"
+        )
+        output = _strip_ansi(result.output)
+        assert "Source A" in output
+        assert "25.0%" in output
+        assert "28" in output
+        assert "33" in output
+
+    def test_full_json_round_trips_rows_and_summary(self) -> None:
+        """`--full --json` round-trips the exact mocked {"rows":..., "summary":...} dict."""
+        assert _IMPORT_OK, "CliRunner or app import failed"
+        assert runner is not None
+
+        with patch(
+            "knowledge_lake.pipeline.quality_audit.run_full_pipeline_audit",
+            return_value=_FULL_RESULT,
+        ):
+            result = runner.invoke(
+                app, ["quality-audit", "--domain", "healthcare", "--full", "--json"]
+            )
+
+        assert result.exit_code == 0, (
+            f"Expected exit 0, got {result.exit_code}. Output: {result.output!r}"
+        )
+        parsed = json.loads(result.output)
+        assert parsed == _FULL_RESULT
+        assert "rows" in parsed
+        assert "summary" in parsed
+
+    def test_full_empty_rows_prints_no_sources_message(self) -> None:
+        """`--full` with zero rows prints the same 'No sources found ...' message."""
+        assert _IMPORT_OK, "CliRunner or app import failed"
+        assert runner is not None
+
+        with patch(
+            "knowledge_lake.pipeline.quality_audit.run_full_pipeline_audit",
+            return_value=_FULL_RESULT_EMPTY,
+        ):
+            result = runner.invoke(
+                app, ["quality-audit", "--domain", "nonexistent", "--full"]
+            )
+
+        assert result.exit_code == 0, (
+            f"Expected exit 0 for an empty (not error) result, got {result.exit_code}. "
+            f"Output: {result.output!r}"
+        )
+        output = _strip_ansi(result.output)
+        assert "No sources found" in output
+        assert "nonexistent" in output
