@@ -9,6 +9,7 @@ This module defines the core schema:
 - CrawlState        — per-URL crawl state tracking (INGEST-04)
 - LlmSpend          — accumulated LLM call cost per scope (ENRICH-05)
 - VectorCollection  — alias-to-physical-collection registry (INDEX-02)
+- ChunkDedupLedger  — corpus-wide exact-dedup ledger (DEDUP-01..03)
 - Dataset           — curated dataset placeholder (created empty in migration #1)
 
 Schema is managed EXCLUSIVELY by Alembic migrations.  This module defines the
@@ -487,6 +488,77 @@ class VectorCollection(Base):
         server_default=func.now(),
     )
     """UTC timestamp of registration."""
+
+
+class ChunkDedupLedger(Base):
+    """Corpus-wide exact-dedup ledger (DEDUP-01..03).
+
+    Postgres is the source of truth for which (collection, text_sha256) pair
+    has already been indexed and who its primary and contributors are (D-13).
+    The Qdrant payload is a mirror of this row, rebuildable from it.
+    """
+
+    __tablename__ = "chunk_dedup_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "collection", "text_sha256", name="uq_chunk_dedup_ledger_collection_text_sha256"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``art_<uuidv7>``, generated via
+    ``new_id("artifact")``, mirroring ``VectorCollection.id``'s own
+    convention — not a lineage node."""
+
+    collection: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    """The alias name, e.g. 'klake_chunks' — never a physical collection
+    name, D-12."""
+
+    text_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    """sha256(normalize_for_dedup(text)).hexdigest() — see pipeline/dedup.py."""
+
+    point_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    """uuid5(KLAKE_DEDUP_NAMESPACE, text_sha256) — the deterministic Qdrant
+    point ID, D-06."""
+
+    primary_chunk_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    """The chunk_id of the first-writer (primary) contributor."""
+
+    primary_parsed_artifact_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    """The parsed_artifact_id of the first-writer (primary) contributor."""
+
+    primary_source_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    """The source_id of the first-writer (primary) contributor, if any."""
+
+    primary_created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    """Never reassigned once set (D-21) — the first successful claimant is
+    permanent."""
+
+    contributors: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    """Unbounded list of {chunk_id, document, source_id, created_at} dicts —
+    one per document that ever contributed this exact text. Postgres is the
+    source of truth (D-13); the Qdrant payload mirrors at most the first N
+    (settings.dedup.contributor_cap). Primary is always contributors[0]."""
+
+    contributor_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    """Always == len(contributors) — never drifts, D-13."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    """UTC timestamp of the ledger row's creation."""
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    """UTC timestamp of the last update (e.g. a contributor append)."""
 
 
 class Dataset(Base):
