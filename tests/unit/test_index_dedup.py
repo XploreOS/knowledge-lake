@@ -13,14 +13,18 @@ exact, index-time dedup key.
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import unicodedata
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+import knowledge_lake.pipeline.index as index_module
 import knowledge_lake.registry.db as registry_db
 from knowledge_lake.pipeline.dedup import (
     KLAKE_DEDUP_NAMESPACE,
@@ -29,6 +33,7 @@ from knowledge_lake.pipeline.dedup import (
     point_id_for_text,
     text_sha256_for,
 )
+from knowledge_lake.registry import repo as registry_repo
 
 
 class TestNormalizeForDedup:
@@ -336,3 +341,290 @@ class TestDedupChunks:
         )
 
         assert len(result["new"]) + len(result["duplicates"]) == len(chunks)
+
+
+# ── TestIndexDuplicateRouting (Plan 21-05) ────────────────────────────────────
+#
+# index()'s duplicate_chunks kwarg — contributor append, capped/primary-first
+# mirror, self-heal. Reuses this file's engine/_patch_engine SQLite harness
+# (dedup_chunks()'s and index()'s ledger reads/writes must see the same
+# committed data) plus tests/unit/test_index_payload.py's fake_vstore
+# MagicMock-based get_vectorstore patching convention.
+
+
+@pytest.fixture()
+def dedup_session(engine):
+    with Session(engine) as sess:
+        yield sess
+
+
+@pytest.fixture()
+def fake_vstore(monkeypatch):
+    """Mock get_vectorstore() so index() never touches a real Qdrant server.
+
+    set_payload defaults to True so tests explicitly opt into the
+    False/self-heal path by overriding it.
+    """
+    vstore = MagicMock()
+    vstore.ensure_aliased_collection.return_value = ("klake_chunks_v1", False)
+    vstore.set_payload.return_value = True
+    monkeypatch.setattr(index_module, "get_vectorstore", lambda _s: vstore)
+    return vstore
+
+
+def _seed_document(session) -> tuple[str, str]:
+    """Create a minimal source/raw/parsed artifact chain; returns (source_id, parsed_id)."""
+    source = registry_repo.create_source(session, name="Dedup Source", source_type="web")
+    raw = registry_repo.create_raw_artifact(
+        session,
+        source_id=source.id,
+        content_hash="dup_raw",
+        storage_uri="s3://b/raw/dup_raw.pdf",
+    )
+    parsed = registry_repo.create_parsed_artifact(
+        session,
+        source_id=source.id,
+        parent_artifact_id=raw.id,
+        content_hash="dup_parsed",
+        storage_uri="s3://b/silver/dup_parsed.json",
+    )
+    session.commit()
+    return source.id, parsed.id
+
+
+def _dup_chunk(chunk_id: str, text: str) -> dict:
+    """Mirrors dedup_chunks()'s annotated duplicate-chunk output shape."""
+    return {
+        "chunk_id": chunk_id,
+        "text": text,
+        "section_path": "§1",
+        "page": 1,
+        "text_sha256": text_sha256_for(text),
+        "point_id": point_id_for_text(text),
+    }
+
+
+class TestIndexDuplicateRouting:
+    """DEDUP-03: index()'s duplicate_chunks kwarg — contributor append,
+    capped/primary-first mirror, self-heal, and backward compatibility."""
+
+    def test_index_without_duplicate_chunks_unaffected(
+        self, dedup_session, fake_vstore
+    ) -> None:
+        """Backward compatibility: calling index() without duplicate_chunks
+        at all behaves identically to before this plan — set_payload is
+        never called."""
+        _source_id, parsed_id = _seed_document(dedup_session)
+        chunks = [
+            {"chunk_id": "chk_1", "section_path": "§1", "page": 1, "text": "hello world"}
+        ]
+        vectors = [[0.1] * 4]
+
+        indexed = index_module.index(chunks, vectors, dim=4, parsed_artifact_id=parsed_id)
+
+        assert indexed == ["chk_1"]
+        fake_vstore.set_payload.assert_not_called()
+        fake_vstore.upsert.assert_called_once()
+
+    def test_set_payload_called_with_only_contributors_and_count(
+        self, dedup_session, fake_vstore
+    ) -> None:
+        """T-21-11: set_payload is called with ONLY {contributors, contributor_count}
+        for a single duplicate — never document/text/quality_score/etc."""
+        source_id, parsed_id = _seed_document(dedup_session)
+        text = "Repeated boilerplate text."
+
+        registry_repo.claim_dedup_ledger_entry(
+            dedup_session,
+            collection="klake_chunks",
+            text_sha256=text_sha256_for(text),
+            point_id=point_id_for_text(text),
+            chunk_id="chk_primary",
+            parsed_artifact_id=parsed_id,
+            source_id=source_id,
+            created_at=datetime.datetime.now(datetime.UTC),
+        )
+        dedup_session.commit()
+
+        dup = _dup_chunk("chk_dup", text)
+
+        index_module.index(
+            [], [], dim=4, parsed_artifact_id=parsed_id, duplicate_chunks=[dup]
+        )
+
+        fake_vstore.set_payload.assert_called_once()
+        collection_arg, point_id_arg, payload_arg = fake_vstore.set_payload.call_args.args
+        assert collection_arg == "klake_chunks"
+        assert point_id_arg == dup["point_id"]
+        assert set(payload_arg.keys()) == {"contributors", "contributor_count"}
+        assert payload_arg["contributor_count"] == 2
+        assert len(payload_arg["contributors"]) == 2
+
+    def test_contributor_cap_boundary_51_contributors_yields_50_length_mirror(
+        self, dedup_session, fake_vstore
+    ) -> None:
+        """A ledger row with exactly contributor_cap+1 (51) contributors
+        produces a Qdrant contributors[] of length 50, with
+        contributor_count == 51 (DEDUP-01/03 boundary edge case)."""
+        source_id, parsed_id = _seed_document(dedup_session)
+        text = "Boundary boilerplate text."
+        now = datetime.datetime.now(datetime.UTC)
+
+        ledger_row, _ = registry_repo.claim_dedup_ledger_entry(
+            dedup_session,
+            collection="klake_chunks",
+            text_sha256=text_sha256_for(text),
+            point_id=point_id_for_text(text),
+            chunk_id="chk_primary",
+            parsed_artifact_id=parsed_id,
+            source_id=source_id,
+            created_at=now,
+        )
+        # Seed 49 more contributors directly (primary + 49 = 50 total before
+        # this test's index() call appends the 51st).
+        for i in range(49):
+            registry_repo.append_dedup_contributor(
+                dedup_session,
+                ledger_row,
+                chunk_id=f"chk_seed_{i}",
+                document=parsed_id,
+                source_id=source_id,
+                created_at=now + datetime.timedelta(seconds=i + 1),
+            )
+        dedup_session.commit()
+        assert ledger_row.contributor_count == 50
+
+        dup = _dup_chunk("chk_51st", text)
+        index_module.index(
+            [], [], dim=4, parsed_artifact_id=parsed_id, duplicate_chunks=[dup]
+        )
+
+        payload_arg = fake_vstore.set_payload.call_args.args[2]
+        assert payload_arg["contributor_count"] == 51
+        assert len(payload_arg["contributors"]) == 50
+
+    def test_primary_always_first_even_with_later_primary_timestamp(
+        self, dedup_session, fake_vstore
+    ) -> None:
+        """D-21/D-23: a naive full sort by created_at would place the primary
+        LAST if its own timestamp is later than another contributor's — the
+        capped mirror must still place it first."""
+        source_id, parsed_id = _seed_document(dedup_session)
+        text = "Tie-break boilerplate text."
+        later = datetime.datetime.now(datetime.UTC)
+        earlier = later - datetime.timedelta(hours=1)
+
+        ledger_row, _ = registry_repo.claim_dedup_ledger_entry(
+            dedup_session,
+            collection="klake_chunks",
+            text_sha256=text_sha256_for(text),
+            point_id=point_id_for_text(text),
+            chunk_id="chk_primary",
+            parsed_artifact_id=parsed_id,
+            source_id=source_id,
+            created_at=later,  # primary's own timestamp is the LATEST
+        )
+        registry_repo.append_dedup_contributor(
+            dedup_session,
+            ledger_row,
+            chunk_id="chk_earlier",
+            document=parsed_id,
+            source_id=source_id,
+            created_at=earlier,  # earlier than the primary
+        )
+        dedup_session.commit()
+
+        dup = _dup_chunk("chk_dup", text)
+        index_module.index(
+            [], [], dim=4, parsed_artifact_id=parsed_id, duplicate_chunks=[dup]
+        )
+
+        payload_arg = fake_vstore.set_payload.call_args.args[2]
+        assert payload_arg["contributors"][0]["chunk_id"] == "chk_primary"
+
+    def test_new_chunk_payload_filterable_fields_unaffected(
+        self, dedup_session, fake_vstore
+    ) -> None:
+        """PAYLOAD-01/02: a 'new' chunk's payload (unaffected by this plan)
+        still contains all pre-existing source-metadata/domain/format
+        fields, proving _resolve_document_payload_fields is unmodified."""
+        source = registry_repo.create_source(
+            dedup_session,
+            name="Filter Source",
+            source_type="html",
+            config={"domain": "healthcare", "tags": ["t1"]},
+        )
+        raw = registry_repo.create_raw_artifact(
+            dedup_session,
+            source_id=source.id,
+            content_hash="filt_raw",
+            storage_uri="s3://b/raw/filt_raw.pdf",
+        )
+        parsed = registry_repo.create_parsed_artifact(
+            dedup_session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash="filt_parsed",
+            storage_uri="s3://b/silver/filt_parsed.json",
+        )
+        dedup_session.commit()
+
+        chunks = [{"chunk_id": "chk_1", "section_path": "§1", "page": 1, "text": "hello"}]
+        index_module.index(chunks, [[0.1] * 4], dim=4, parsed_artifact_id=parsed.id)
+
+        upsert_call = fake_vstore.upsert.call_args
+        points = upsert_call.args[1]
+        payload = points[0].payload
+        assert payload["domain"] == "healthcare"
+        assert payload["source_id"] == source.id
+        assert payload["format"] == "html"
+        assert payload["tags"] == ["t1"]
+
+    def test_self_heal_on_vanished_point_reembeds_and_repairs_ledger(
+        self, dedup_session, fake_vstore, monkeypatch, engine
+    ) -> None:
+        """T-21-10/D-24: set_payload returning False triggers a fresh
+        embed()+upsert() under the SAME point_id, and repairs the ledger
+        row's primary_chunk_id/primary_parsed_artifact_id/primary_source_id/
+        primary_created_at to reflect the now-current (healed) chunk."""
+        source_id, parsed_id = _seed_document(dedup_session)
+        text = "Vanished point boilerplate text."
+
+        registry_repo.claim_dedup_ledger_entry(
+            dedup_session,
+            collection="klake_chunks",
+            text_sha256=text_sha256_for(text),
+            point_id=point_id_for_text(text),
+            chunk_id="chk_primary",
+            parsed_artifact_id=parsed_id,
+            source_id=source_id,
+            created_at=datetime.datetime.now(datetime.UTC),
+        )
+        dedup_session.commit()
+
+        fake_vstore.set_payload.return_value = False
+
+        fake_embed = MagicMock(return_value=([[0.2, 0.2, 0.2, 0.2]], 4))
+        monkeypatch.setattr("knowledge_lake.pipeline.embed.embed", fake_embed)
+
+        dup = _dup_chunk("chk_healed", text)
+        index_module.index(
+            [], [], dim=4, parsed_artifact_id=parsed_id, duplicate_chunks=[dup]
+        )
+
+        # Only the healed-points upsert runs (no "new" chunks in this call).
+        fake_vstore.upsert.assert_called_once()
+        healed_points = fake_vstore.upsert.call_args.args[1]
+        assert len(healed_points) == 1
+        assert healed_points[0].id == dup["point_id"]
+
+        # Ledger row is repaired to point at the now-current (healed) chunk.
+        with Session(engine) as verify_session:
+            refreshed = registry_repo.get_dedup_ledger_entry(
+                verify_session,
+                collection="klake_chunks",
+                text_sha256=text_sha256_for(text),
+            )
+            assert refreshed.primary_chunk_id == "chk_healed"
+            assert refreshed.primary_parsed_artifact_id == parsed_id
+            assert refreshed.primary_source_id == source_id
