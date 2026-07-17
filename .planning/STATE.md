@@ -4,17 +4,17 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: index-time-dedup
-status: executing
-stopped_at: Completed 21-07-PLAN.md
-last_updated: "2026-07-17T13:35:37.747Z"
+status: verifying
+stopped_at: Completed 21-08-PLAN.md
+last_updated: "2026-07-17T13:54:50.309Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 21
-  completed_plans: 20
-  percent: 80
+  completed_plans: 21
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 21 (index-time-dedup) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17 — Phase 21 execution started
 
 ## Performance Metrics
@@ -101,6 +101,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 | Phase 21 P05 | 11min | 2 tasks | 2 files |
 | Phase 21 P06 | 8min | 1 tasks | 3 files |
 | Phase 21 P07 | 7min | 2 tasks | 3 files |
+| Phase 21 P08 | 18min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,8 @@ Last activity: 2026-07-17 — Phase 21 execution started
 - [Phase ?]: 21-06: process_crawled() wires dedup_chunks() between chunk() and embed()/index(); 5 test_process_crawled_clean.py tests extended with pass-through dedup_chunks mocks to avoid KeyError('text') regression now that dedup_chunks() is a real required stage
 - [Phase ?]: 21-07: definitions.py registered the new dedup_chunks asset (not in plan's files_modified) — required for Dagster Definitions to load without DagsterInvalidDefinitionError
 - [Phase ?]: 21-07: dedup_chunks asset placed physically between tree_index_document and embed_chunks in assets.py (not immediately after chunk_document) to minimize diff churn — graph position (between chunk_document and embed_chunks), not file position, is what the plan/tests require
+- [Phase ?]: 21-08: Dagster path exercised via direct invocation of dedup_chunks/embed_chunks/index_chunks asset functions (materialize() lacks input_values in this Dagster version) with real PostgresResource/QdrantResource, rather than a full graph run from raw ingest
+- [Phase ?]: 21-08: Both new integration tests use fully synthetic parsed_artifact_id/source_id strings (no seeded Source/Artifact rows) after confirming index()'s payload-field resolution degrades gracefully for unknown artifact ids
 
 ### Pending Todos
 
@@ -207,8 +210,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T13:35:37.731Z
-Stopped at: Completed 21-07-PLAN.md
+Last session: 2026-07-17T13:54:50.297Z
+Stopped at: Completed 21-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
