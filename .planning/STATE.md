@@ -5,16 +5,16 @@ milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: index-time-dedup
 status: executing
-stopped_at: Completed 21-02-PLAN.md
-last_updated: "2026-07-17T12:52:15.208Z"
+stopped_at: Completed 21-03-PLAN.md
+last_updated: "2026-07-17T12:58:11.883Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 21
-  completed_plans: 15
-  percent: 71
+  completed_plans: 16
+  percent: 76
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 21 (index-time-dedup) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 21 execution started
 
@@ -96,6 +96,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 | Phase 20 P04 | 10min | 2 tasks | 2 files |
 | Phase 21 P01 | 12min | 2 tasks | 4 files |
 | Phase 21 P02 | 5min | 2 tasks | 3 files |
+| Phase 21 P03 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,8 @@ Last activity: 2026-07-17 — Phase 21 execution started
 - [Phase ?]: 21-01: ChunkDedupLedger.id uses new_id('artifact') (art_<uuidv7>), matching VectorCollection's precedent for a generic non-lineage registry row
 - [Phase ?]: 21-02: KLAKE_DEDUP_NAMESPACE hardcoded as a literal uuid4-generated constant, never derived from settings/env/collection name (D-05)
 - [Phase ?]: 21-02: normalize_for_dedup deliberately does not reuse clean.py's line-oriented _normalize_whitespace() (D-03) to keep the exact-dedup key contract decoupled from cosmetic cleaning changes
+- [Phase ?]: 21-03: set_payload() catches UnexpectedResponse(404) and returns False; any other status code re-raises unchanged (T-21-06)
+- [Phase ?]: 21-03: No speculative retrieve() pre-check added before set_payload() — the try/except merge call IS the existence check, in one round trip (D-26)
 
 ### Pending Todos
 
@@ -193,8 +196,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T12:52:15.195Z
-Stopped at: Completed 21-02-PLAN.md
+Last session: 2026-07-17T12:58:11.872Z
+Stopped at: Completed 21-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
