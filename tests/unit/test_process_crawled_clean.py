@@ -275,3 +275,104 @@ class TestProcessCrawledCleanBoundaries:
         mock_chunk.assert_called_once()
         mock_embed.assert_not_called()
         mock_index.assert_not_called()
+
+
+# ── Task 1 (20-02): domain_filters resolution and threading ───────────────────
+
+
+class TestProcessCrawledDomainFilters:
+    """process_crawled() must resolve settings.domain.domain_name via
+    DomainLoader.from_name(...).filters and thread the result into every
+    chunk() call — closing RESEARCH.md Pitfall 1's explicitly-flagged gap:
+    a unit-level predicate test alone does not prove the production pipeline
+    protects clinical codes. Patches knowledge_lake.config.settings.get_settings
+    (the SOURCE module process_crawled's function-local import reads from) and
+    knowledge_lake.domains.loader.DomainLoader.from_name."""
+
+    def test_domain_filters_resolved_and_threaded_when_domain_configured(
+        self, session, source
+    ):
+        """settings.domain.domain_name set -> DomainLoader.from_name(...).filters
+        is resolved once and threaded into chunk(domain_filters=...)."""
+        from knowledge_lake.config.settings import DomainSettings, Settings
+        from knowledge_lake.pipeline.process import process_crawled
+
+        _seed_raw_document(session, source.id)
+
+        sentinel_filters = object()
+        mock_domain_loader_instance = MagicMock(filters=sentinel_filters)
+        mock_from_name = MagicMock(return_value=mock_domain_loader_instance)
+
+        configured_settings = Settings(
+            domain=DomainSettings(domain_name="healthcare"),
+            _env_file=None,  # type: ignore[call-arg]
+        )
+        mock_get_settings = MagicMock(return_value=configured_settings)
+
+        mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
+        mock_clean = MagicMock(return_value={"cleaned_doc": object()})
+        mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_embed = MagicMock(return_value=([[0.1]], 1))
+        mock_index = MagicMock(return_value=None)
+
+        with (
+            patch("knowledge_lake.config.settings.get_settings", mock_get_settings),
+            patch(
+                "knowledge_lake.domains.loader.DomainLoader.from_name",
+                mock_from_name,
+            ),
+            patch("knowledge_lake.pipeline.parse.parse", mock_parse),
+            patch("knowledge_lake.pipeline.clean.clean", mock_clean),
+            patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.embed.embed", mock_embed),
+            patch("knowledge_lake.pipeline.index.index", mock_index),
+        ):
+            result = process_crawled()
+
+        assert result["failed"] == 0
+        mock_from_name.assert_called_once_with("healthcare")
+        mock_chunk.assert_called_once()
+        assert mock_chunk.call_args.kwargs["domain_filters"] is sentinel_filters, (
+            "chunk() must receive the resolved DomainLoader.filters as "
+            "domain_filters= — proving process_crawled() genuinely resolves "
+            "and threads it, not just that a predicate-level unit test passes"
+        )
+
+    def test_domain_filters_none_when_no_domain_configured(self, session, source):
+        """settings.domain.domain_name left at its default None -> domain_filters
+        stays None and DomainLoader.from_name is never called (no regression)."""
+        from knowledge_lake.config.settings import Settings
+        from knowledge_lake.pipeline.process import process_crawled
+
+        _seed_raw_document(session, source.id)
+
+        mock_from_name = MagicMock()
+
+        default_settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert default_settings.domain.domain_name is None
+        mock_get_settings = MagicMock(return_value=default_settings)
+
+        mock_parse = MagicMock(return_value=({"artifact_id": "parsed-1"}, object()))
+        mock_clean = MagicMock(return_value={"cleaned_doc": object()})
+        mock_chunk = MagicMock(return_value=[{"chunk_id": "c1"}])
+        mock_embed = MagicMock(return_value=([[0.1]], 1))
+        mock_index = MagicMock(return_value=None)
+
+        with (
+            patch("knowledge_lake.config.settings.get_settings", mock_get_settings),
+            patch(
+                "knowledge_lake.domains.loader.DomainLoader.from_name",
+                mock_from_name,
+            ),
+            patch("knowledge_lake.pipeline.parse.parse", mock_parse),
+            patch("knowledge_lake.pipeline.clean.clean", mock_clean),
+            patch("knowledge_lake.pipeline.chunk.chunk", mock_chunk),
+            patch("knowledge_lake.pipeline.embed.embed", mock_embed),
+            patch("knowledge_lake.pipeline.index.index", mock_index),
+        ):
+            result = process_crawled()
+
+        assert result["failed"] == 0
+        mock_from_name.assert_not_called()
+        mock_chunk.assert_called_once()
+        assert mock_chunk.call_args.kwargs.get("domain_filters") is None
