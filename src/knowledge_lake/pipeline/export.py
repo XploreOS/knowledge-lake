@@ -287,6 +287,7 @@ def export_rag_corpus(
 
         rows: list[dict] = []
         filtered_out = 0
+        substance_filtered_out = 0
         for chunk in chunks:
             # Resolve per-row domain for row data enrichment — same pattern as pipeline/index.py
             # Note: use row_domain (not domain) to avoid shadowing the function's domain kwarg
@@ -298,6 +299,17 @@ def export_rag_corpus(
                 filtered_out += 1
                 continue
 
+            meta = chunk.metadata_ or {}
+
+            # EXPORT-01/D-08/D-09: chunk-level substance gate (Plan 20-01). Missing key
+            # defaults to True (backward-compat for pre-Phase-20 chunks); an explicit
+            # None value is also treated as falsy and excluded. This is exclusively a
+            # row-skip pre-filter — substance_passed/rejection_reason are never added
+            # to _RAG_CORPUS_FIELDS or written as an exported column (T-05-08).
+            if not meta.get("substance_passed", True):
+                substance_filtered_out += 1
+                continue
+
             parsed_id = chunk.parent_artifact_id  # chunk -> parsed
             enriched = (
                 registry_repo.get_enriched_artifact_for_parsed(session, parsed_id)
@@ -306,8 +318,6 @@ def export_rag_corpus(
             )
             enrichment_metadata = (enriched.metadata_ or {}) if enriched else {}
             quality_score = enriched.quality_score if enriched else None
-
-            meta = chunk.metadata_ or {}
 
             # Resolve chunk text: prefer persisted storage_uri (Finding 1 / same pattern
             # as datasets.generate_qa_example). Falls back to meta.get("text","") then ""
@@ -339,6 +349,7 @@ def export_rag_corpus(
             total=len(chunks),
             kept=len(rows),
             filtered_out=filtered_out,
+            substance_filtered_out=substance_filtered_out,
         )
 
         if not rows:
