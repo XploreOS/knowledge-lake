@@ -205,13 +205,13 @@ Plans:
   2. Re-processing the same document produces the same point ID — re-index is idempotent by construction via `uuid5(NAMESPACE, sha256(normalized_text))`
   3. A deduplicated point is filterable by source_id, domain, and format — the `contributors[]` field lists all source documents that contained this text, with primary determined by earliest `created_at`
 
-**Plans:** 1/8 plans executed
+**Plans:** 2/8 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 21-01-PLAN.md — Dedup ledger schema (ChunkDedupLedger model + migration 0011, applied) + repo.py CRUD (claim/get/append-contributor) (DEDUP-01, DEDUP-02, DEDUP-03)
-- [ ] 21-02-PLAN.md — DedupSettings + pure normalize_for_dedup/text_sha256_for/point_id_for_text functions (DEDUP-01, DEDUP-02)
+- [x] 21-02-PLAN.md — DedupSettings + pure normalize_for_dedup/text_sha256_for/point_id_for_text functions (DEDUP-01, DEDUP-02)
 - [ ] 21-03-PLAN.md — VectorStorePlugin.set_payload protocol + QdrantVectorStore implementation (DEDUP-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -281,4 +281,4 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 4/4 | Complete    | 2026-07-17 |
-| 21 | v2.6 Index-Time Dedup | 1/8 | In Progress|  |
+| 21 | v2.6 Index-Time Dedup | 2/8 | In Progress|  |
