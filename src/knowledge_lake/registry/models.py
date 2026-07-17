@@ -534,7 +534,9 @@ class ChunkDedupLedger(Base):
         DateTime(timezone=True), nullable=False
     )
     """Never reassigned once set (D-21) — the first successful claimant is
-    permanent."""
+    permanent, except during D-24 self-heal repair, which reassigns all
+    primary_* fields when the point was lost out-of-band and re-created
+    under the same point_id."""
 
     contributors: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
     """Unbounded list of {chunk_id, document, source_id, created_at} dicts —

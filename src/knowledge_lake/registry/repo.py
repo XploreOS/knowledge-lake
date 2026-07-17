@@ -1259,8 +1259,19 @@ def append_dedup_contributor(
     ``contributor_count`` is derived from the new list's length -- never an
     independent increment, so it cannot drift. The caller is responsible for
     committing the session; this function only mutates the tracked ORM object.
+
+    Idempotent by ``chunk_id``: if an entry for this ``chunk_id`` is already
+    present, this is a no-op. ``chunk()`` is itself content-hash idempotent --
+    reprocessing an already-indexed document reuses the same chunk_id, which
+    dedup_chunks() correctly routes to "duplicates" on every rerun. Without
+    this guard, re-running the same document would re-append its own chunk
+    as a distinct contributor of itself on every pass, inflating
+    contributor_count and corrupting the per-document contributor lineage
+    this ledger exists to preserve.
     """
     new_contributors = list(ledger_row.contributors or [])
+    if any(c.get("chunk_id") == chunk_id for c in new_contributors):
+        return ledger_row
     new_contributors.append(
         {
             "chunk_id": chunk_id,

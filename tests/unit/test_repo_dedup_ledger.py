@@ -278,6 +278,78 @@ def test_append_dedup_contributor_count_never_drifts(session, n_appends):
     assert row.contributor_count == 1 + n_appends
 
 
+def test_append_dedup_contributor_is_idempotent_for_repeated_chunk_id(session):
+    """Regression (code review WR-01): reprocessing an already-indexed
+    document reuses the same content-hash-derived chunk_id (chunk() is
+    itself content-hash idempotent). dedup_chunks() correctly routes that
+    rerun's chunk to "duplicates" every time, so index() calls
+    append_dedup_contributor with the SAME chunk_id on every rerun. Without
+    an idempotency guard, this would double-count the same document as two
+    distinct contributors of itself, inflating contributor_count and
+    corrupting the ledger's per-document lineage guarantee."""
+    created_at = _now()
+    row, _ = registry_repo.claim_dedup_ledger_entry(
+        session,
+        collection="klake_chunks",
+        text_sha256="reprocessme",
+        point_id="pid-1",
+        chunk_id="chk_1",
+        parsed_artifact_id="art_1",
+        source_id="src_1",
+        created_at=created_at,
+    )
+    session.commit()
+    assert row.contributor_count == 1
+
+    # First genuine duplicate: a different document contributing the same text.
+    registry_repo.append_dedup_contributor(
+        session,
+        row,
+        chunk_id="chk_2",
+        document="art_2",
+        source_id="src_2",
+        created_at=_now(),
+    )
+    session.commit()
+    assert row.contributor_count == 2
+
+    # Reprocessing doc_1: same chunk_id as the existing primary (chk_1) is
+    # "re-appended" — must be a no-op, not a third contributor entry.
+    registry_repo.append_dedup_contributor(
+        session,
+        row,
+        chunk_id="chk_1",
+        document="art_1",
+        source_id="src_1",
+        created_at=_now(),
+    )
+    session.commit()
+
+    assert row.contributor_count == 2, (
+        "Re-appending an existing chunk_id must be a no-op — contributor_count "
+        "must not inflate when the same document/chunk is reprocessed."
+    )
+    assert len(row.contributors) == 2
+    chunk_ids = [c["chunk_id"] for c in row.contributors]
+    assert chunk_ids.count("chk_1") == 1, (
+        f"chk_1 must appear exactly once in contributors, got {chunk_ids}"
+    )
+
+    # Reprocessing the SECOND contributor's chunk (chk_2) must also be a no-op.
+    registry_repo.append_dedup_contributor(
+        session,
+        row,
+        chunk_id="chk_2",
+        document="art_2",
+        source_id="src_2",
+        created_at=_now(),
+    )
+    session.commit()
+
+    assert row.contributor_count == 2
+    assert len(row.contributors) == 2
+
+
 def test_single_contributor_ledger_row_has_length_one(session):
     """DEDUP-03 trivial boundary case: no duplicate ever arrived."""
     created_at = _now()
