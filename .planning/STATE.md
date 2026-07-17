@@ -4,9 +4,9 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: Index-Time Dedup
-status: planning
+status: executing
 stopped_at: Completed 20-04-PLAN.md
-last_updated: "2026-07-17T07:28:46.953Z"
+last_updated: "2026-07-17T12:36:01.223Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 20 complete, transitioned to Phase 21
 progress:
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 21 — Index-Time Dedup
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-17 — Phase 20 complete, transitioned to Phase 21
 
 ## Performance Metrics
