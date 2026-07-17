@@ -608,6 +608,196 @@ class TestRagCorpus:
         # get_object should NOT have been called for a chunk with no storage_uri
         mock_storage.get_object.assert_not_called()
 
+    def _seed_chunk_with_substance(self, session, source, *, suffix: str, metadata: dict):
+        """Seed a raw -> parsed -> chunk tree with a caller-specified metadata_ dict.
+
+        Mirrors _seed_chunk_with_internal_key / test_export_domain_filter.py's
+        _seed_chunk pattern, but lets each substance-gate test control metadata_
+        exactly (e.g. substance_passed True/False/None/absent).
+        """
+        from knowledge_lake.registry import repo as registry_repo
+
+        raw = registry_repo.create_raw_artifact(
+            session, source_id=source.id, content_hash=f"raw_{suffix}"
+        )
+        session.flush()
+        parsed = registry_repo.create_parsed_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=raw.id,
+            content_hash=f"parsed_{suffix}",
+        )
+        session.flush()
+        chunk = registry_repo.create_chunk_artifact(
+            session,
+            source_id=source.id,
+            parent_artifact_id=parsed.id,
+            content_hash=f"chunk_{suffix}",
+            metadata=metadata,
+        )
+        session.flush()
+        return chunk, parsed
+
+    def _run_export(self, engine):
+        """Run export_rag_corpus() with a mocked storage backend, return (result, df)."""
+        import polars as pl
+
+        settings = _make_settings(engine)
+        written_data: dict[str, bytes] = {}
+
+        def mock_put_object(key, data, **kwargs):
+            written_data[key] = data
+
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = mock_put_object
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        import knowledge_lake.pipeline.export as export_module
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            result = export_module.export_rag_corpus(settings=settings)
+
+        parquet_keys = [k for k in written_data if k.endswith(".parquet")]
+        assert len(parquet_keys) == 1
+        df = pl.read_parquet(io.BytesIO(written_data[parquet_keys[0]]))
+        return result, df
+
+    def test_substance_passed_true_is_included(self, session, source, engine):
+        """A chunk with substance_passed=True IS included in the export."""
+        chunk, _parsed = self._seed_chunk_with_substance(
+            session, source, suffix="sub_true",
+            metadata={"substance_passed": True, "text": "Clinical prose about HIPAA safeguards."},
+        )
+        session.commit()
+
+        result, df = self._run_export(engine)
+
+        assert chunk.id in df["chunk_id"].to_list()
+        assert result["row_count"] == 1
+
+    def test_substance_passed_false_is_excluded(self, session, source, engine):
+        """A chunk with substance_passed=False is EXCLUDED from the export."""
+        chunk, _parsed = self._seed_chunk_with_substance(
+            session, source, suffix="sub_false",
+            metadata={
+                "substance_passed": False,
+                "rejection_reason": "below_alpha_ratio:0.3",
+                "text": "nav junk cookie banner",
+            },
+        )
+        session.commit()
+
+        result, df = self._run_export(engine)
+
+        assert chunk.id not in df["chunk_id"].to_list()
+        assert result["row_count"] == 0
+
+    def test_substance_passed_missing_key_defaults_to_included(self, session, source, engine):
+        """A chunk with NO substance_passed key at all (pre-Phase-20) IS included (D-09)."""
+        chunk, _parsed = self._seed_chunk_with_substance(
+            session, source, suffix="sub_missing",
+            metadata={"text": "Legacy chunk with no gate annotation."},
+        )
+        session.commit()
+
+        result, df = self._run_export(engine)
+
+        assert chunk.id in df["chunk_id"].to_list()
+        assert result["row_count"] == 1
+
+    def test_substance_passed_explicit_none_is_excluded(self, session, source, engine):
+        """A chunk with substance_passed explicitly None (distinct from missing) is EXCLUDED."""
+        chunk, _parsed = self._seed_chunk_with_substance(
+            session, source, suffix="sub_none",
+            metadata={"substance_passed": None, "text": "Ambiguous gate state."},
+        )
+        session.commit()
+
+        result, df = self._run_export(engine)
+
+        assert chunk.id not in df["chunk_id"].to_list()
+        assert result["row_count"] == 0
+
+    def test_document_with_all_chunks_rejected_exports_zero_rows(self, session, source, engine):
+        """A document whose every chunk has substance_passed=False exports zero rows,
+        without raising — the existing empty-schema-Parquet branch handles it.
+        """
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_allrej1",
+            metadata={"substance_passed": False, "text": "junk 1"},
+        )
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_allrej2",
+            metadata={"substance_passed": False, "text": "junk 2"},
+        )
+        session.commit()
+
+        result, df = self._run_export(engine)
+
+        assert result["row_count"] == 0
+        assert df.height == 0
+
+    def test_substance_passed_never_exported_as_column(self, session, source, engine):
+        """The exported Parquet's column set equals _RAG_CORPUS_FIELDS exactly —
+        substance_passed/rejection_reason never appear as columns.
+        """
+        from knowledge_lake.pipeline.export import _RAG_CORPUS_FIELDS
+
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_colcheck",
+            metadata={
+                "substance_passed": True,
+                "rejection_reason": None,
+                "text": "Clinical content.",
+            },
+        )
+        session.commit()
+
+        _result, df = self._run_export(engine)
+
+        column_names = set(df.columns)
+        assert column_names == set(_RAG_CORPUS_FIELDS)
+        assert "substance_passed" not in column_names
+        assert "rejection_reason" not in column_names
+
+    def test_substance_filtered_out_counter_logged(self, session, source, engine):
+        """export.rag_corpus.building's log call carries a substance_filtered_out
+        count reflecting exactly how many chunks were skipped for this reason.
+        """
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_log_pass",
+            metadata={"substance_passed": True, "text": "Clinical content."},
+        )
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_log_fail1",
+            metadata={"substance_passed": False, "text": "junk 1"},
+        )
+        self._seed_chunk_with_substance(
+            session, source, suffix="sub_log_fail2",
+            metadata={"substance_passed": False, "text": "junk 2"},
+        )
+        session.commit()
+
+        settings = _make_settings(engine)
+        mock_storage = MagicMock()
+        mock_storage.put_object.side_effect = lambda key, data, **kw: None
+        mock_storage.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+
+        import knowledge_lake.pipeline.export as export_module
+
+        with patch.object(export_module, "_make_storage", return_value=mock_storage):
+            with patch.object(export_module.log, "info") as mock_log_info:
+                result = export_module.export_rag_corpus(settings=settings)
+
+        assert result["row_count"] == 1
+
+        building_calls = [
+            c for c in mock_log_info.call_args_list
+            if c.args and c.args[0] == "export.rag_corpus.building"
+        ]
+        assert len(building_calls) == 1
+        assert building_calls[0].kwargs["substance_filtered_out"] == 2
+
 
 class TestNoDiskWrites:
     """PROJECT.md 'no local filesystem as production store' guard."""
