@@ -8,11 +8,11 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
-## Current State (v2.6-in-progress, Phase 19 complete 2026-07-17)
+## Current State (v2.6-in-progress, Phase 20 complete 2026-07-17)
 
-- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement) · Phase 18 complete (Gate Decouple) · Phase 19 complete (Section Classifier + Patterns)
+- **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement) · Phase 18 complete (Gate Decouple) · Phase 19 complete (Section Classifier + Patterns) · Phase 20 complete (Chunk Substance Gate + Export Gate)
 - **Source lines:** ~26,000 Python (src) + ~24,300 (tests)
-- **Tests:** 994 passing, 0 failed, 0 xpassed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
+- **Tests:** 1118 passing, 0 failed, 3 skipped, 6 xfailed (`xfail_strict = true` active) plus integration/e2e suites (Qdrant/Postgres-gated)
 - **Pipeline:** ingest → parse → **clean (now active on all paths)** → chunk/tree_index → enrich → embed → index → curate → generate-dataset → export → wiki
 - **Agent surface:** MCP server (stdio + Streamable HTTP), 11 intent-level tools over one registry; OpenAPI + OpenAI tool defs from a single Pydantic schema source; 4 Claude Code skills
 - **Retrieval:** hybrid BM25 + dense (RRF), mode-switchable (`hybrid|dense|sparse`); two-stage tree retrieval; query router dispatching between chunk and tree paths (`chunk|tree|two_stage|auto`)
@@ -28,6 +28,7 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Phase 17 complete:** Clean-stage bypass closed on both Dagster and CLI paths; WR-05 content hash scoping applied; conservation invariant (`rejected+kept==sections_considered`) wired; `klake quality-audit` harness ships a reproducible per-source garbage-rate table. 25/25 must-haves verified passed 2026-07-16.
 - **Phase 18 complete:** Re-crawl change gate decoupled from `BOILERPLATE_PATTERNS` — `_GATE_BOILERPLATE_PATTERNS` frozen in `crawl.py`, `_gate_normalize()` added, `remove_boilerplate` import removed, byte-stability pinning test ships. 5/5 must-haves verified passed 2026-07-16.
 - **Phase 19 complete:** Section-level boilerplate classification ships — `classify_sections()` computes substance signals (link_density, terminal_punct_ratio, stopword_ratio, token_count) and actually drops boilerplate sections in `clean()`; `BOILERPLATE_PATTERNS` extended 4→9 entries (5 new garbage categories); `pipeline/quality/` pure predicate module (7 predicates, zero I/O, 100% branch coverage) ships for reuse by Phase 20; `DomainFilters` + `domains/healthcare/filters.yaml` protect clinical codes (ICD-10/LOINC/RxNorm/dosage patterns) from removal. Post-merge code review found and fixed 2 critical issues (an overbroad marketing-CTA regex that would have dropped legitimate clinical enrollment text, and missing `extra="forbid"` on domain-pack Pydantic models). 15/15 must-haves verified passed 2026-07-17.
+- **Phase 20 complete:** Chunk-level substance gate ships — `chunk()`'s composite gate wires `pipeline/quality/`'s predicates plus a chunk-scoped `FineWebQualityFilter` (`ChunkQualitySettings`, distinct from `CurateSettings`), enforce/report modes, `is_table` exemption, and a QUAL-05 conservation invariant; `filter_config_version` folded into the WR-05 chunk hash so threshold changes trigger re-processing (PIPE-01). `export_rag_corpus()` gates on chunk-level `substance_passed` instead of document-level `quality_score` (EXPORT-01); eval/instruction dataset examples carry a `version` tag (EXPORT-02). `tests/fixtures/must_not_reject.yaml` (25 hand-labeled clinical entries) + a parametrized CI test prove the real `chunk()` gate never drops ICD-10/LOINC/RxNorm/dosage/cardinality-constraint content (MEAS-02). Post-execution code review found and fixed 2 critical issues: `clean()` (which runs before `chunk()`) never received the resolved `domain_filters` in production, so a bare clinical code could be dropped a stage before `chunk()`'s new gate ever saw it; and the new cardinality-allowlist regex was broad enough to unconditionally exempt ordinary pagination text ("Page 1 of 5") from `clean.py`'s own boilerplate detector. Both fixed with regression tests verified to fail pre-fix. 5/5 must-haves verified passed 2026-07-17.
 
 ## Next Milestone: v2.6 Data Quality & Enrichment
 
@@ -143,9 +144,9 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 - [ ] Cleaned text consumed by chunk/tree/enrich (close the clean-stage bypass)
 - [ ] Crawler-level boilerplate stripping (forward-only; raw zone immutability preserved)
 - [x] Section-level boilerplate classification (deterministic-first) — Phase 19
-- [ ] Minimum-substance gate at chunk (no floor exists today — `ChunkSettings` has only max/overlap/tokenizer)
+- [x] Minimum-substance gate at chunk (composite predicate + chunk-scoped `FineWebQualityFilter`, enforce/report modes) — Phase 20
 - [ ] Index-time dedup preserving per-document chunk lineage (WR-05)
-- [ ] Quality gate on gold RAG corpus export
+- [x] Quality gate on gold RAG corpus export (chunk-level `substance_passed`, not document-level `quality_score`) — Phase 20
 
 ### Deferred to a future milestone
 
@@ -233,4 +234,4 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-17 after Phase 19 (Section Classifier + Patterns) verified passed*
+*Last updated: 2026-07-17 after Phase 20 (Chunk Substance Gate + Export Gate) verified passed*
