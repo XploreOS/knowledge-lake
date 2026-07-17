@@ -4,17 +4,17 @@ milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 20
 current_phase_name: chunk-substance-gate-export-gate
-status: executing
-stopped_at: Completed 20-03-PLAN.md
-last_updated: "2026-07-17T04:20:00.000Z"
+status: verifying
+stopped_at: Completed 20-04-PLAN.md
+last_updated: "2026-07-17T06:55:50.407Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 20 execution started
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 60
+  completed_plans: 13
+  percent: 80
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 20 (chunk-substance-gate-export-gate) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17 — Phase 20 execution started
 
 ## Performance Metrics
@@ -92,6 +92,7 @@ Last activity: 2026-07-17 — Phase 20 execution started
 | Phase 20 P01 | 13min | 3 tasks | 4 files |
 | Phase 20 P02 | 6min | 3 tasks | 4 files |
 | Phase 20 P03 | ~40min (session-interrupted, resumed) | 2 tasks | 4 files |
+| Phase 20 P04 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,7 @@ Last activity: 2026-07-17 — Phase 20 execution started
 - [Phase ?]: 20-03: EXPORT-02 delivered as versioning-only (payload["version"] tag), not migration — pre-Phase-20 DatasetExample rows stay unversioned until an operator re-runs the existing, unmodified `klake generate-dataset` CLI against re-processed artifacts; documented in 20-03-PLAN.md's <operational_followup> per plan-checker review
 - [Phase ?]: 20-03: export_rag_corpus()'s substance_passed gate treats an explicit None the same as False (excluded) via meta.get('substance_passed', True) — deliberate, tested distinction from a missing key (defaults True/included)
 - [Phase ?]: 20-03: executor session was cut off by a Claude Code usage-limit reset mid-Task-2 (RED commit landed, GREEN uncommitted); recovered by verifying the in-progress working-tree diff against Task 2's own RED tests/acceptance criteria before committing — no plan content altered
+- [Phase ?]: 20-04: Every must_not_reject.yaml fixture text deliberately matches one of healthcare filters.yaml's 7 normative_allowlists patterns, making the fixture set a direct proof of Plan 20-02's DomainLoader wiring rather than relying on some entries clearing FineWebQualityFilter/threshold defaults naturally
 
 ### Pending Todos
 
@@ -184,8 +186,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T04:20:00.000Z
-Stopped at: Completed 20-03-PLAN.md
+Last session: 2026-07-17T06:55:50.396Z
+Stopped at: Completed 20-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
