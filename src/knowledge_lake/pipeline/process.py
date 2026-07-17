@@ -15,6 +15,11 @@ Resolves ``settings.domain.domain_name`` via ``DomainLoader`` once per call
 ``chunk()`` call, mirroring the Dagster ``chunk_document`` asset's guard so
 the substance-gate domain allowlist exemption (QUAL-03) protects clinical
 codes on this path too.
+
+DEDUP-01: runs ``dedup_chunks()`` between ``chunk()`` and ``embed()``/
+``index()`` so this CLI/API/MCP-shared path embeds only first-seen chunk
+text, threading ``duplicate_chunks`` into ``index()`` to mirror contributors
+onto the pre-existing Qdrant point instead of re-embedding duplicate text.
 """
 from __future__ import annotations
 
@@ -61,6 +66,7 @@ def process_crawled(
     from knowledge_lake.config.settings import get_settings
     from knowledge_lake.pipeline.chunk import chunk
     from knowledge_lake.pipeline.clean import clean
+    from knowledge_lake.pipeline.dedup import dedup_chunks
     from knowledge_lake.pipeline.embed import embed
     from knowledge_lake.pipeline.index import index
     from knowledge_lake.pipeline.ingest import _detect_mime_from_uri
@@ -128,8 +134,17 @@ def process_crawled(
                 processed += 1
                 continue
 
-            vectors, dim = embed(chunks_list)
-            index(chunks_list, vectors, dim, parsed_id, collection=collection)
+            dedup_result = dedup_chunks(chunks_list, parsed_id, src_id, collection=collection)
+
+            vectors, dim = embed(dedup_result["new"])
+            index(
+                dedup_result["new"],
+                vectors,
+                dim,
+                parsed_id,
+                collection=collection,
+                duplicate_chunks=dedup_result["duplicates"],
+            )
 
             processed += 1
             total_chunks += len(chunks_list)
