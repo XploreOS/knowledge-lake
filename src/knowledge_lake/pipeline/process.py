@@ -120,7 +120,7 @@ def process_crawled(
             parse_result, parsed_doc = parse(raw_id, src_id, mime_type=mime)
             parsed_id = parse_result["artifact_id"]
 
-            clean_result = clean(parsed_id, src_id, parsed_doc=parsed_doc)
+            clean_result = clean(parsed_id, src_id, parsed_doc=parsed_doc, domain_filters=domain_filters)
             cleaned_doc = clean_result["cleaned_doc"]
 
             chunks_list = chunk(parsed_id, src_id, cleaned_doc, domain_filters=domain_filters)

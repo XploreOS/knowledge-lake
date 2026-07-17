@@ -293,7 +293,10 @@ class TestProcessCrawledDomainFilters:
         self, session, source
     ):
         """settings.domain.domain_name set -> DomainLoader.from_name(...).filters
-        is resolved once and threaded into chunk(domain_filters=...)."""
+        is resolved once and threaded into BOTH clean(domain_filters=...) and
+        chunk(domain_filters=...) (CR-01: clean() runs before chunk() and can
+        drop a clinical-code section via check_alpha_ratio before chunk()'s gate
+        ever sees it, so domain_filters must reach clean() too, not just chunk())."""
         from knowledge_lake.config.settings import DomainSettings, Settings
         from knowledge_lake.pipeline.process import process_crawled
 
@@ -331,7 +334,14 @@ class TestProcessCrawledDomainFilters:
 
         assert result["failed"] == 0
         mock_from_name.assert_called_once_with("healthcare")
+        mock_clean.assert_called_once()
         mock_chunk.assert_called_once()
+        assert mock_clean.call_args.kwargs["domain_filters"] is sentinel_filters, (
+            "clean() must ALSO receive the resolved DomainLoader.filters as "
+            "domain_filters= — clean() runs before chunk() and can drop a "
+            "clinical-code section via check_alpha_ratio before chunk()'s gate "
+            "ever runs (CR-01 regression guard)"
+        )
         assert mock_chunk.call_args.kwargs["domain_filters"] is sentinel_filters, (
             "chunk() must receive the resolved DomainLoader.filters as "
             "domain_filters= — proving process_crawled() genuinely resolves "

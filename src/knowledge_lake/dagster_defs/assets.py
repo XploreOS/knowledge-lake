@@ -268,7 +268,10 @@ def parsed_document(
 @asset(
     description=(
         "Clean a parsed document: remove boilerplate, detect language, near-dup flag. "
-        "Calls pipeline.clean.clean — no logic duplicated."
+        "Calls pipeline.clean.clean — no logic duplicated. "
+        "Resolves settings.domain.domain_name via DomainLoader and threads its "
+        ".filters into clean() so section-level boilerplate classification can "
+        "exempt domain-specific clinical codes before chunk() ever runs (QUAL-03 CR-01)."
     ),
     group_name="pipeline",
     retry_policy=_PIPELINE_RETRY,
@@ -316,7 +319,18 @@ def clean_document(
 
     log.info("dagster.clean_document.start", parsed_artifact_id=parsed_artifact_id)
 
-    clean_result = clean(parsed_artifact_id, source_id, parsed_doc=parsed_doc, settings=settings)
+    domain_filters = None
+    if settings.domain.domain_name:
+        from knowledge_lake.domains.loader import DomainLoader
+        domain_filters = DomainLoader.from_name(settings.domain.domain_name).filters
+
+    clean_result = clean(
+        parsed_artifact_id,
+        source_id,
+        parsed_doc=parsed_doc,
+        settings=settings,
+        domain_filters=domain_filters,
+    )
 
     result = {
         "artifact_id": clean_result["artifact_id"],

@@ -169,3 +169,146 @@ def test_fixture_survives_real_chunk_substance_gate(entry, engine, fake_storage,
             f"REJECTED by the substance gate: rejection_reason="
             f"{r.get('rejection_reason')!r}, text={entry['text']!r}"
         )
+
+
+# ── CR-01 regression guard: real clean() -> chunk() sequence ─────────────────
+#
+# The proof test above calls chunk() directly with a hand-built ParsedDoc,
+# which does NOT exercise clean() — the stage that actually runs first in
+# every production path (process_crawled, clean_document Dagster asset) and
+# can outright DROP a section via check_alpha_ratio before chunk()'s gate
+# ever sees it. A bare clinical code like "ICD-10 E11.9" (alpha ratio 0.36)
+# fails that threshold with no allowlist exemption unless domain_filters is
+# threaded into clean() too, not just chunk().
+#
+# This test proves the SEQUENCE is correct when both calls are explicitly
+# given domain_filters — necessary but NOT sufficient to catch the actual
+# CR-01 bug, since it doesn't exercise how production resolves and threads
+# domain_filters into clean(). That production-wiring regression is guarded
+# separately by test_process_crawled_clean.py::TestProcessCrawledDomainFilters
+# ::test_domain_filters_resolved_and_threaded_when_domain_configured, which
+# asserts clean() (not just chunk()) receives the resolved DomainLoader
+# filters via mock-call inspection of process_crawled()'s own resolution
+# logic — verified to fail without the process.py fix.
+
+
+def _mock_clean_storage():
+    from unittest.mock import MagicMock
+
+    mock_storage_instance = MagicMock()
+    mock_storage_instance.get_object.return_value = b"unused"
+    mock_storage_instance.object_uri.side_effect = lambda key: f"s3://test-bucket/{key}"
+    mock_storage_instance.put_object.side_effect = lambda *a, **kw: None
+    return mock_storage_instance
+
+
+def test_bare_icd10_code_survives_real_clean_then_chunk_sequence(
+    engine, fake_storage, test_settings
+):
+    """CR-01 regression guard: a bare 'ICD-10 E11.9' section (alpha ratio 0.36,
+    below check_alpha_ratio's 0.5 default with NO allowlist exemption) must
+    survive the REAL clean() -> chunk() sequence when domain_filters is
+    resolved via DomainLoader.from_name("healthcare") and threaded into BOTH
+    calls — proving clean() no longer drops it before chunk()'s gate runs."""
+    import knowledge_lake.pipeline.clean as clean_module
+    from unittest.mock import patch
+
+    from knowledge_lake.domains.loader import DomainLoader
+    from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.pipeline.clean import clean
+    from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+    source_id, parsed_id = _seed_source_and_parsed(engine, domain="healthcare")
+    parsed_doc = ParsedDoc(
+        text="ICD-10 E11.9",
+        sections=[
+            Section(heading="Code", section_path="§1", page=1, text="ICD-10 E11.9", is_table=False)
+        ],
+        metadata={},
+    )
+
+    domain_filters = DomainLoader.from_name("healthcare").filters
+
+    with patch.object(clean_module, "StorageBackend", return_value=_mock_clean_storage()):
+        clean_result = clean(
+            parsed_id,
+            source_id,
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+            domain_filters=domain_filters,
+        )
+
+    cleaned_doc = clean_result["cleaned_doc"]
+    assert len(cleaned_doc.sections) == 1, (
+        "clean() dropped the bare ICD-10 code before chunk() ever ran — "
+        "domain_filters was not threaded into clean() (CR-01 regression)"
+    )
+
+    results = chunk(
+        parsed_id,
+        source_id,
+        cleaned_doc,
+        settings=test_settings,
+        domain_filters=domain_filters,
+    )
+
+    assert len(results) >= 1
+    for r in results:
+        assert r["substance_passed"], (
+            f"ICD-10 E11.9 was rejected by chunk()'s gate after surviving "
+            f"clean(): rejection_reason={r.get('rejection_reason')!r}"
+        )
+
+
+# ── CR-02 regression guard: negative fixtures for the cardinality pattern ────
+#
+# The cardinality-constraint normative_allowlists pattern must never become
+# broad enough to exempt ordinary pagination/boilerplate text from
+# clean.py's dedicated "Page N of M" boilerplate detector. These fixtures
+# must still be classified as boilerplate / rejected even with the
+# healthcare domain_filters active — pinning the fix that narrowed the
+# pattern to require adjacency to clinical-scoring vocabulary.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Page 1 of 5",
+        "Showing 1 of 20 results",
+        "Home About Contact Sitemap Search Page 2 of 8",
+    ],
+    ids=["page_footer", "results_pagination", "nav_with_page_footer"],
+)
+def test_pagination_boilerplate_still_rejected_with_domain_filters_active(
+    text, engine, fake_storage, test_settings
+):
+    """CR-02 regression guard: pagination/boilerplate text must NOT be rescued
+    by the cardinality-constraint allowlist pattern, even with the real
+    healthcare domain_filters resolved and passed to chunk()."""
+    from knowledge_lake.domains.loader import DomainLoader
+    from knowledge_lake.pipeline.chunk import chunk
+    from knowledge_lake.plugins.protocols import ParsedDoc, Section
+
+    source_id, parsed_id = _seed_source_and_parsed(engine, domain="healthcare")
+    parsed_doc = ParsedDoc(
+        text=text,
+        sections=[Section(heading="", section_path="§1", page=1, text=text, is_table=False)],
+        metadata={},
+    )
+
+    domain_filters = DomainLoader.from_name("healthcare").filters
+
+    results = chunk(
+        parsed_id,
+        source_id,
+        parsed_doc,
+        settings=test_settings,
+        domain_filters=domain_filters,
+    )
+
+    for r in results:
+        assert not r["substance_passed"], (
+            f"Pagination boilerplate {text!r} was WRONGLY exempted by the "
+            f"cardinality-constraint allowlist pattern (CR-02 regression) — "
+            f"it must fail the substance gate, not be unconditionally rescued"
+        )
