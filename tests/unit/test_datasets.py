@@ -393,3 +393,116 @@ def test_llm_call_failure_is_skipped_not_raised(
 
     assert result["status"] == "skipped_generation_failed"
     assert result.get("example_id") is None
+
+
+def test_qa_example_payload_carries_version_field(
+    engine, seeded, fake_storage, test_settings
+) -> None:
+    """EXPORT-02/D-11: generate_qa_example()'s payload dict includes a 'version'
+    key set verbatim from settings.chunk_quality.filter_config_version.
+    """
+    import knowledge_lake.pipeline.datasets as datasets_module
+    from sqlalchemy import select
+    from knowledge_lake.registry.models import DatasetExample
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(VALID_QA_PAYLOAD))
+    with patch("litellm.completion", mock_completion):
+        result = datasets_module.generate_qa_example(
+            seeded["chunk_id"], "version-tag-qa-dataset", settings=test_settings
+        )
+
+    assert result["status"] == "generated"
+
+    with Session(engine) as check_session:
+        stmt = select(DatasetExample).where(DatasetExample.id == result["example_id"])
+        row = check_session.execute(stmt).scalar_one_or_none()
+        assert row is not None
+        assert row.payload["version"] == test_settings.chunk_quality.filter_config_version
+
+
+def test_instruction_example_payload_carries_version_field(
+    engine, seeded, fake_storage, test_settings
+) -> None:
+    """EXPORT-02/D-12: generate_instruction_example()'s payload dict includes a
+    'version' key set verbatim from settings.chunk_quality.filter_config_version.
+    """
+    import knowledge_lake.pipeline.datasets as datasets_module
+    from sqlalchemy import select
+    from knowledge_lake.registry.models import DatasetExample
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(VALID_INSTRUCTION_PAYLOAD))
+    with patch("litellm.completion", mock_completion):
+        result = datasets_module.generate_instruction_example(
+            seeded["enriched_document_id"], "version-tag-instr-dataset", settings=test_settings
+        )
+
+    assert result["status"] == "generated"
+
+    with Session(engine) as check_session:
+        stmt = select(DatasetExample).where(DatasetExample.id == result["example_id"])
+        row = check_session.execute(stmt).scalar_one_or_none()
+        assert row is not None
+        assert row.payload["version"] == test_settings.chunk_quality.filter_config_version
+
+
+def test_qa_example_different_filter_config_version_yields_different_version_tag(
+    engine, seeded, fake_storage
+) -> None:
+    """Two calls to generate_qa_example() under different
+    settings.chunk_quality.filter_config_version values produce examples whose
+    payload['version'] differ accordingly. Each call targets a distinct chunk
+    and dataset name so neither hits the pre-existing _dataset_gen_cache_key cache
+    (which is keyed on content_hash + dataset.prompt_version, not filter_config_version).
+    """
+    import knowledge_lake.pipeline.datasets as datasets_module
+    from knowledge_lake.config.settings import ChunkQualitySettings, Settings
+    from knowledge_lake.registry import repo as registry_repo
+    from sqlalchemy import select
+    from knowledge_lake.registry.models import DatasetExample
+
+    settings_v1 = Settings(
+        chunk_quality=ChunkQualitySettings(filter_config_version="1.0"),
+        _env_file=None,  # type: ignore[call-arg]
+    )
+    settings_v2 = Settings(
+        chunk_quality=ChunkQualitySettings(filter_config_version="2.0"),
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    # Second chunk under the same source so the QA call has a distinct content_hash
+    with Session(engine) as extra_session:
+        chunk2 = registry_repo.create_chunk_artifact(
+            extra_session,
+            source_id=seeded["source_id"],
+            parent_artifact_id=seeded["chunk_id"],
+            content_hash="chunk_h_version_v2",
+            storage_uri=None,
+            metadata={"text": "A second chunk for version-tag divergence testing."},
+        )
+        extra_session.commit()
+        chunk2_id = chunk2.id
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(VALID_QA_PAYLOAD))
+    with patch("litellm.completion", mock_completion):
+        result_v1 = datasets_module.generate_qa_example(
+            seeded["chunk_id"], "version-diff-dataset-v1", settings=settings_v1
+        )
+        result_v2 = datasets_module.generate_qa_example(
+            chunk2_id, "version-diff-dataset-v2", settings=settings_v2
+        )
+
+    assert result_v1["status"] == "generated"
+    assert result_v2["status"] == "generated"
+
+    with Session(engine) as check_session:
+        row_v1 = check_session.execute(
+            select(DatasetExample).where(DatasetExample.id == result_v1["example_id"])
+        ).scalar_one_or_none()
+        row_v2 = check_session.execute(
+            select(DatasetExample).where(DatasetExample.id == result_v2["example_id"])
+        ).scalar_one_or_none()
+        assert row_v1 is not None
+        assert row_v2 is not None
+        assert row_v1.payload["version"] == "1.0"
+        assert row_v2.payload["version"] == "2.0"
+        assert row_v1.payload["version"] != row_v2.payload["version"]
