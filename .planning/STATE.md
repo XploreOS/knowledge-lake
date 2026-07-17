@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 21
-current_phase_name: Index-Time Dedup
+current_phase_name: index-time-dedup
 status: executing
-stopped_at: Completed 20-04-PLAN.md
-last_updated: "2026-07-17T12:36:01.223Z"
+stopped_at: Completed 21-01-PLAN.md
+last_updated: "2026-07-17T12:47:08.008Z"
 last_activity: 2026-07-17
-last_activity_desc: Phase 20 complete, transitioned to Phase 21
+last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
-  percent: 80
+  total_plans: 21
+  completed_plans: 14
+  percent: 67
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 20 — chunk-substance-gate-export-gate
+**Current focus:** Phase 21 — index-time-dedup
 
 ## Current Position
 
-Phase: 21 — Index-Time Dedup
-Plan: Not started
+Phase: 21 (index-time-dedup) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-07-17 — Phase 20 complete, transitioned to Phase 21
+Last activity: 2026-07-17 — Phase 21 execution started
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Last activity: 2026-07-17 — Phase 20 complete, transitioned to Phase 21
 | Phase 20 P02 | 6min | 3 tasks | 4 files |
 | Phase 20 P03 | ~40min (session-interrupted, resumed) | 2 tasks | 4 files |
 | Phase 20 P04 | 10min | 2 tasks | 2 files |
+| Phase 21 P01 | 12min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,8 @@ Last activity: 2026-07-17 — Phase 20 complete, transitioned to Phase 21
 - [Phase ?]: 20-03: export_rag_corpus()'s substance_passed gate treats an explicit None the same as False (excluded) via meta.get('substance_passed', True) — deliberate, tested distinction from a missing key (defaults True/included)
 - [Phase ?]: 20-03: executor session was cut off by a Claude Code usage-limit reset mid-Task-2 (RED commit landed, GREEN uncommitted); recovered by verifying the in-progress working-tree diff against Task 2's own RED tests/acceptance criteria before committing — no plan content altered
 - [Phase ?]: 20-04: Every must_not_reject.yaml fixture text deliberately matches one of healthcare filters.yaml's 7 normative_allowlists patterns, making the fixture set a direct proof of Plan 20-02's DomainLoader wiring rather than relying on some entries clearing FineWebQualityFilter/threshold defaults naturally
+- [Phase ?]: 21-01: contributors column reuses the module's existing _JSON alias (not JSON().with_variant(JSONB)) per the plan's locked Task 1 action text, consistent with Source.config/Artifact.metadata_
+- [Phase ?]: 21-01: ChunkDedupLedger.id uses new_id('artifact') (art_<uuidv7>), matching VectorCollection's precedent for a generic non-lineage registry row
 
 ### Pending Todos
 
@@ -187,8 +190,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T06:55:50.396Z
-Stopped at: Completed 20-04-PLAN.md
+Last session: 2026-07-17T12:47:07.991Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
