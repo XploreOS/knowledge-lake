@@ -282,3 +282,33 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 4/4 | Complete    | 2026-07-17 |
 | 21 | v2.6 Index-Time Dedup | 8/8 | Complete    | 2026-07-17 |
+| 22 | Address tech debt: measure garbage/junk rates end-to-end | 0/3 | Planned     | — |
+
+### Phase 22: Address tech debt: measure garbage/junk rates end-to-end, reconcile Nyquist validation
+
+**Goal**: Produce genuine, reproducible chunk-level and export-level measurements of the v2.6 milestone's two quantitative success criteria (<5% garbage chunks, <2% junk gold-export rows) against real reprocessed data from the 34 healthcare sources — scoped to avoid dilution by the ~4,512 pre-v2.6 chunk artifacts (D-04) — and document the export dedup-awareness boundary as an accepted design decision (D-07). Closes the two open tech-debt items from `.planning/v2.6-MILESTONE-AUDIT.md`.
+**Depends on**: Phase 21
+**Requirements**: MEAS-01 (extended), QUAL-03 (extended), EXPORT-01 (extended) — no new REQ-IDs; this phase closes measurement/process gaps against already-shipped v2.6 requirements
+**Success Criteria** (what must be TRUE):
+
+  1. `klake quality-audit --full` produces a chunk-level `garbage_rate` and an export-level `junk_rate` for the 34 healthcare sources, using the frozen `rejected/(rejected+kept)` formula (Phase 17 D-10), scoped only to this run's freshly-reprocessed chunks — never diluted by pre-v2.6 chunks defaulting `substance_passed=True`
+  2. `domain_filters` is threaded into both `run_quality_audit()`'s and the new measurement's `clean()`/`chunk()` calls, closing the pre-existing Pitfall-1 gap that could silently strip a clinical-code section before any downstream gate protects it
+  3. A regression test proves the D-04 dilution risk is structurally prevented — seeding a pre-v2.6 chunk (no `substance_passed` key) alongside a freshly-gated chunk in the same fixture DB, the scoped measurement reports only the fresh one
+  4. `export_rag_corpus()`'s docstring documents the chunk-artifact-scoped (not dedup-collapsed) export design as an accepted D-07 boundary — zero export.py logic change
+  5. A real run against the live 34-source healthcare corpus produces actual before/after numbers reported against the 28%/33% baselines from `MILESTONE-CONTEXT.md`
+  6. Nyquist reconciliation for phases 17-21 is documented as an operator follow-up (`/gsd-validate-phase {17..21}`), not implemented as phase-22 code
+
+**Plans:** 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 22-01-PLAN.md — run_full_pipeline_audit() chunk-level tally + D-04 export-scoping + domain_filters gap fix + D-07 docstring note (MEAS-01, QUAL-03, EXPORT-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 22-02-PLAN.md — klake quality-audit --full CLI flag, dual table/JSON output (MEAS-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 22-03-PLAN.md — Real measurement run against the live 34-source healthcare corpus; Nyquist reconciliation logged as operator follow-up (MEAS-01, EXPORT-01)
