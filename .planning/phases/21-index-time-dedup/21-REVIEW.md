@@ -6,6 +6,8 @@ findings:
   warning: 1
   info: 1
   total: 2
+fix_report: .planning/phases/21-index-time-dedup/21-REVIEW-FIX.md
+fix_status: all_fixed
 ---
 
 # Code Review: Phase 21 (index-time-dedup)
