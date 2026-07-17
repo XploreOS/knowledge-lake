@@ -5,7 +5,7 @@ This file provides the Dagster code location (loaded by the dagster-webserver an
 dagster-daemon compose services). It registers:
 
   Assets (pipeline stages):
-    ingest_raw_document → parsed_document → clean_document → chunk_document → embed_chunks → index_chunks
+    ingest_raw_document → parsed_document → clean_document → chunk_document → dedup_chunks → embed_chunks → index_chunks
 
   Resources (connection config, read via EnvVar — Pitfall 14):
     postgres  — PostgreSQL registry database URL
@@ -39,6 +39,7 @@ from knowledge_lake.dagster_defs.assets import (
     clean_document,
     core_pipeline_e2e_job,
     curate_document_asset,
+    dedup_chunks,
     embed_chunks,
     enrich_document,
     export_finetune_dataset,
@@ -76,6 +77,7 @@ defs = Definitions(
         tree_index_document,
         curate_document_asset,
         generate_dataset,
+        dedup_chunks,
         embed_chunks,
         index_chunks,
         export_rag_corpus,

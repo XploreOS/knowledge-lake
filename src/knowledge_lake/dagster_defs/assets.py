@@ -13,12 +13,13 @@ Pipeline stages wrapped as assets:
   enrich_document        — enrich_document()          → enriched_document artifact
   curate_document_asset  — curate_document()          → curated_document artifact
   chunk_document         — chunk()                   → chunk artifact IDs
+  dedup_chunks           — pipeline.dedup.dedup_chunks() → new/duplicates partition
   embed_chunks           — embed()                   → vectors + dim
   index_chunks           — index()                   → indexed chunk IDs in Qdrant
 
 Asset ordering (deps chain):
   ingest_raw_document → parsed_document → clean_document → enrich_document →
-  curate_document_asset → chunk_document → embed_chunks → index_chunks
+  curate_document_asset → chunk_document → dedup_chunks → embed_chunks → index_chunks
 
   KL-04/05/06 (2026-07-15): D-01 originally made enrich_document and
   curate_document_asset parallel branches off clean_document that "did not
@@ -550,17 +551,68 @@ def tree_index_document(
 
 @asset(
     description=(
-        "Embed chunk texts into dense vectors using the configured embedder plugin. "
-        "Calls pipeline.embed.embed — no logic duplicated."
+        "Resolve each chunk's text to a deterministic dedup ledger entry; route "
+        "first-seen text to embed+upsert and already-seen text to a payload-only "
+        "contributor append. Calls pipeline.dedup.dedup_chunks — no logic "
+        "duplicated."
     ),
     group_name="pipeline",
     retry_policy=_PIPELINE_RETRY,
 )
-def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
+def dedup_chunks(chunk_document: dict[str, Any], postgres: PostgresResource) -> dict[str, Any]:
+    """Dedup stage: chunk_document's chunks → new/duplicates partition.
+
+    Receives the chunk_document output dict and returns a dict with new,
+    duplicates, parsed_artifact_id, source_id, collection — the new list feeds
+    embed_chunks, the duplicates list is forwarded (via embed_chunks) to
+    index_chunks' duplicate_chunks kwarg (DEDUP-01/02/03).
+    """
+    from knowledge_lake.config.settings import Settings
+    from knowledge_lake.pipeline.dedup import dedup_chunks as _dedup_chunks
+
+    chunks = chunk_document["chunks"]
+    parsed_artifact_id = chunk_document["parsed_artifact_id"]
+    source_id = chunk_document["source_id"]
+    collection = chunk_document.get("collection", DEFAULT_COLLECTION)
+
+    settings = Settings(
+        database_url=postgres.database_url,
+        _env_file=None,  # type: ignore[call-arg]
+    )
+
+    log.info("dagster.dedup_chunks.start", chunk_count=len(chunks))
+
+    result = _dedup_chunks(chunks, parsed_artifact_id, source_id, collection=collection, settings=settings)
+
+    out = {
+        "new": result["new"],
+        "duplicates": result["duplicates"],
+        "parsed_artifact_id": parsed_artifact_id,
+        "source_id": source_id,
+        "collection": collection,
+    }
+
+    log.info("dagster.dedup_chunks.complete", **result["stats"])
+    return out
+
+
+@asset(
+    description=(
+        "Embed chunk texts into dense vectors using the configured embedder plugin. "
+        "Data input is dedup_chunks (renamed from chunk_document, DEDUP-01) — reads "
+        "the first-seen 'new' chunks only and forwards 'duplicates' unchanged for "
+        "index_chunks to route into the dedup ledger. Calls pipeline.embed.embed — "
+        "no logic duplicated."
+    ),
+    group_name="pipeline",
+    retry_policy=_PIPELINE_RETRY,
+)
+def embed_chunks(dedup_chunks: dict[str, Any]) -> dict[str, Any]:
     """Embed stage: chunk texts → dense vectors.
 
-    Stateless transformation — reads chunks dict from chunk_document output,
-    returns a dict with vectors, dim, chunks, parsed_artifact_id, collection.
+    Stateless transformation — reads chunks dict from dedup_chunks output,
+    returns a dict with vectors, dim, chunks, parsed_artifact_id, collection,
+    duplicates.
 
     Note: This asset takes no Dagster resources — the embedder plugin is
     resolved from the environment settings (the default local sentence-transformers
@@ -568,10 +620,11 @@ def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
     """
     from knowledge_lake.pipeline.embed import embed
 
-    chunks = chunk_document["chunks"]
-    parsed_artifact_id = chunk_document["parsed_artifact_id"]
-    source_id = chunk_document["source_id"]
-    collection = chunk_document.get("collection", DEFAULT_COLLECTION)
+    chunks = dedup_chunks["new"]
+    parsed_artifact_id = dedup_chunks["parsed_artifact_id"]
+    source_id = dedup_chunks["source_id"]
+    collection = dedup_chunks.get("collection", DEFAULT_COLLECTION)
+    duplicates = dedup_chunks["duplicates"]
 
     log.info("dagster.embed_chunks.start", chunk_count=len(chunks))
 
@@ -584,6 +637,7 @@ def embed_chunks(chunk_document: dict[str, Any]) -> dict[str, Any]:
         "parsed_artifact_id": parsed_artifact_id,
         "source_id": source_id,
         "collection": collection,
+        "duplicates": duplicates,
     }
 
     log.info("dagster.embed_chunks.complete", vectors=len(vectors), dim=dim)
@@ -615,6 +669,7 @@ def index_chunks(
     chunks = embed_chunks["chunks"]
     parsed_artifact_id = embed_chunks["parsed_artifact_id"]
     collection = embed_chunks.get("collection", DEFAULT_COLLECTION)
+    duplicate_chunks = embed_chunks["duplicates"]
 
     settings = Settings(
         qdrant_url=qdrant.qdrant_url,
@@ -635,6 +690,7 @@ def index_chunks(
         parsed_artifact_id,
         collection=collection,
         settings=settings,
+        duplicate_chunks=duplicate_chunks,
     )
 
     result = {
@@ -1023,13 +1079,18 @@ core_pipeline_e2e_job = define_asset_job(
         enrich_document,
         curate_document_asset,
         chunk_document,
+        # DEDUP-01: omitting dedup_chunks here would silently break the
+        # chunk_document -> embed_chunks edge for this job, the same class of
+        # regression KL-06 fixed for curate_document_asset (see
+        # test_asset_ordering.py).
+        dedup_chunks,
         embed_chunks,
         index_chunks,
     ),
     description=(
         "Full pipeline job for core E2E validation (DOMAIN-04). "
         "Materializes the core ingest-to-index chain "
-        "(ingest → parse → clean → enrich → curate → chunk → embed → index); "
+        "(ingest → parse → clean → enrich → curate → chunk → dedup → embed → index); "
         "domain-agnostic — the asset selection is the same regardless of which "
         "domain pack is active."
     ),
