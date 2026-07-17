@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 22
 current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
 status: executing
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-07-17T18:18:11.902Z"
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-07-17T18:25:36.462Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 22 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 83
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 22 (address-tech-debt-measure-garbage-junk-rates-end-to-end-reco) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 22 execution started
 
@@ -104,6 +104,7 @@ Last activity: 2026-07-17 — Phase 22 execution started
 | Phase 21 P07 | 7min | 2 tasks | 3 files |
 | Phase 21 P08 | 18min | 2 tasks | 2 files |
 | Phase 22 P01 | 16min | 2 tasks | 3 files |
+| Phase 22 P02 | 6min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,7 @@ Last activity: 2026-07-17 — Phase 22 execution started
 - [Phase ?]: 21-08: Both new integration tests use fully synthetic parsed_artifact_id/source_id strings (no seeded Source/Artifact rows) after confirming index()'s payload-field resolution degrades gracefully for unknown artifact ids
 - [Phase ?]: Phase 22 P01: export read-back uses export.py's _make_storage() factory (not a fresh StorageBackend) so tests can patch one storage double for both export_rag_corpus()'s write and the caller's read-back
 - [Phase ?]: Phase 22 P01: this_run_chunk_ids initialized once before the per-source loop (corpus-wide, not per-source) so D-04 scoping spans every source in a single export_rag_corpus() call
+- [Phase ?]: Phase 22 P02: run_full_pipeline_audit()'s actual committed return shape matched the plan's <interfaces> contract exactly (no drift from Plan 22-01) — CLI wiring needed no adjustment
 
 ### Pending Todos
 
@@ -218,8 +220,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T18:18:11.890Z
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-07-17T18:25:36.445Z
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
