@@ -99,6 +99,9 @@ class DummyStore:
     ) -> int:
         return 0
 
+    def set_payload(self, collection: str, point_id: str, payload: dict) -> bool:
+        return True
+
 
 # ---------------------------------------------------------------------------
 # Tests: Protocols are runtime_checkable
