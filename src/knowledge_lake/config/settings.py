@@ -355,6 +355,24 @@ class ChunkQualitySettings(BaseModel):
     intentionally independent (RESEARCH.md Assumption A3)."""
 
 
+class DedupSettings(BaseModel):
+    """Index-time exact-dedup configuration (DEDUP-01..03).
+
+    Nested under Settings as settings.dedup. Environment variable pattern:
+    KLAKE_DEDUP__CONTRIBUTOR_CAP (resolved via the existing
+    env_nested_delimiter="__").
+    """
+
+    contributor_cap: int = 50
+    """Maximum contributors mirrored into the Qdrant payload per point (D-23) —
+    an unresearched round number, not a tuned threshold. The ledger (Postgres)
+    always retains the FULL, unbounded contributor list (D-13); only the
+    Qdrant payload mirror is capped, to bound payload growth on hot
+    boilerplate text shared across many source documents. contributor_count
+    in both the ledger and the Qdrant payload always reports the exact total
+    regardless of this cap."""
+
+
 class DatasetSettings(BaseModel):
     """Dataset-generation configuration (DATA-01..03).
 
@@ -743,6 +761,11 @@ class Settings(BaseSettings):
     Resolved via KLAKE_MCP__TOKEN / KLAKE_MCP__READONLY / KLAKE_MCP__HOST /
     KLAKE_MCP__PORT env vars (env_nested_delimiter='__').
     """
+
+    dedup: DedupSettings = Field(default_factory=DedupSettings)
+    """Index-time exact-dedup configuration (DEDUP-01..03).
+
+    Resolved via KLAKE_DEDUP__CONTRIBUTOR_CAP env var (env_nested_delimiter='__')."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 
