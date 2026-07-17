@@ -310,6 +310,51 @@ class CurateSettings(BaseModel):
     """Bumping this invalidates the curation cache (mirrors EnrichSettings.prompt_version)."""
 
 
+class ChunkQualitySettings(BaseModel):
+    """Chunk-scope substance gate configuration (QUAL-02, QUAL-03, PIPE-01).
+
+    A dedicated model distinct from CurateSettings — chunk text is much shorter
+    than document text (D-05, D-06), so FineWebQualityFilter and the composite
+    threshold predicates need chunk-appropriate defaults, not document-level ones.
+
+    Nested under Settings as settings.chunk_quality. Environment variable pattern:
+    KLAKE_CHUNK_QUALITY__GATE_MODE, KLAKE_CHUNK_QUALITY__FILTER_CONFIG_VERSION, etc.
+    (resolved automatically via the existing env_nested_delimiter="__" — no custom
+    parsing needed, D-14).
+    """
+
+    gate_mode: Literal["enforce", "report"] = "enforce"
+    """'enforce' drops failing chunks from chunk()'s output; 'report' annotates
+    but keeps them (D-13)."""
+
+    min_token_count: int = 3
+    """Overrides check_token_floor's min_tokens (mirrors DEFAULT_MIN_TOKENS)."""
+
+    min_alpha_ratio: float = 0.5
+    """Overrides check_alpha_ratio's min_ratio (mirrors DEFAULT_MIN_ALPHA_RATIO)."""
+
+    max_link_density: float = 0.3
+    """Overrides check_link_density's max_density (mirrors DEFAULT_MAX_LINK_DENSITY)."""
+
+    min_stopword_ratio: float = 0.05
+    """Overrides check_stopword_ratio's min_ratio (mirrors DEFAULT_MIN_STOPWORD_RATIO)."""
+
+    fineweb_line_punct_thr: float = 0.12
+    """Passed to FineWebQualityFilter(line_punct_thr=...) — matches DataTrove's
+    own constructor default so out-of-the-box behavior is unchanged."""
+
+    fineweb_short_line_thr: float = 0.67
+    """Passed to FineWebQualityFilter(short_line_thr=...) — matches DataTrove default."""
+
+    fineweb_short_line_length: int = 30
+    """Passed to FineWebQualityFilter(short_line_length=...) — matches DataTrove default."""
+
+    filter_config_version: str = "1.0"
+    """Bumping this invalidates the chunk-gate cache (D-17). Deliberately differs
+    from CurateSettings.filter_config_version's "v1" default — the two caches are
+    intentionally independent (RESEARCH.md Assumption A3)."""
+
+
 class DatasetSettings(BaseModel):
     """Dataset-generation configuration (DATA-01..03).
 
@@ -657,6 +702,12 @@ class Settings(BaseSettings):
 
     dataset: DatasetSettings = Field(default_factory=DatasetSettings)
     """Dataset-generation configuration (DATA-01..03)."""
+
+    chunk_quality: ChunkQualitySettings = Field(default_factory=ChunkQualitySettings)
+    """Chunk-scope substance gate configuration (QUAL-02, QUAL-03, PIPE-01).
+
+    Resolved via KLAKE_CHUNK_QUALITY__GATE_MODE, KLAKE_CHUNK_QUALITY__FILTER_CONFIG_VERSION,
+    etc. (env_nested_delimiter='__')."""
 
     index: IndexSettings = Field(default_factory=IndexSettings)
     """Vector index / alias configuration (INDEX-02)."""
