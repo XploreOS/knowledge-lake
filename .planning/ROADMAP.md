@@ -205,7 +205,7 @@ Plans:
   2. Re-processing the same document produces the same point ID — re-index is idempotent by construction via `uuid5(NAMESPACE, sha256(normalized_text))`
   3. A deduplicated point is filterable by source_id, domain, and format — the `contributors[]` field lists all source documents that contained this text, with primary determined by earliest `created_at`
 
-**Plans:** 6/8 plans executed
+**Plans:** 7/8 plans executed
 
 Plans:
 **Wave 1**
@@ -225,7 +225,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 21-06-PLAN.md — Wire dedup_chunks() into process_crawled() (CLI/API/MCP path) (DEDUP-01)
-- [ ] 21-07-PLAN.md — Wire dedup_chunks Dagster asset + core_pipeline_e2e_job selection update (DEDUP-01)
+- [x] 21-07-PLAN.md — Wire dedup_chunks Dagster asset + core_pipeline_e2e_job selection update (DEDUP-01)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -281,4 +281,4 @@ Phases execute in numeric order. v2.6 begins at Phase 17.
 | 18 | v2.6 Gate Decouple | 1/1 | Complete    | 2026-07-16 |
 | 19 | v2.6 Section Classifier + Patterns | 4/4 | Complete    | 2026-07-17 |
 | 20 | v2.6 Chunk Substance Gate + Export Gate | 4/4 | Complete    | 2026-07-17 |
-| 21 | v2.6 Index-Time Dedup | 6/8 | In Progress|  |
+| 21 | v2.6 Index-Time Dedup | 7/8 | In Progress|  |

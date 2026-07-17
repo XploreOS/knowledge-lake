@@ -5,15 +5,15 @@ milestone_name: Data Quality & Enrichment
 current_phase: 21
 current_phase_name: index-time-dedup
 status: executing
-stopped_at: Completed 21-06-PLAN.md
-last_updated: "2026-07-17T13:28:46.954Z"
+stopped_at: Completed 21-07-PLAN.md
+last_updated: "2026-07-17T13:35:37.747Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 80
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 21 (index-time-dedup) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 21 execution started
 
@@ -100,6 +100,7 @@ Last activity: 2026-07-17 — Phase 21 execution started
 | Phase 21 P04 | 9min | 2 tasks | 2 files |
 | Phase 21 P05 | 11min | 2 tasks | 2 files |
 | Phase 21 P06 | 8min | 1 tasks | 3 files |
+| Phase 21 P07 | 7min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,8 @@ Last activity: 2026-07-17 — Phase 21 execution started
 - [Phase ?]: 21-05: Extended index()'s empty-input guard to (not chunks and not duplicate_chunks) so an all-duplicates document batch still runs the contributor-append branch
 - [Phase ?]: 21-05: Added explicit RuntimeError None-guards around get_dedup_ledger_entry() (self-heal loop) and _build_capped_contributors_mirror()'s primary-entry lookup, caught by mypy as new union-attr/list-item errors
 - [Phase ?]: 21-06: process_crawled() wires dedup_chunks() between chunk() and embed()/index(); 5 test_process_crawled_clean.py tests extended with pass-through dedup_chunks mocks to avoid KeyError('text') regression now that dedup_chunks() is a real required stage
+- [Phase ?]: 21-07: definitions.py registered the new dedup_chunks asset (not in plan's files_modified) — required for Dagster Definitions to load without DagsterInvalidDefinitionError
+- [Phase ?]: 21-07: dedup_chunks asset placed physically between tree_index_document and embed_chunks in assets.py (not immediately after chunk_document) to minimize diff churn — graph position (between chunk_document and embed_chunks), not file position, is what the plan/tests require
 
 ### Pending Todos
 
@@ -204,8 +207,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T13:28:46.942Z
-Stopped at: Completed 21-06-PLAN.md
+Last session: 2026-07-17T13:35:37.731Z
+Stopped at: Completed 21-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
