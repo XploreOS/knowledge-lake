@@ -269,6 +269,20 @@ def test_fineweb_predicate_exact_line_punct_boundary_passes(test_settings):
     assert result.passed is True
 
 
+def test_fineweb_predicate_empty_lines_fails_with_empty_reason(test_settings):
+    """A chunk whose every line is blank returns (False, 'empty') per
+    datatrove's own filter() source — NOT an exemption, so it fails the
+    composite gate like any other threshold rejection."""
+    from knowledge_lake.pipeline.chunk import _build_fineweb_filter, _fineweb_predicate
+
+    filter_instance = _build_fineweb_filter(test_settings.chunk_quality)
+    result = _fineweb_predicate(
+        "   \n\n   \n\t\n", {"is_table": False}, filter_instance=filter_instance
+    )
+    assert result.passed is False
+    assert result.reason == "empty"
+
+
 def test_fineweb_predicate_nav_junk_fails_line_punct_ratio(test_settings):
     """A single-line nav-junk chunk (no terminal punctuation) fails
     FineWebQualityFilter's line_punct_ratio check directly."""
