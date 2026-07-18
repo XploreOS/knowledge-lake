@@ -151,6 +151,51 @@ Tree-based reasoning retrieval and compiled knowledge bases, added *alongside* t
 
 ---
 
+## Milestone: v2.6 — Data Quality & Enrichment
+
+**Shipped:** 2026-07-18
+**Phases:** 6 (17-22) | **Plans:** 24 | **Tasks:** 47 | **Timeline:** ~2 days (2026-07-16 → 2026-07-18) | **Commits:** 155
+
+### What Was Built
+
+The exact gap v2.5's retrospective named: a pipeline that was mechanically correct but produced ~28% garbage chunks and 33% junk gold-export rows, because `clean_document` and `process_crawled` both forwarded the *uncleaned* `ParsedDoc` to every downstream consumer. Phase 17 closed that bypass on both the Dagster and CLI/API/MCP paths, added a parent-scoped content hash, and shipped the first quality-audit harness. Phase 18 froze the re-crawl change gate's boilerplate patterns independently of `clean.py` so Phase 19 could safely extend them without triggering a 34-source re-crawl storm. Phase 19 added section-granularity substance classification (a zero-I/O, 100%-branch-covered predicate module) with domain-pack clinical-code allowlists protecting ICD-10/LOINC/RxNorm/dosage text from false-positive removal. Phase 20 moved the same gate to chunk scope (DataTrove's `FineWebQualityFilter` + the Phase-19 predicates), gated the gold RAG export on chunk-level `substance_passed`, and shipped a 25-fixture must-not-reject CI safety net. Phase 21 added corpus-wide index-time exact deduplication (Postgres ledger, deterministic `uuid5` point IDs, capped contributor-payload mirroring, self-heal on out-of-band point loss) wired identically into both call sites. Phase 22 — added after the first milestone audit found the two headline success criteria had never actually been measured — built a real chunk+export-level measurement harness and ran it against the live 34-source corpus.
+
+### What Worked
+
+- **Deterministic-first predicate module reused twice, unmodified.** Phase 19's `pipeline/quality/` package (7 pure predicates, zero I/O) was built once and consumed as-is by Phase 20's chunk-level gate — no drift between "what counts as garbage" at section scope vs. chunk scope, because it's the literal same code.
+- **Dual-call-site wiring became an explicit, tested deliverable, not an afterthought.** Phases 17, 20, and 21 each wired their new stage into *both* the Dagster asset graph and `process_crawled()` (CLI/API/MCP) as separate, individually-tested tasks — and the milestone-close integration checker confirmed zero drift between the two paths across all 19 requirement wirings.
+- **Post-execution code review caught a real, non-cosmetic bug in four consecutive phases** (19, 20, 21, 22) — an overbroad marketing-CTA regex that would have stripped genuine clinical enrollment text, a missing `domain_filters` thread that could silently drop a clinical code a stage before the new gate ever saw it, a contributor-count double-count on document reprocessing, and an unguarded `chunk()`/`export_rag_corpus()` call that could crash mid-audit. Every fix was independently re-verified via revert-and-retest, not trusted from the review narrative.
+- **The D-04 dilution risk was proven real, not assumed away.** Phase 22's export-junk measurement seeded a pre-v2.6 chunk with no `substance_passed` key alongside a freshly-gated chunk in the same fixture DB and showed the scoped measurement correctly excludes the old one, while the real unmodified `export_rag_corpus()` independently proves it would have scanned both — turning a plausible-sounding scoping decision into a demonstrated one.
+- **An honest, surfaced interpretive ambiguity beat a silently-picked answer.** Phase 22's verifier found that `chunk_garbage_rate` (45.64%) and `export_junk_rate` (0.0%) measure genuinely different things and routed the "is criterion #1 met" question to human sign-off rather than guessing — the UAT decision is now a durable, documented artifact instead of an assumption buried in a SUMMARY.md.
+
+### What Was Inefficient
+
+- **The Nyquist-reconciliation lesson recurred for a third time.** v2.0's retrospective named this exact failure mode ("quality gates run retroactively, not per-phase") and v2.5 repeated it. v2.6 did too: phases 17-21 shipped with `VALIDATION.md` still in its pre-execution seed state (`status: draft`/`planned`, `nyquist_compliant: false`) — the `verify:post` hook exists and is configured, but wasn't exercised inline during phase execution. It took a dedicated post-milestone session (`/gsd-validate-phase 17` through `22`) to reconcile all 6 phases, finding zero actual coverage gaps in the process — all the planned test coverage was real, it just was never marked as confirmed.
+- **Security gating (`/gsd-secure-phase`) only ran for Phase 22**, not phases 17-21, despite `security_enforcement: true` in the current config. Unlike Nyquist, this was not caught or reconciled by any workflow this milestone — worth a retroactive `/gsd-secure-phase 17` through `21` pass, or confirming intentionally out of scope for a backend-only, no-new-trust-boundary milestone.
+- **The milestone's own headline success criterion needed a phase (22) just to produce a real number.** Phases 17-21 all shipped "passed" verification with 100% of their own test suites green, but the two quantitative criteria the milestone existed to satisfy (<5% garbage chunks, <2% junk export rows) had zero live-corpus evidence until Phase 22 — an explicit repeat of v2.5's lesson #1 ("green gates measure mechanism, not output") even though that exact lesson was written down one milestone ago.
+
+### Patterns Established
+
+- **Zero-I/O predicate modules as a reusable substance-quality primitive**, consumed identically at multiple pipeline granularities (section, chunk) rather than reimplemented per call site.
+- **Domain-pack allowlist as an unconditional override, evaluated before any threshold predicate** — short clinical codes structurally cannot pass length/alpha-ratio checks on their own merits, so the allowlist must short-circuit, never merely bias, the decision.
+- **Dilution-safe measurement scoping**: when re-running a corpus-wide audit against a codebase with historical (pre-gate) data, scope the reported rate to only the current run's own artifact IDs, and prove the scoping matters with a fixture that seeds both eras in the same test DB.
+- **Interpretive ambiguity in a milestone's own success criteria gets a UAT decision, not a verifier guess.** When two defensible readings of a requirement diverge, document the human call as its own artifact (`*-UAT.md`) rather than resolving it silently in prose.
+
+### Key Lessons
+
+1. **A lesson written down once is not a lesson enforced.** "Run quality gates per-phase" has now been the explicit takeaway of v2.0 and v2.5's retrospectives, and v2.6 still shipped 5 of its 6 phases without inline Nyquist reconciliation. The only fix that has ever actually worked in this project (per the v2.5 retrospective) is turning a lesson into a build gate — `verify:post` hooks exist for exactly this, and leaving them configured-but-unexercised is the same failure shape every time.
+2. **"Complete" and "measured" are different claims, and a milestone can ship the first without the second.** Every phase 17-21 acceptance criterion was about mechanism (the gate exists, is wired, rejects the right inputs in a fixture). None of them, on their own, produced a real number against real data — that took a dedicated Phase 22, added only after a milestone audit noticed the gap.
+3. **When a metric name is ambiguous between two measurement bases, that ambiguity will eventually need a human to resolve it — surface it before it's discovered by someone downstream.** `chunk_garbage_rate` (live gate-rejection rate) and `export_junk_rate` (garbage reaching the corpus) diverged by 45.64% vs 0.0% and both are "correct" by their own definition; only a documented product decision (not a verifier's best guess) can settle which one the original requirement meant.
+4. **A validated pattern from N-1 milestones ago transfers cheaply.** Phase 20's chunk-scope gate consumed Phase 19's zero-I/O predicate module completely unmodified — the cost of the second consumer was near zero because the first was built as a genuinely reusable primitive, not a one-off.
+
+### Cost Observations
+
+- 155 commits over ~2 days; 24 plans, 47 tasks across 6 phases
+- 4 of 6 phases (19, 20, 21, 22) had a post-execution code-review-fix cycle that caught a genuine bug — a much higher hit rate than v1.0/v2.0/v2.5, suggesting either the domain (data-quality gating with many interacting call sites and edge cases) is intrinsically harder to get right in one pass, or code review is catching real things at a stable rate across the whole project and it's simply more visible in a smaller-phase-count milestone
+- Notable: this was the first milestone where a phase (22) existed solely to produce a measurement rather than ship a feature — worth normalizing "run the real thing against real data" as an explicit phase type for any future milestone whose success criteria are quantitative
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -160,6 +205,7 @@ Tree-based reasoning retrieval and compiled knowledge bases, added *alongside* t
 | v1.0 | 6 | 25 | First milestone — GSD auto-chain established; TDD wave-0 pattern validated |
 | v2.0 | 6 | 38 | Plan-time threat models + validation contracts; single schema source across agent surfaces; quality gates run retroactively (lesson: run inline) |
 | v2.5 | 4 | 14 | Plugin seams mirrored at near-zero cost; heuristic-first + LLM-opt-in with guaranteed fallback became the default shape; `xfail_strict` promoted from lesson to build gate; first E2E run on real data exposed that all gates measured mechanism, not output quality |
+| v2.6 | 6 | 24 | Directly remediated v2.5's "measures mechanism, not output" gap by closing the clean-stage bypass and shipping section/chunk-level substance gates + index-time dedup; added a dedicated measurement-only phase (22) to produce real numbers against the live corpus; Nyquist reconciliation retroactive for the 3rd milestone running (lesson still not enforced as a build gate) |
 
 ### Cumulative Quality
 
@@ -168,6 +214,7 @@ Tree-based reasoning retrieval and compiled knowledge bases, added *alongside* t
 | v1.0 | 324 | 20 | ✓ all phases passed | — | — |
 | v2.0 | 522 | 39 | ✓ all phases passed | 6/6 (`threats_open: 0`) | 6/6 compliant |
 | v2.5 | 971 | 0 (`xfail_strict`) | ✓ all phases passed | 4/4 | 4/4 compliant |
+| v2.6 | 1181 | 0 (`xfail_strict`) | ✓ all phases passed | 1/6 (Phase 22 only — 17-21 not retroactively secured) | 6/6 compliant (reconciled retroactively post-milestone) |
 
 ### Top Lessons (Verified Across Milestones)
 
@@ -178,3 +225,5 @@ Tree-based reasoning retrieval and compiled knowledge bases, added *alongside* t
 5. **`xfail(strict=False)` can mask a real failure.** Audit xfails at verification; a self-fulfilling stub is worse than no test. (v2.0 — **recurred in v2.5**; only fixed by making it a build gate, which is the real lesson)
 6. **Green gates prove the code matches the plan, not that the output is good.** Verification, audits, and E2E flow checks all measured mechanism. Data quality needs its own instrument, or a "complete" pipeline ships 28% garbage. (v2.5)
 7. **Anything that can silently serve stale code will eventually hide a real bug.** Pin base images, build them in CI, and make the running version observable. (v2.5)
+8. **A lesson written down is not a lesson enforced — this is now a 3-milestone pattern.** "Run quality gates per-phase, not retroactively" was v2.0's explicit takeaway, recurred in v2.5, and recurred again in v2.6 (5 of 6 phases needed retroactive Nyquist reconciliation). The only instance where this pattern actually stopped recurring was `xfail_strict` — because it became a build gate, not a document. Any future recurrence of "we should run X per-phase" should be resolved by wiring the `verify:post` hook, not by writing it down again. (v2.6)
+9. **When a metric's name is ambiguous between two valid measurement bases, surface the ambiguity and get a human decision — don't silently pick one.** `chunk_garbage_rate` and `export_junk_rate` diverged by 45 percentage points and both were "correct" readings of the same milestone criterion; the fix was a documented UAT decision, not a verifier's best guess. (v2.6)
