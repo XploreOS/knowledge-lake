@@ -1,10 +1,11 @@
 ---
 phase: 18
 slug: gate-decouple
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-16
+validated: 2026-07-18
 ---
 
 # Phase 18 — Validation Strategy
@@ -38,8 +39,8 @@ created: 2026-07-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 18-TBD | TBD | TBD | GATE-01 | — | Gate signature byte-stable across clean.py changes; adding pattern to BOILERPLATE_PATTERNS does not change gate sig | unit | `uv run pytest tests/unit/test_gate_signature_pin.py -x` | ❌ W0 — new file | ⬜ pending |
-| 18-TBD | TBD | TBD | GATE-01 | — | Existing recrawl gate tests still pass (no regression from decoupling) | unit | `uv run pytest tests/unit/test_recrawl_gate.py -x` | ✅ exists | ⬜ pending |
+| 18-01-T1 | 18-01 | 1 | GATE-01 | — | `_GATE_BOILERPLATE_PATTERNS` frozen copy + `_gate_normalize()` sever `_signature()` from `clean.py`'s `remove_boilerplate()` | unit | `uv run pytest tests/unit/test_gate_signature_pin.py tests/unit/test_recrawl_gate.py -x` | `tests/unit/test_gate_signature_pin.py::test_gate_signature_byte_stable` | ✅ green |
+| 18-01-T2 | 18-01 | 1 | GATE-01 | — | Gate signature byte-stable across `clean.py` changes; appending a pattern to `BOILERPLATE_PATTERNS` does not change gate sig | unit | `uv run pytest tests/unit/test_gate_signature_pin.py -x` | `tests/unit/test_gate_signature_pin.py::test_gate_decoupled_from_clean_patterns` | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -47,8 +48,8 @@ created: 2026-07-16
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/test_gate_signature_pin.py` (new) — covers GATE-01: gate-signature byte-stability pinning test and decoupled-from-clean-patterns assertion
-- [ ] Existing `tests/unit/test_recrawl_gate.py` already covers the gate's functional regression — no gap
+- [x] `tests/unit/test_gate_signature_pin.py` (new) — covers GATE-01: gate-signature byte-stability pinning test and decoupled-from-clean-patterns assertion — Plan 18-01, Tasks 1-2
+- [x] Existing `tests/unit/test_recrawl_gate.py` already covers the gate's functional regression — no gap
 
 ---
 
@@ -60,11 +61,23 @@ created: 2026-07-16
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 20s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 20s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated — plan 18-01 executed and verified green (7 passed for gate-specific tests; full suite 1000 passed, 3 skipped, 6 xfailed at plan completion); retroactive audit 2026-07-18 confirmed both test functions exist and match the requirement map
+
+---
+
+## Validation Audit 2026-07-18
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Reconstructed per-task map from 18-01-SUMMARY.md (task IDs were placeholders at planning time; plan had not yet been created). Both tasks' test functions (`test_gate_signature_byte_stable`, `test_gate_decoupled_from_clean_patterns`) confirmed present in `tests/unit/test_gate_signature_pin.py` via source grep. No gaps.
