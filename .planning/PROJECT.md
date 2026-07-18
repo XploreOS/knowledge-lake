@@ -24,7 +24,7 @@ Every domain resource ingested must be traceable from raw source through every t
 - **API:** FastAPI (Swagger at /docs) extended with `/crawl-all`, mode-aware and route-aware search, `/export-wiki`
 - **Domain packs:** 1 (healthcare, 28 curated sources)  ·  **Dagster assets:** 12+ with RetryPolicy
 - **Quality gates:** all v2.5 phases verified `passed`, threat-secured, Nyquist-compliant; v2.5 milestone audit PASSED (19/19 requirements, 5/5 E2E flows); E2E gap analysis closed — all 19 findings resolved
-- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets; `check_table_exemption()` predicate is currently a no-op for real documents — no builtin parser ever sets `Section.is_table=True` yet, so the domain allowlist (not the table exemption) is what actually protects tabular clinical content today (Phase 19 research finding)
+- **Tech debt:** Typer <0.25.0 pin; MCP `_search_handler` crashes on non-empty results (needs `dataclasses.asdict(h)`); `mode` param dual semantics on tree path; domain path-traversal regex duplicated across 3 modules; `sources.config["domain"]` dual-write pending removal; domain packs cannot contribute Dagster jobs (KL-16); Dagster code-location reload needed for new sensors/assets; `check_table_exemption()` predicate is currently a no-op for real documents — no builtin parser ever sets `Section.is_table=True` yet, so the domain allowlist (not the table exemption) is what actually protects tabular clinical content today (Phase 19 research finding); `export_rag_corpus()` enumerates chunk artifacts pre-dedup (not post-dedup Qdrant points) — cross-document chunks with identical normalized text appear as separate gold-export rows even though they collapse to one deduplicated vector; documented as an accepted D-07 boundary (Phase 22), not a defect — export prioritizes citation completeness, index prioritizes retrieval efficiency
 - **Phase 17 complete:** Clean-stage bypass closed on both Dagster and CLI paths; WR-05 content hash scoping applied; conservation invariant (`rejected+kept==sections_considered`) wired; `klake quality-audit` harness ships a reproducible per-source garbage-rate table. 25/25 must-haves verified passed 2026-07-16.
 - **Phase 18 complete:** Re-crawl change gate decoupled from `BOILERPLATE_PATTERNS` — `_GATE_BOILERPLATE_PATTERNS` frozen in `crawl.py`, `_gate_normalize()` added, `remove_boilerplate` import removed, byte-stability pinning test ships. 5/5 must-haves verified passed 2026-07-16.
 - **Phase 19 complete:** Section-level boilerplate classification ships — `classify_sections()` computes substance signals (link_density, terminal_punct_ratio, stopword_ratio, token_count) and actually drops boilerplate sections in `clean()`; `BOILERPLATE_PATTERNS` extended 4→9 entries (5 new garbage categories); `pipeline/quality/` pure predicate module (7 predicates, zero I/O, 100% branch coverage) ships for reuse by Phase 20; `DomainFilters` + `domains/healthcare/filters.yaml` protect clinical codes (ICD-10/LOINC/RxNorm/dosage patterns) from removal. Post-merge code review found and fixed 2 critical issues (an overbroad marketing-CTA regex that would have dropped legitimate clinical enrollment text, and missing `extra="forbid"` on domain-pack Pydantic models). 15/15 must-haves verified passed 2026-07-17.
@@ -32,20 +32,9 @@ Every domain resource ingested must be traceable from raw source through every t
 - **Phase 21 complete:** Index-time exact dedup ships — a new corpus-wide Postgres ledger (`chunk_dedup_ledger`, migration `0011`) resolves each chunk's text to a deterministic `uuid5(NAMESPACE, sha256(normalize_for_dedup(text)))` point ID via an atomic `INSERT ... ON CONFLICT DO NOTHING ... RETURNING` claim (DEDUP-01/02); a new `dedup_chunks()` stage sits between `chunk()` and `embed()`, wired into both the CLI/API/MCP path (`process_crawled()`) and a new Dagster asset (`core_pipeline_e2e_job` selection updated); `index()` gained a `duplicate_chunks` path that appends a capped, primary-first `contributors[]` mirror onto the existing Qdrant point via a new `VectorStorePlugin.set_payload()` protocol method, self-healing if the point vanished out-of-band (DEDUP-03) — existing PAYLOAD-01/02 filters keep working unmodified since the primary's payload fields are untouched. Chunk artifacts stay per-document (WR-05 intact) — only the vector is deduplicated. Forward-only per milestone D-2: the existing 4,499-chunk corpus is not retroactively deduplicated. Post-execution code review found and fixed 1 warning: reprocessing an already-indexed document double-counted its own chunk as a second ledger contributor (`chunk()`'s content-hash idempotency meant a rerun's chunk correctly routed to "duplicates" every time, but the contributor-append call had no same-chunk_id guard) — fixed with an idempotency guard in `append_dedup_contributor()` plus a regression test. 8/8 must-haves verified passed 2026-07-17.
 - **Phase 22 complete:** Tech-debt closure phase, added after the v2.6 milestone audit found its two quantitative success criteria had never actually been measured. `run_full_pipeline_audit()` (new, in `pipeline/quality_audit.py`) extends the Phase-17 `quality-audit` harness with chunk-level and export-level measurement, reusing `clean()`/`chunk()`/`export_rag_corpus()` unmodified — no new gate logic. Fixed a real pre-existing bug: `run_quality_audit()` never threaded `domain_filters` into its `clean()` call. Solved the phase's central risk (D-04): a naive full-domain re-scan would have been diluted by ~4,512 pre-v2.6 chunks defaulting `substance_passed=True`; the measurement instead scopes strictly to each run's own freshly-produced chunk IDs (backed by a regression test that proves the dilution risk is real, not assumed away). Added `klake quality-audit --full` CLI flag (dual table/JSON output). Ran a real measurement against the live 34-source healthcare corpus: **export_junk_rate fell from 33% → 0.0%** (decisively beats the <2% target — this is the literal successor metric to "how much garbage reaches the delivered corpus"); `chunk_garbage_rate` came out at 45.64% (up from the 28% baseline, but this measures something different — the gate's own live rejection rate of raw candidates before persistence, not delivered-corpus quality; a high number here is expected evidence the gate is working, not a regression). Post-execution code review found and fixed 2 critical issues (chunk-tally/persisting `chunk()` call ran outside the per-document error-isolation `try/except`; the real `export_rag_corpus()` call had no exception handling and could crash on `TrainEvalContaminationError`) plus 3 warnings — all fixed and verified, zero regressions (1185 passed). Nyquist reconciliation for Phases 17–21 (`VALIDATION.md` status/`nyquist_compliant` fields) deliberately left as an operator follow-up (`/gsd-validate-phase 17` through `21`), not phase-22 code. UAT resolved the milestone's "<5% garbage chunks" wording question: **criterion #1 is considered met**, read via `export_junk_rate`. 8/9 must-haves verified programmatically; 1 routed to human decision (resolved). This is the last roadmapped phase of v2.6 (Data Quality & Enrichment) — the milestone is complete.
 
-## Next Milestone: v2.6 Data Quality & Enrichment
+## Next Milestone
 
-**Goal:** Stop garbage content from reaching the silver zone, chunking, tree index, and gold export — so the RAG corpus is trustworthy rather than merely populated.
-
-**Target features:**
-- Close the clean-stage bypass (both Dagster and `klake process` paths)
-- Section-level boilerplate classification with substance annotations
-- Minimum-substance gate at chunk (with domain-pack allowlists)
-- Quality predicate module (pure, deterministic, no I/O)
-- Index-time deduplication (one vector per unique text, lineage preserved per WR-05)
-- Quality gate on gold RAG export (chunk-level, not document-level)
-- Re-runnable quality audit harness + must-not-reject CI fixtures
-
-**Scope decisions:** Crawler extraction DEFERRED (no-op today; section classifier covers superset) · forward-only CONFIRMED (test data wiped before production via `docker compose down -v`) · dedup at index time (after substance gate) · research complete. Full context: `.planning/MILESTONE-CONTEXT.md`, requirements: `.planning/REQUIREMENTS.md`. Phase numbering continues at **Phase 17**.
+Not yet defined. Run `/gsd-new-milestone` to begin questioning → research → requirements → roadmap for the next milestone. Phase numbering will continue at **Phase 23**.
 
 ## Requirements
 
@@ -139,22 +128,46 @@ Every domain resource ingested must be traceable from raw source through every t
 - [x] KB-04: Incremental wiki compilation — manifest diff rebuilds only affected pages — Phase 16
 - [x] KB-05: Wiki export via CLI (`klake export-wiki`) and API (`POST /export-wiki`) — Phase 16
 
-### Active (v2.6 — Data Quality & Enrichment)
+### Validated (v2.6 — Data Quality & Enrichment, milestone complete 2026-07-18)
 
-Requirements are defined by `/gsd-new-milestone` (research → requirements → roadmap). Target areas:
+**Close the Bypass + Measurement**
+- [x] CLEAN-01: Close Dagster clean-stage bypass — `clean_document` forwards cleaned `ParsedDoc`, not raw — Phase 17
+- [x] CLEAN-02: Close `process_crawled` clean-stage bypass — `clean()` inserted between `parse()`/`chunk()` — Phase 17
+- [x] CLEAN-03: Parent-scoped content hash (`f"{parsed_artifact_id}:{cleaned_text}"`), closing a cross-document lineage-corruption bug — Phase 17
+- [x] QUAL-04: Unconditional rejection recording + garbage-rate metric persisted on every clean() call — Phase 17
+- [x] QUAL-05: Conservation invariant (`rejected+kept==considered`) enforced as `RuntimeError`, never a bare assert — Phase 17
+- [x] MEAS-01: `run_quality_audit()` + `klake quality-audit` reproducible per-source garbage-rate harness — Phase 17 (extended Phase 22)
 
-- [ ] Cleaned text consumed by chunk/tree/enrich (close the clean-stage bypass)
-- [ ] Crawler-level boilerplate stripping (forward-only; raw zone immutability preserved)
-- [x] Section-level boilerplate classification (deterministic-first) — Phase 19
-- [x] Minimum-substance gate at chunk (composite predicate + chunk-scoped `FineWebQualityFilter`, enforce/report modes) — Phase 20
-- [x] Index-time dedup preserving per-document chunk lineage (WR-05) — Phase 21
-- [x] Quality gate on gold RAG corpus export (chunk-level `substance_passed`, not document-level `quality_score`) — Phase 20
+**Gate Decouple**
+- [x] GATE-01: Re-crawl change gate decoupled from evolving `clean.py` patterns via frozen `_GATE_BOILERPLATE_PATTERNS` — Phase 18
+
+**Section Classifier + Patterns**
+- [x] CLEAN-04: Section-granularity cleaning — `classify_sections()` computes substance signals and actually drops boilerplate sections — Phase 19
+- [x] CLEAN-05: `BOILERPLATE_PATTERNS` extended 4→9 entries (nav, ToS, marketing CTA, cookie consent, gov disclaimer) — Phase 19
+- [x] CLEAN-06: Domain-pack `filters.yaml` clinical-code allowlist (ICD-10/LOINC/RxNorm/dosage) — Phase 19
+- [x] QUAL-01: `pipeline/quality/` pure predicate module, zero I/O, 100% branch coverage — Phase 19
+
+**Chunk Substance Gate + Export Gate**
+- [x] QUAL-02: `FineWebQualityFilter` at chunk scope via `ChunkQualitySettings` (distinct from `CurateSettings`) — Phase 20
+- [x] QUAL-03: Composite chunk substance gate, enforce/report modes, `is_table`/allowlist exemptions — Phase 20
+- [x] MEAS-02: Must-not-reject CI fixtures (25 hand-labeled clinical entries, 5 categories) — Phase 20
+- [x] EXPORT-01: Gold RAG export gated on chunk-level `substance_passed`, not document-level `quality_score` — Phase 20
+- [x] EXPORT-02: Eval/instruction dataset examples version-tagged via `filter_config_version` — Phase 20
+- [x] PIPE-01: `filter_config_version` folded into WR-05 chunk hash — threshold changes force reprocessing — Phase 20
+
+**Index-Time Dedup**
+- [x] DEDUP-01: Corpus-wide exact dedup — Postgres `chunk_dedup_ledger`, atomic claim, one Qdrant point per unique text — Phase 21
+- [x] DEDUP-02: Deterministic point IDs (`uuid5(NAMESPACE, sha256(normalize_for_dedup(text)))`), idempotent re-index — Phase 21
+- [x] DEDUP-03: Payload preservation — capped primary-first `contributors[]`, self-heals if a point vanishes out-of-band — Phase 21
+
+**Result (measured 2026-07-17/18, Phase 22):** `export_junk_rate` fell 33%→0.0% against the real 34-source healthcare corpus (target <2%, decisively met). `chunk_garbage_rate` came out at 45.64% — a different, expected-high metric (the gate's own live candidate-rejection rate, not garbage reaching the delivered corpus); UAT resolved the milestone's "<5% garbage chunks" wording as met via `export_junk_rate`, the corpus-quality successor metric. Crawler-level boilerplate stripping was scoped out (D-1: section classifier covers the superset) and never built — not a gap, a deliberate scope decision.
 
 ### Deferred to a future milestone
 
 - EVAL-01/02 (RAGAS/Promptfoo eval harness; Langfuse/Arize observability), SDK-01 (klake-client SDK), DOMAIN-05/06 (multi-domain conflict resolution; pack registry + versioning), DISCOVER-01 (SearXNG auto-discovery scheduling), UI-02 (admin/crawl analytics dashboard), VERSION-01 (lakeFS/DVC data versioning), SITEMAP-01 (sitemap-first crawl strategy)
 - Deferred at v2.5: ROUTE-05/06 (LLM-based routing for ambiguous queries; routing telemetry + feedback loop), KB-06/07/08 (watch mode; wiki lint for contradictions/orphans/staleness; multi-turn chat grounded in wiki), TREE-06/07 (tree schema versioning + migration; PageIndex File System meta-tree over the corpus)
-- **QUALITY-01** (quality-score search propagation) — deferred since v2.0; overlaps v2.6 scope and should be reconsidered during v2.6 requirements rather than carried forward blindly
+- **QUALITY-01** (quality-score search propagation) — deferred since v2.0, still not addressed by v2.6's chunk/export-level quality gates (those gate ingestion/export, not search ranking) — reconsider for the next milestone
+- Crawler-level boilerplate stripping — deliberately deferred at v2.6 (D-1: section classifier at clean-stage covers the superset); revisit only if a use case emerges where stripping before the raw zone specifically matters
 
 ### Out of Scope
 
@@ -175,7 +188,8 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 - v1.0 shipped 2026-07-02 → 2026-07-07 (5 days, 259 commits, 303 files changed)
 - v2.0 shipped 2026-07-12 (6 phases, 38 plans, 252 commits)
 - v2.5 shipped 2026-07-15 (4 phases, 14 plans, 190 commits, 243 files changed, +32,060/−2,377)
-- First end-to-end run on real healthcare data (34 sources, 4,499 chunks) proved the pipeline works mechanically but produces ~28% garbage content — mechanical correctness and data quality are separate problems, and only the former was being tested
+- v2.6 shipped 2026-07-18 (6 phases, 24 plans, 47 tasks, 155 commits, 128 files changed, +22,928/−146)
+- First end-to-end run on real healthcare data (34 sources, 4,499 chunks) proved the pipeline works mechanically but produces ~28% garbage content — mechanical correctness and data quality are separate problems, and only the former was being tested. v2.6 closed this: the clean-stage bypass is fixed, chunk/export quality gates are live, and a real re-measurement against the same 34-source corpus shows `export_junk_rate` at 0.0% (down from 33%)
 - Plugin architecture: every external tool is replaceable without breaking core registries or lineage
 - Closest analogues: DataTrove (pretraining corpus), RAGFlow (RAG), Dagster (orchestration), Docling (parsing)
 
@@ -226,8 +240,13 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 | Wiki cross-links gated by IDF, not raw entity match | Linking on common terms produces a hairball; IDF keeps links meaningful | ✓ Validated (Phase 16) — threshold still needs empirical tuning for link density |
 | `xfail_strict = true` enabled repo-wide | A stale xfail marker hid two API endpoints returning 500s for months | ✓ Validated (2026-07-15) — a test that passes while marked xfail now fails the build |
 | Docker base pinned to `.python-version` (`python:3.12-slim`) | An unbuildable `python:3.14-slim` base silently kept a 13-day-old container alive, masking real bugs | ✓ Validated (2026-07-15) — CI now builds the api image; `/health` reports running version |
-| Chunk dedup key includes parent (`{parsed_artifact_id}:{text}`) — WR-05 | Prevents lineage corruption when identical text appears in different documents | ⚠ Revisit — directly causes 653 duplicate embeddings (14% of corpus); v2.6 resolves via index-time dedup rather than overturning this |
-| Clean stage writes `cleaned_document` but chunk/tree/enrich read `parsed_doc` | Not a decision — an unintended bypass found 2026-07-15 | ✗ Defect — boilerplate removal reaches only the pretrain path; primary driver of v2.6 |
+| Chunk dedup key includes parent (`{parsed_artifact_id}:{text}`) — WR-05 | Prevents lineage corruption when identical text appears in different documents | ✓ Validated (Phase 21) — resolved via index-time dedup (`chunk_dedup_ledger` + deterministic `uuid5` point IDs) rather than overturning the parent-scoped hash; chunk artifacts stay per-document, only the vector is deduplicated |
+| Clean stage writes `cleaned_document` but chunk/tree/enrich read `parsed_doc` | Not a decision — an unintended bypass found 2026-07-15 | ✓ Fixed (Phase 17) — `clean_document`/`process_crawled` both forward the cleaned `ParsedDoc`; boilerplate removal now reaches all downstream consumers, not just the pretrain path |
+| Gate-decouple: re-crawl change signature frozen independently of `clean.py`'s evolving `BOILERPLATE_PATTERNS` | Extending patterns for Phase 19 would otherwise thrash the change-detection gate and trigger a 34-source re-crawl storm | ✓ Validated (Phase 18) — `_GATE_BOILERPLATE_PATTERNS` frozen copy in `crawl.py`, byte-stability pinning test locks the invariant |
+| Domain-pack `filters.yaml` as an unconditional allowlist override (not a threshold tweak) | Short clinical codes (ICD-10, dosages) can never pass length/alpha-ratio thresholds on their own merits | ✓ Validated (Phase 19/20) — `check_domain_allowlist()` short-circuits ahead of every other predicate; 25-fixture must-not-reject CI suite proves it holds at chunk scope too |
+| Chunk-level substance gate reuses Phase 19's predicate module rather than a second gate implementation | Avoids two independent, potentially-drifting definitions of "garbage" | ✓ Validated (Phase 20) — `_apply_substance_gate()` wraps DataTrove's `FineWebQualityFilter` + the same `pipeline/quality/` predicates, chunk-scoped settings |
+| Index-time dedup measurement scoped to each run's own freshly-produced chunk IDs, not a domain-wide re-scan | A naive full-domain scan would be diluted by ~4,512 pre-v2.6 chunks defaulting `substance_passed=True` (D-04) | ✓ Validated (Phase 22) — dilution risk proven real via a regression test (old chunk excluded from scoped rate while the real unmodified export independently proves it scanned both) |
+| Milestone success criterion #1 ("<5% garbage chunks") read via `export_junk_rate`, not the literal `chunk_garbage_rate` | The two metrics measure different things — live gate-rejection rate of candidates vs. garbage reaching the delivered corpus; only the latter is the corpus-quality successor to the original 28% baseline | ✓ Validated via UAT (Phase 22, 2026-07-18) — `export_junk_rate` 0.0%, decisively beats <2% target |
 
 ## Evolution
 
@@ -236,4 +255,4 @@ Requirements are defined by `/gsd-new-milestone` (research → requirements → 
 **After each milestone:** Full review of all sections, Core Value check, Out of Scope audit.
 
 ---
-*Last updated: 2026-07-18 after Phase 22 (tech-debt closure) verified passed — v2.6 milestone complete*
+*Last updated: 2026-07-18 after v2.6 (Data Quality & Enrichment) milestone completion — archived, tagged, and closed*
