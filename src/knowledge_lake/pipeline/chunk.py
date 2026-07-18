@@ -30,6 +30,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import importlib.metadata  # noqa: F401 — defensive: ensures FineWebQualityFilter's
+
 # lazy tokenizer probe (datatrove.utils.text.split_into_words) never hits the
 # "module 'importlib' has no attribute 'metadata'" AttributeError regardless
 # of future import-order changes elsewhere in the app (RESEARCH.md Pitfall 4).

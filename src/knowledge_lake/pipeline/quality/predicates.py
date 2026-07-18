@@ -37,9 +37,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from knowledge_lake.pipeline.quality.constants import (
+    _LINK_PATTERN,
     STOP_WORDS_SET,
     TERMINAL_PUNCTUATION_SET,
-    _LINK_PATTERN,
     token_count,
 )
 
