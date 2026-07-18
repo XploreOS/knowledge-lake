@@ -437,22 +437,41 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
 
         import polars as pl
 
-        from knowledge_lake.pipeline.export import _make_storage, export_rag_corpus
+        from knowledge_lake.pipeline.export import (
+            TrainEvalContaminationError,
+            _make_storage,
+            export_rag_corpus,
+        )
         from knowledge_lake.pipeline.utils import uri_to_key
 
-        export_result = export_rag_corpus(domain=domain, settings=s)
-
-        # _make_storage (not a fresh StorageBackend(s.storage)) is used
-        # deliberately — it is export.py's own test patch point, so a
-        # caller-side read-back of the exported Parquet goes through the
-        # same storage double as export_rag_corpus()'s own write in tests
-        # (patch.object(export_module, "_make_storage", ...)).
-        storage = _make_storage(s)
-        buf = io.BytesIO(storage.get_object(uri_to_key(export_result["storage_uri"])))
-        df = pl.read_parquet(buf)
-        export_kept = df.filter(pl.col("chunk_id").is_in(list(this_run_chunk_ids))).height
-        export_junk = len(this_run_chunk_ids) - export_kept
-        export_junk_rate = export_junk / len(this_run_chunk_ids)
+        try:
+            export_result = export_rag_corpus(domain=domain, settings=s)
+        except TrainEvalContaminationError:
+            # CR-02: export_rag_corpus()'s first statement is a corpus-wide
+            # train/eval contamination hard gate, unrelated to this run's own
+            # freshly-chunked documents. A "measurement" command must never
+            # crash on a pre-existing, undocumented corpus-wide overlap —
+            # report export-level measurement as unavailable and let the
+            # section/chunk-level rows still return.
+            log.warning(
+                "quality_audit.export_scoping_skipped_contamination",
+                domain=domain,
+            )
+            export_kept = 0
+            export_junk = 0
+            export_junk_rate = None
+        else:
+            # _make_storage (not a fresh StorageBackend(s.storage)) is used
+            # deliberately — it is export.py's own test patch point, so a
+            # caller-side read-back of the exported Parquet goes through the
+            # same storage double as export_rag_corpus()'s own write in tests
+            # (patch.object(export_module, "_make_storage", ...)).
+            storage = _make_storage(s)
+            buf = io.BytesIO(storage.get_object(uri_to_key(export_result["storage_uri"])))
+            df = pl.read_parquet(buf)
+            export_kept = df.filter(pl.col("chunk_id").is_in(list(this_run_chunk_ids))).height
+            export_junk = len(this_run_chunk_ids) - export_kept
+            export_junk_rate = export_junk / len(this_run_chunk_ids)
     else:
         export_kept = 0
         export_junk = 0

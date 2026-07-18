@@ -1002,9 +1002,14 @@ def cmd_quality_audit(
     (MEAS-01 extended, Phase 22).
     """
     if full:
+        from knowledge_lake.pipeline.export import TrainEvalContaminationError
         from knowledge_lake.pipeline.quality_audit import run_full_pipeline_audit
 
-        result = run_full_pipeline_audit(domain=domain)
+        try:
+            result = run_full_pipeline_audit(domain=domain)
+        except (TrainEvalContaminationError, ValueError, LookupError) as exc:
+            typer.echo(f"Error: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
         rows = result["rows"]
         summary = result["summary"]
 
