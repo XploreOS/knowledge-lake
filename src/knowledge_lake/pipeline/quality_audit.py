@@ -21,8 +21,15 @@ Phase 22 D-04).
 
 Scope is ``parse -> clean -> chunk (-> export)``. This module must never
 import ``knowledge_lake.pipeline.embed`` or ``knowledge_lake.pipeline.index``
-— the audit is read/measurement-only (D-07's "the pipeline IS the
-measurement") and must never trigger vector-store writes or embedding spend.
+— the audit must never trigger vector-store writes or embedding spend
+(D-07's "the pipeline IS the measurement").
+
+WR-01: ``run_full_pipeline_audit()`` is NOT side-effect-free. It persists
+real ``chunk()`` artifacts and calls the real ``export_rag_corpus()``, which
+mints a fresh gold-zone Parquet object + ``Dataset`` row on every invocation
+(no cleanup, no dedup against a prior run's export). Treat ``--full`` as a
+real pipeline run for measurement purposes, not a read-only inspection —
+repeated/scheduled invocations will accumulate gold-zone exports over time.
 """
 
 from __future__ import annotations

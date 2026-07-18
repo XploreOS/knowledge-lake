@@ -984,7 +984,9 @@ def cmd_quality_audit(
         "--full",
         help=(
             "Also compute chunk-level and export-level measurements "
-            "(run_full_pipeline_audit) alongside the section-level table."
+            "(run_full_pipeline_audit) alongside the section-level table. "
+            "NOT side-effect-free: persists real chunk() artifacts and writes "
+            "a new gold-zone export + Dataset row on every run (WR-01)."
         ),
     ),
 ) -> None:
@@ -999,7 +1001,11 @@ def cmd_quality_audit(
     With ``--full``, also re-runs chunk() and reads back export_rag_corpus()'s
     output (D-04-scoped to this run's own chunks) to report chunk-level
     garbage_rate and export-level junk_rate alongside the 28%/33% baselines
-    (MEAS-01 extended, Phase 22).
+    (MEAS-01 extended, Phase 22). WR-01: ``--full`` is NOT read/measurement-only
+    like the base command — it persists real chunk() artifacts and writes a
+    fresh gold-zone export_rag_corpus() Parquet + Dataset row on every
+    invocation with no cleanup, so repeated/scheduled runs accumulate
+    gold-zone exports over time.
     """
     if full:
         from knowledge_lake.pipeline.export import TrainEvalContaminationError
