@@ -1,10 +1,11 @@
 ---
 phase: 17
 slug: close-the-bypass-measurement
-status: planned
+status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-07-16
+validated: 2026-07-18
 ---
 
 # Phase 17 — Validation Strategy
@@ -38,14 +39,14 @@ created: 2026-07-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 17-01-T1 | 17-01 | 1 | CLEAN-01, CLEAN-02, CLEAN-03 | T-17-01-01 | `clean()` threads parsed_doc, cleans sections without dropping any, WR-05 parent-scoped hash | unit | `uv run pytest tests/unit/test_clean.py tests/unit/test_clean_silver_key.py -x` | extend `tests/unit/test_clean.py` | ⬜ pending |
-| 17-01-T2 | 17-01 | 1 | QUAL-04, QUAL-05 | T-17-01-01 | Conservation invariant (`rejected+kept==considered`), unconditional rejection-count recording | unit | `uv run pytest tests/unit/test_clean.py -x` | extend `tests/unit/test_clean.py` | ⬜ pending |
-| 17-02-T1 | 17-02 | 2 | CLEAN-01 | T-17-02-01 | `clean_document` forwards `clean_result["cleaned_doc"]` under the `"parsed_doc"` key | integration | `uv run pytest tests/integration/test_dagster_assets.py::TestDefinitionsLoad -x` | `src/knowledge_lake/dagster_defs/assets.py` (modified) | ⬜ pending |
-| 17-02-T2 | 17-02 | 2 | CLEAN-01 | T-17-02-01 | `chunk_document` receives sections with boilerplate removed; uncleaned `parsed_doc` no longer forwarded; curate_document_asset regression-free (D-03) | integration | `uv run pytest tests/integration/test_dagster_assets.py -k materialize -x` | extend `test_dagster_materialize_produces_artifacts` (`test_dagster_assets.py:291`) | ⬜ pending |
-| 17-03-T1 | 17-03 | 2 | CLEAN-02 | T-17-03-01 | `process_crawled` calls `clean()` between `parse()`/`chunk()`; `chunk()` receives `cleaned_doc` | unit | `uv run pytest tests/unit/test_process_crawled_clean.py -x` | new `tests/unit/test_process_crawled_clean.py` | ⬜ pending |
-| 17-03-T2 | 17-03 | 2 | CLEAN-02 | T-17-03-01 | `klake process` produces chunks from cleaned text — identical output to Dagster path; error-handling/empty-chunks parity | unit | `uv run pytest tests/unit/test_process_crawled_clean.py -x` | extend `tests/unit/test_process_crawled_clean.py` | ⬜ pending |
-| 17-04-T1 | 17-04 | 2 | MEAS-01, QUAL-04 | T-17-04-01, T-17-04-02 | `run_quality_audit()` per-source table: total sections, kept, rejected, reasons, garbage rate; no embed/index calls | unit | `uv run pytest tests/unit/test_quality_audit.py -x` | new `tests/unit/test_quality_audit.py` | ⬜ pending |
-| 17-04-T2 | 17-04 | 2 | MEAS-01 | T-17-04-01 | `klake quality-audit` CLI produces N-row reproducible table (row count = live `Source.domain` query, not hardcoded) or `--json` | unit | `uv run pytest tests/unit/test_cli_quality_audit.py -x` | new `tests/unit/test_cli_quality_audit.py` | ⬜ pending |
+| 17-01-T1 | 17-01 | 1 | CLEAN-01, CLEAN-02, CLEAN-03 | T-17-01-01 | `clean()` threads parsed_doc, cleans sections without dropping any, WR-05 parent-scoped hash | unit | `uv run pytest tests/unit/test_clean.py tests/unit/test_clean_silver_key.py -x` | `tests/unit/test_clean.py::TestCleanParsedDocThreading` | ✅ green |
+| 17-01-T2 | 17-01 | 1 | QUAL-04, QUAL-05 | T-17-01-01 | Conservation invariant (`rejected+kept==considered`), unconditional rejection-count recording | unit | `uv run pytest tests/unit/test_clean.py -x` | `tests/unit/test_clean.py::TestCleanConservationInvariant` | ✅ green |
+| 17-02-T1 | 17-02 | 2 | CLEAN-01 | T-17-02-01 | `clean_document` forwards `clean_result["cleaned_doc"]` under the `"parsed_doc"` key | integration | `uv run pytest tests/integration/test_dagster_assets.py::TestDefinitionsLoad -x` | `tests/integration/test_dagster_assets.py::TestDefinitionsLoad::test_definitions_importable` | ✅ green |
+| 17-02-T2 | 17-02 | 2 | CLEAN-01 | T-17-02-01 | `chunk_document` receives sections with boilerplate removed; uncleaned `parsed_doc` no longer forwarded; curate_document_asset regression-free (D-03) | integration | `uv run pytest tests/integration/test_dagster_assets.py -k materialize -x` | `tests/integration/test_dagster_assets.py::test_dagster_materialize_produces_artifacts` | ✅ green |
+| 17-03-T1 | 17-03 | 2 | CLEAN-02 | T-17-03-01 | `process_crawled` calls `clean()` between `parse()`/`chunk()`; `chunk()` receives `cleaned_doc` | unit | `uv run pytest tests/unit/test_process_crawled_clean.py -x` | `tests/unit/test_process_crawled_clean.py::TestProcessCrawledCleanWiring` | ✅ green |
+| 17-03-T2 | 17-03 | 2 | CLEAN-02 | T-17-03-01 | `klake process` produces chunks from cleaned text — identical output to Dagster path; error-handling/empty-chunks parity | unit | `uv run pytest tests/unit/test_process_crawled_clean.py -x` | `tests/unit/test_process_crawled_clean.py::TestProcessCrawledCleanBoundaries` | ✅ green |
+| 17-04-T1 | 17-04 | 2 | MEAS-01, QUAL-04 | T-17-04-01, T-17-04-02 | `run_quality_audit()` per-source table: total sections, kept, rejected, reasons, garbage rate; no embed/index calls | unit | `uv run pytest tests/unit/test_quality_audit.py -x` | `tests/unit/test_quality_audit.py` (10 test classes) | ✅ green |
+| 17-04-T2 | 17-04 | 2 | MEAS-01 | T-17-04-01 | `klake quality-audit` CLI produces N-row reproducible table (row count = live `Source.domain` query, not hardcoded) or `--json` | unit | `uv run pytest tests/unit/test_cli_quality_audit.py -x` | `tests/unit/test_cli_quality_audit.py` (5 test classes) | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -82,4 +83,16 @@ code change with tests in the same task, tdd="true"):
 - [x] Feedback latency < 30s — unit-level task commands complete well under 30s; the two integration-level commands (17-02) are plan/wave-level checks against the already-running docker-compose stack, not per-task quick checks
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** planned — plans committed 2026-07-16, ready for `/gsd-execute-phase 17`
+**Approval:** validated — all 8 tasks executed and verified green, full suite (982+ tests, later 1181) passing with 0 failures as of retroactive audit 2026-07-18
+
+---
+
+## Validation Audit 2026-07-18
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 8 requirement rows re-verified against actual SUMMARY.md task results (all `status: pass`) and confirmed by re-running the full suite: `uv run pytest tests/unit tests/integration -q` → 1181 passed, 3 skipped, 6 xfailed, 0 failed. Test files and named test classes cross-checked against source (`grep -n "^class Test"`) — all present and matching the requirement map. Statuses updated from planning-time `⬜ pending` to `✅ green`; no gaps required auditor intervention.
