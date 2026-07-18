@@ -3,41 +3,41 @@ gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
 current_phase: 22
-current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
-status: verifying
+status: completed
 stopped_at: Completed 22-03-PLAN.md
-last_updated: "2026-07-17T19:45:33.108Z"
-last_activity: 2026-07-17
-last_activity_desc: Phase 22 execution started
+last_updated: "2026-07-18T02:58:37.691Z"
+last_activity: 2026-07-18
+last_activity_desc: Phase 22 complete
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 24
   completed_plans: 24
   percent: 100
+current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-15)
+See: .planning/PROJECT.md (updated 2026-07-18)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 22 — address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
+**Current focus:** v2.6 (Data Quality & Enrichment) is complete — all 6 phases (17-22) done. Awaiting `/gsd-complete-milestone v2.6` to archive.
 
 ## Current Position
 
-Phase: 22 (address-tech-debt-measure-garbage-junk-rates-end-to-end-reco) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-07-17 — Phase 22 execution started
+Phase: 22
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-07-18 — Phase 22 complete
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 73 (v1.0: 25, v2.0: 38, v2.5: 14)
+- Total plans completed: 76 (v1.0: 25, v2.0: 38, v2.5: 14)
 - Average duration: ~10 min
 - Total execution time: --
 
@@ -60,6 +60,7 @@ Last activity: 2026-07-17 — Phase 22 execution started
 | 19 | 4 | - | - |
 | 20 | 4 | - | - |
 | 21 | 8 | - | - |
+| 22 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -169,7 +170,7 @@ None yet.
 
 **Open — carried into v2.6:**
 
-- [v2.6 driver]: The clean stage is architecturally bypassed — `clean_document` forwards the *uncleaned* `parsed_doc` to `chunk_document` / `tree_index_document` / `enrich_document`, so boilerplate removal reaches only the pretrain path. Root cause of ~28% garbage chunks and 33% unusable gold RAG corpus. See `.planning/MILESTONE-CONTEXT.md`.
+- [Phase 22, operator follow-up]: Nyquist reconciliation for Phases 17–21 — each phase's `VALIDATION.md` still shows its pre-execution seed state (`status: draft`/`planned`, `nyquist_compliant: false`), never reconciled by a post-execution `/gsd-validate-phase` run. Deliberately left as an operator action, not phase-22 code. Run `/gsd-validate-phase 17` through `/gsd-validate-phase 21` to close.
 - [Tech debt, CR-01]: MCP `_search_handler` uses `hasattr(h, "_asdict")`, always False for dataclasses — crashes on non-empty results. Needs `dataclasses.asdict(h)`. **MCP search is unusable in production until fixed.**
 - [Tech debt, CR-02]: `mode` param dual-semantics — `?mode=hybrid&route=tree` passes API validation but reaches `tree_search()` with an invalid value; needs a split into `mode`/`tree_mode`.
 - [Tech debt]: Domain path-traversal regex has 3 independent copies (`domains/loader.py`, `api/app.py`, `pipeline/domains.py`) — if one drifts, the guards diverge.
@@ -191,7 +192,7 @@ None yet.
 
 **Resolved in v2.5 (2026-07-15):** E2E gap analysis CLOSED — all 19 findings resolved (see `.planning/milestones/v2.5-E2E-GAP-ANALYSIS.md`). Includes KL-18 (three endpoints returning 500 via `DetachedInstanceError`), the Dockerfile landmine, and parse section persistence (the section-less path was collapsing 38 sections into 1 chunk; now 51 per-section chunks, ~30x faster). Suite: 971 passed, 0 failed.
 
-- Operator follow-up: run /gsd-validate-phase 17, 18, 19, 20, 21 to reconcile Nyquist validation status (D-08/D-09, per Phase 22-03-SUMMARY.md)
+**Resolved in v2.6 (2026-07-18):** Milestone audit's two open tech-debt items CLOSED (see `.planning/v2.6-MILESTONE-AUDIT.md`, Phase 22). Real measurement now exists: export_junk_rate fell 33%→0.0% (decisively meets <2% target — resolved via UAT as the criterion-#1 metric); chunk_garbage_rate came out at 45.64% (a different, expected-high metric — the gate's own live rejection rate, not delivered-corpus quality). Nyquist reconciliation for Phases 17-21 remains an open operator follow-up (see Blockers/Concerns above). Suite: 1185 passed, 0 failed.
 
 ### Quick Tasks Completed
 
@@ -224,8 +225,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-17T19:45:26.454Z
-Stopped at: Completed 22-03-PLAN.md
+Last session: 2026-07-18T02:58:37.691Z
+Stopped at: Phase 22 complete, ready to complete milestone v2.6
 Resume file: None
 
 ## Operator Next Steps
