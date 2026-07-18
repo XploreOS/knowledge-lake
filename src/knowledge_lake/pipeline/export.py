@@ -236,11 +236,21 @@ def _enforce_no_contamination(s: Settings) -> None:
     This is the fail-closed hard gate 05-AI-SPEC Section 6/7 requires at
     'every klake export invocation, not sampled.' Call this as the FIRST statement
     of every export function.
+
+    WR-02: the raised message breaks out ``direct_overlap_count`` (exact
+    cleaned_document ID match) from ``near_dup_overlap_count`` (conservative
+    union of every near_dup-flagged document on both sides — NOT a pairwise
+    match, so it can be much larger than the real overlap) so operators can
+    see when the conservative near-dup branch is firing broadly instead of a
+    genuine direct collision.
     """
     result = check_train_eval_contamination(settings=s)
     if result["contaminated_count"] > 0:
         raise TrainEvalContaminationError(
             f"train/eval contamination: {result['contaminated_count']} undocumented overlap(s) "
+            f"({result['direct_overlap_count']} direct, "
+            f"{result['near_dup_overlap_count']} near-dup — near-dup is a "
+            f"conservative flat-union check, not a pairwise match) "
             f"— {result['contaminated_artifact_ids']}. "
             f"Add to ExportSettings.contamination_override_artifact_ids if this overlap "
             f"is deliberate and documented."
