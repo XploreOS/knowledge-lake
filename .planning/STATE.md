@@ -24,7 +24,7 @@ current_phase_name: address-tech-debt-measure-garbage-junk-rates-end-to-end-reco
 See: .planning/PROJECT.md (updated 2026-07-18)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** v2.6 (Data Quality & Enrichment) is complete — all 6 phases (17-22) done. Awaiting `/gsd-complete-milestone v2.6` to archive.
+**Current focus:** v2.6 (Data Quality & Enrichment) shipped and archived 2026-07-18. Awaiting `/gsd-new-milestone` to begin the next cycle.
 
 ## Current Position
 
@@ -168,9 +168,8 @@ None yet.
 
 ### Blockers/Concerns
 
-**Open — carried into v2.6:**
+**Open — carried forward into next milestone:**
 
-- [Phase 22, operator follow-up]: Nyquist reconciliation for Phases 17–21 — each phase's `VALIDATION.md` still shows its pre-execution seed state (`status: draft`/`planned`, `nyquist_compliant: false`), never reconciled by a post-execution `/gsd-validate-phase` run. Deliberately left as an operator action, not phase-22 code. Run `/gsd-validate-phase 17` through `/gsd-validate-phase 21` to close.
 - [Tech debt, CR-01]: MCP `_search_handler` uses `hasattr(h, "_asdict")`, always False for dataclasses — crashes on non-empty results. Needs `dataclasses.asdict(h)`. **MCP search is unusable in production until fixed.**
 - [Tech debt, CR-02]: `mode` param dual-semantics — `?mode=hybrid&route=tree` passes API validation but reaches `tree_search()` with an invalid value; needs a split into `mode`/`tree_mode`.
 - [Tech debt]: Domain path-traversal regex has 3 independent copies (`domains/loader.py`, `api/app.py`, `pipeline/domains.py`) — if one drifts, the guards diverge.
@@ -181,6 +180,7 @@ None yet.
 - [Phase 14]: Tree traversal prompt quality unvalidated — no ground-truth benchmarks for the healthcare domain.
 - [Phase 16]: Entity cross-link IDF threshold needs empirical tuning for useful link density.
 - [Wart, KL-01]: `_unclassified` still labels an all-domain export (`domain=` means "no filter, all domains").
+- [Tech debt, v2.6]: `/gsd-secure-phase` only ran for Phase 22, not phases 17-21, despite `security_enforcement: true` in config — unlike Nyquist, this was not reconciled this milestone. Worth a retroactive `/gsd-secure-phase 17` through `21` pass, or confirming intentionally out of scope for a backend-only, no-new-trust-boundary milestone.
 
 **Standing gotchas — do not relearn these:**
 
@@ -192,7 +192,7 @@ None yet.
 
 **Resolved in v2.5 (2026-07-15):** E2E gap analysis CLOSED — all 19 findings resolved (see `.planning/milestones/v2.5-E2E-GAP-ANALYSIS.md`). Includes KL-18 (three endpoints returning 500 via `DetachedInstanceError`), the Dockerfile landmine, and parse section persistence (the section-less path was collapsing 38 sections into 1 chunk; now 51 per-section chunks, ~30x faster). Suite: 971 passed, 0 failed.
 
-**Resolved in v2.6 (2026-07-18):** Milestone audit's two open tech-debt items CLOSED (see `.planning/v2.6-MILESTONE-AUDIT.md`, Phase 22). Real measurement now exists: export_junk_rate fell 33%→0.0% (decisively meets <2% target — resolved via UAT as the criterion-#1 metric); chunk_garbage_rate came out at 45.64% (a different, expected-high metric — the gate's own live rejection rate, not delivered-corpus quality). Nyquist reconciliation for Phases 17-21 remains an open operator follow-up (see Blockers/Concerns above). Suite: 1185 passed, 0 failed.
+**Resolved in v2.6 (2026-07-18):** Milestone audit's two open tech-debt items CLOSED (see `.planning/milestones/v2.6-MILESTONE-AUDIT.md`, Phase 22). Real measurement now exists: export_junk_rate fell 33%→0.0% (decisively meets <2% target — resolved via UAT as the criterion-#1 metric); chunk_garbage_rate came out at 45.64% (a different, expected-high metric — the gate's own live rejection rate, not delivered-corpus quality). Nyquist reconciliation for all 6 phases (17-22) also CLOSED this milestone — `/gsd-validate-phase` re-run for each, all now `status: validated`, `nyquist_compliant: true`, zero coverage gaps found. Milestone audit re-run post-reconciliation: PASSED (20/20 requirements, 19/19 integration links wired, 6/6 Nyquist-compliant). Suite: 1181 passed, 0 failed.
 
 ### Quick Tasks Completed
 
@@ -225,8 +225,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-18T02:58:37.691Z
-Stopped at: Phase 22 complete, ready to complete milestone v2.6
+Last session: 2026-07-18T04:10:00Z
+Stopped at: v2.6 milestone archived and tagged; awaiting `/gsd-new-milestone`
 Resume file: None
 
 ## Operator Next Steps
