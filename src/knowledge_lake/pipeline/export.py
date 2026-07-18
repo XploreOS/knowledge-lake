@@ -483,15 +483,23 @@ def export_pretrain_corpus(
             cleaned = registry_repo.get_artifact(session, parent_id)
             if cleaned is None:
                 continue
-            # Retrieve text from S3 silver zone
+            # Retrieve text from S3 silver zone. WR-03: reuse the shared
+            # _uri_to_key() helper (already imported for export_rag_corpus())
+            # instead of re-implementing s3:// key parsing — it raises a
+            # descriptive ValueError on a malformed URI rather than silently
+            # falling back to passing the whole URI as the object key.
             if cleaned.storage_uri:
-                # Extract the S3 key from the URI (s3://bucket/key)
-                parts = cleaned.storage_uri.split("/", 3)
-                key = parts[3] if len(parts) == 4 else cleaned.storage_uri
                 try:
+                    key = _uri_to_key(cleaned.storage_uri)
                     text_bytes = storage.get_object(key)
                     text = text_bytes.decode("utf-8", errors="replace")
                 except Exception:
+                    log.warning(
+                        "export.pretrain.text_retrieval_failed",
+                        cleaned_document_id=cleaned.id,
+                        storage_uri=cleaned.storage_uri,
+                        exc_info=True,
+                    )
                     text = ""
             else:
                 text = ""
