@@ -324,41 +324,57 @@ def run_full_pipeline_audit(*, domain: str = "healthcare", settings=None) -> dic
             if cleaned_doc is None:
                 continue
 
-            # In-memory chunk-level tally (RESEARCH.md Pattern 1) — pure,
-            # no registry writes. _apply_substance_gate mutates raw_chunks
-            # in place, annotating substance_passed/rejection_reason on
-            # every entry (kept AND rejected) regardless of gate_mode.
-            raw_chunks = _build_token_chunks(
-                cleaned_doc,
-                s.chunk.max_tokens,
-                s.chunk.overlap_tokens,
-                s.chunk.heading_breadcrumb_depth,
-            )
-            _apply_substance_gate(raw_chunks, s, domain_filters, parsed_id)
-            chunks_considered += len(raw_chunks)
-            for r in raw_chunks:
-                if r["substance_passed"]:
-                    chunks_kept += 1
-                else:
-                    chunks_rejected += 1
-                    reason = r["rejection_reason"]
-                    chunk_rejection_reasons[reason] = (
-                        chunk_rejection_reasons.get(reason, 0) + 1
-                    )
+            try:
+                # In-memory chunk-level tally (RESEARCH.md Pattern 1) — pure,
+                # no registry writes. _apply_substance_gate mutates raw_chunks
+                # in place, annotating substance_passed/rejection_reason on
+                # every entry (kept AND rejected) regardless of gate_mode.
+                raw_chunks = _build_token_chunks(
+                    cleaned_doc,
+                    s.chunk.max_tokens,
+                    s.chunk.overlap_tokens,
+                    s.chunk.heading_breadcrumb_depth,
+                )
+                _apply_substance_gate(raw_chunks, s, domain_filters, parsed_id)
+                chunks_considered += len(raw_chunks)
+                for r in raw_chunks:
+                    if r["substance_passed"]:
+                        chunks_kept += 1
+                    else:
+                        chunks_rejected += 1
+                        reason = r["rejection_reason"]
+                        chunk_rejection_reasons[reason] = (
+                            chunk_rejection_reasons.get(reason, 0) + 1
+                        )
 
-            # Real persisted chunk() call (criterion #2 groundwork). Enforce
-            # mode (the shipped default) never persists a rejected chunk in
-            # the first place (RESEARCH.md Pitfall 2) — every chunk_id this
-            # run tracks is, by construction, already substance_passed=True.
-            # Track chunk IDs from the RETURN VALUE only (RESEARCH.md
-            # Pitfall 4) — a content-hash no-op branch means a re-run of an
-            # already-chunked document is a legitimate reuse, not a bug, and
-            # the returned dict's substance_passed is always freshly
-            # computed by THIS call regardless of which branch fired.
-            chunk_results = chunk(
-                parsed_id, source_id, cleaned_doc, settings=s, domain_filters=domain_filters,
-            )
-            this_run_chunk_ids.update(r["chunk_id"] for r in chunk_results)
+                # Real persisted chunk() call (criterion #2 groundwork). Enforce
+                # mode (the shipped default) never persists a rejected chunk in
+                # the first place (RESEARCH.md Pitfall 2) — every chunk_id this
+                # run tracks is, by construction, already substance_passed=True.
+                # Track chunk IDs from the RETURN VALUE only (RESEARCH.md
+                # Pitfall 4) — a content-hash no-op branch means a re-run of an
+                # already-chunked document is a legitimate reuse, not a bug, and
+                # the returned dict's substance_passed is always freshly
+                # computed by THIS call regardless of which branch fired.
+                chunk_results = chunk(
+                    parsed_id, source_id, cleaned_doc, settings=s, domain_filters=domain_filters,
+                )
+                this_run_chunk_ids.update(r["chunk_id"] for r in chunk_results)
+            except Exception:
+                # CR-01: chunk-level measurement and the real, persisting
+                # chunk() call must never abort the whole domain scan — mirror
+                # the parse/clean error-isolation contract above so a
+                # transient S3/DB failure on one document is counted and
+                # skipped, not propagated out of run_full_pipeline_audit().
+                documents_errored += 1
+                log.warning(
+                    "quality_audit.chunk_failed",
+                    source_id=source_id,
+                    raw_id=raw_id,
+                    parsed_id=parsed_id,
+                    exc_info=True,
+                )
+                continue
 
         total = sections_rejected + sections_kept
         garbage_rate = (sections_rejected / total) if total > 0 else None
