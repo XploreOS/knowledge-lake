@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: Data Quality & Enrichment
 status: Awaiting next milestone
-stopped_at: Phase 22 complete, ready to complete milestone v2.6
-last_updated: "2026-07-18T03:59:58.316Z"
+stopped_at: "Completed 260718-6fu quick task: fix CI lint failure ruff I001"
+last_updated: "2026-07-18T04:43:22.991Z"
 last_activity: 2026-07-18
 last_activity_desc: Milestone v2.6 completed and archived
 progress:
@@ -107,6 +107,7 @@ Last activity: 2026-07-18 — Milestone v2.6 completed and archived
 | Phase 22 P01 | 16min | 2 tasks | 3 files |
 | Phase 22 P02 | 6min | 1 tasks | 2 files |
 | Phase 22 P03 | 73min | 1 tasks | 0 files |
+| Phase quick P260718-6fu | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,7 @@ Last activity: 2026-07-18 — Milestone v2.6 completed and archived
 - [Phase ?]: Phase 22 P01: this_run_chunk_ids initialized once before the per-source loop (corpus-wide, not per-source) so D-04 scoping spans every source in a single export_rag_corpus() call
 - [Phase ?]: Phase 22 P02: run_full_pipeline_audit()'s actual committed return shape matched the plan's <interfaces> contract exactly (no drift from Plan 22-01) — CLI wiring needed no adjustment
 - [Phase ?]: Phase 22 P03: chunk_garbage_rate (45.64%) measures gate-rejection-rate of candidates, not garbage remaining in corpus -- export_junk_rate (0.0%, down from 33% baseline) is the direct successor metric to the milestone's original criteria and met its <2% target decisively
+- [Phase ?]: CI-LINT-01: CI's Lint (ruff) job only scopes src/, not tests/ — 299 pre-existing tests/ lint findings are out of scope for this and future lint-only quick tasks unless CI's job scope changes
 
 ### Pending Todos
 
@@ -204,6 +206,7 @@ None yet.
 | 260715-5pb | Fix KL-07, KL-04/05/06, KL-11, KL-16, KL-10 | 2026-07-15 | bf8b6ac | [260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10](./quick/260715-5pb-fix-kl-07-kl-04-05-06-kl-11-kl-16-kl-10/) |
 | 260715-bgt | Fix KL-18 detached-session 500s, KL-08 stale container, KL-09 tree-index CLI | 2026-07-15 | b974337 | [260715-bgt-fix-kl-18-detached-session-500s-kl-08-st](./quick/260715-bgt-fix-kl-18-detached-session-500s-kl-08-st/) |
 | 260715-chy | Fix remaining low findings, CI image build guard, parse section persistence | 2026-07-15 | 1c0159f | [260715-chy-fix-remaining-low-findings-ci-image-buil](./quick/260715-chy-fix-remaining-low-findings-ci-image-buil/) |
+| 260718-6fu | Fix CI lint failure: ruff I001 import sort in predicates.py and chunk.py | 2026-07-18 | e1af6b1 | [260718-6fu-fix-ci-lint-failure-ruff-i001-import-sor](./quick/260718-6fu-fix-ci-lint-failure-ruff-i001-import-sor/) |
 
 ### Roadmap Evolution
 
@@ -225,8 +228,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-18T04:10:00Z
-Stopped at: v2.6 milestone archived and tagged; awaiting `/gsd-new-milestone`
+Last session: 2026-07-18T04:42:56.078Z
+Stopped at: Completed 260718-6fu quick task: fix CI lint failure ruff I001
 Resume file: None
 
 ## Operator Next Steps
