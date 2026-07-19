@@ -8,6 +8,28 @@ A reusable, domain-agnostic framework that orchestrates best-in-class open-sourc
 
 Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
 
+## Current Milestone: v2.7 Governed Dataset Production and Release Lifecycle
+
+**Goal:** Reposition Knowledge Lake from a document-ingestion/RAG framework into an open-source DatasetOps control plane that manufactures versioned, policy-evaluated, quality-validated, reproducible AI datasets traceable to their sources — proven end-to-end with a flagship non-healthcare dataset.
+
+**Target features:**
+- Dataset Project (lifecycle: draft → configured → sources_pending → ready → processing → validating → review_required → releasable → released → failed → archived) + versioned, hashed Dataset Specification (YAML/JSON)
+- Auditable source usage-policy decisions (approved/retrieval/training/commercial/derivatives/redistribution/attribution/share-alike/unknown), deterministic and declarative — extending existing `Source.license_type`
+- Formal Dataset Quality Contract (multi-level rules: source/document/chunk/example/split/release) with passed/failed/recoverable/skipped/not-applicable outcomes
+- Accepted/rejected/recoverable/quarantined result partitions — nothing silently discarded, aggregated rejection reporting
+- `CurationEngine` protocol (prepare/execute/collect) generalizing the existing `pipeline/curate.py` DataTrove wrapper; DataTrove formalized as the first production backend (Dagster-launched, accepted/rejected writers, checkpointing)
+- Generated-example candidate lifecycle (generated → validating → accepted/recoverable/repaired/rejected) with an `ExampleValidator` interface, extending `pipeline/datasets.py`
+- Deterministic, versioned, group-aware train/validation/test splits + benchmark contamination gate, replacing today's payload-shape-sniffing `check_train_eval_contamination()`
+- Immutable Dataset Release (manifests: dataset/splits/dataset-card/quality/source/license/policy-decisions/lineage/validation/checksums/reproduce.yaml) as a new table — `Dataset`/`DatasetExample` extended, not replaced
+- Machine-readable reproducibility manifest + a rebuild-equivalence test
+- `klake dataset diff <release-a> <release-b>` release comparison from manifests
+- Coherent CLI/API/MCP surface (new `dataset`/`project`/`policy`/`curation`/`release` command groups, mirroring the existing `domain` sub-Typer group pattern) calling shared application services — no logic in CLI/API handlers, Dagster assets, or MCP shims
+- Minimal dataset lineage explorer (Project → Release → Split → Example → Validation → Candidate → Chunk → Parsed Doc → Raw Doc → Source → Policy Decision)
+- Evaluation Run foundation (data model + one simple adapter, not a full RAGAS/RAG-FiT integration)
+- Flagship proof: AI Agent Security and Permission Dataset (RAG corpus + small grounded instruction set + protected eval set), released with full manifests and one traceable record-level lineage demonstration
+
+**Preserve:** LiteLLM-only model calls, task-based aliases, immutable raw zone, PostgreSQL as registry of record, S3-compatible storage, Dagster orchestration, Alembic migrations, deterministic-before-LLM validation, license/robots tracking, backward-compatible CLI/API/MCP/export behavior, external engines never becoming systems of record.
+
 ## Current State (v2.6 complete, Phase 22 complete 2026-07-18)
 
 - **Shipped:** v1.0 MVP (Phases 1–6) · v2.0 Agent-Ready Lake (Phases 7–12) · v2.5 PageIndex Plugin Integration (Phases 13–16 — Tree Index, Tree Retrieval, Query Router, OpenKB Export) · Phase 17 complete (Close the Bypass + Measurement) · Phase 18 complete (Gate Decouple) · Phase 19 complete (Section Classifier + Patterns) · Phase 20 complete (Chunk Substance Gate + Export Gate) · Phase 21 complete (Index-Time Dedup) · Phase 22 complete (tech-debt closure: real garbage/junk-rate measurement + Nyquist reconciliation follow-up) — all roadmapped v2.6 work is done
