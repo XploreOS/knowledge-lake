@@ -1,312 +1,243 @@
-# Stack Research
+# Stack Research — v2.7 Additions (Governed Dataset Production and Release Lifecycle)
 
-**Domain:** Content-quality filtering for a crawl→parse→clean→chunk RAG pipeline (v2.6)
-**Researched:** 2026-07-15
-**Confidence:** HIGH (core findings executed against the pinned, installed versions; cross-checked against official docs)
+**Domain:** DatasetOps control plane additions — CurationEngine formalization, Croissant metadata, dataset cards, reproducibility manifests, group-aware splits, benchmark contamination
+**Researched:** 2026-07-19
+**Confidence:** HIGH on version numbers (live PyPI/GitHub verification); MEDIUM-HIGH on API/architecture details (GitHub source + release-notes review); design recommendations are original synthesis grounded in this repo's own documented conventions (curate.py anti-pattern notes, Phase 21 dedup-ledger precedent, T-05-08 allow-list discipline)
 
-## Headline Verdict
+**Scope note:** This file covers ONLY the six areas in the v2.7 research question. It does not re-litigate any already-validated v1.0–v2.6 stack choice (Dagster, Docling, Crawl4AI/Scrapy, Qdrant, MinIO/boto3, PostgreSQL/SQLAlchemy/Alembic, FastAPI/Typer/MCP, LiteLLM, DataTrove's 3 filter classes, datasketch, Polars/DuckDB/PyArrow) — those stay exactly as pinned.
 
-**Add nothing. Wire what exists.**
+## Headline Answer
 
-Every capability v2.6 needs is already installed and pinned in `pyproject.toml`. The gap is not
-missing libraries — it is unwired configuration and one adapter line that discards the filtered
-output. Three of the six root causes in `MILESTONE-CONTEXT.md` close with zero new dependencies.
+**Zero new runtime dependencies are required for 5 of 6 capabilities.** Only Croissant metadata benefits from a new package, and even there the recommendation is a **dev-only** dependency, not a production one. Everything else is achievable with what's already pinned (`datatrove==0.9.0`, `datasketch==2.0.0`, `sentence-transformers==5.6.0`, `jinja2`, `pyyaml`, `orjson`, `xxhash`, `hashlib`/`importlib.metadata`/`subprocess` from stdlib).
 
-| Layer | Need | Verdict | What to do |
-|-------|------|---------|------------|
-| L1 crawl | Strip nav/footer/cookie | **Add nothing** | Wire `PruningContentFilter` + `remove_consent_popups` in `crawl4ai_adapter.py` |
-| L2 section | Boilerplate classification | **Add nothing** | Extend `BOILERPLATE_PATTERNS` in `pipeline/clean.py` |
-| L3 chunk | Minimum-substance gate | **Add nothing** | Wire `FineWebQualityFilter` (installed, unused) in `pipeline/chunk.py` |
-| L4 index | Dedup | **Add nothing** | SHA256 over normalized text in `pipeline/embed.py` |
-| L5 gold | Quality gate | **Add nothing** | Existing `composite_quality_score` already computed |
-
-The only dependency worth naming is **trafilatura 2.1.0**, and only as a *contingency* if the
-already-installed Crawl4AI pruning under-performs on government/clinical HTML. Do not add it
-pre-emptively.
-
-## Recommended Stack
-
-### Core Technologies (all already pinned — no version changes)
-
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Crawl4AI | **0.9.1** (installed) | L1 boilerplate stripping at crawl time | `PruningContentFilter` verified to remove nav + footer while preserving clinical prose *and* tables. Already a dependency; the filter is simply never constructed. |
-| DataTrove | **0.9.0** (installed) | L3 chunk-level substance gate | `FineWebQualityFilter` does line-level analysis with `short_line_length=30` — the audit's exact threshold, arrived at independently. Installed but absent from `_build_filters()`. |
-| datasketch | **2.0.0** (installed) | Near-duplicate detection (already used) | Sufficient. The 653 exact duplicates need only SHA256; MinHash stays for corpus-wide near-dup. |
-| `hashlib` (stdlib) | — | L4 index-time exact dedup | The 653 duplicates are *exact*. Exact hashing is deterministic, O(1), and needs no library. |
-
-### Supporting Libraries
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| trafilatura | 2.1.0 (2026-06-07, Apache-2.0) | HTML main-content extraction | **Contingency only.** Add if Phase-17 validation shows `fit_markdown` still leaks boilerplate on gov/clinical HTML. Quality leader (WCXB F1 0.859, ~6.6% boilerplate admitted). HTML-only → helps the crawl path, never the PDF path. |
-| `re` (stdlib) | — | Marketing/cookie/TOS patterns | Now — `PruningContentFilter` provably does *not* catch cookie banners or enrollment CTAs (see Verified Findings). |
-
-### Development Tools
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| Existing pytest suite | Regression gate | Phase-3 tests depend on `BOILERPLATE_PATTERNS` — **extend, do not replace** (open question 5 in MILESTONE-CONTEXT). |
-| `xfail_strict = true` | Already active | A quality gate that silently passes is exactly the v2.5 failure mode this flag now catches. |
-
-## Installation
-
-```bash
-# NOTHING TO INSTALL for the recommended path.
-# crawl4ai==0.9.1, datatrove==0.9.0, datasketch==2.0.0 are already pinned in pyproject.toml.
-
-# CONTINGENCY ONLY — add if fit_markdown validation fails on gov/clinical HTML in Phase 17:
-# uv add trafilatura==2.1.0
-```
+| # | Capability | New runtime dependency? | Recommendation |
+|---|---|---|---|
+| 1 | CurationEngine + DataTrove backend | No — same pin (`datatrove==0.9.0`) | Adopt `LocalPipelineExecutor` + native readers/writers/checkpointing; do NOT install `datatrove[s3]` or `datatrove[ray]` |
+| 2 | Croissant metadata | Dev-only (`mlcroissant==1.1.0`) | Hand-emit `croissant.json` via Pydantic + orjson; use `mlcroissant validate` in CI only |
+| 3 | Dataset card | No | Jinja2 template, same pattern as `enrich.j2`/`qa_generation.j2` |
+| 4 | Reproducibility manifest | No | Pure application logic on existing hashing/serialization libs |
+| 5 | Group-aware split | No | Hand-rolled deterministic hash-bucket split (stdlib `hashlib`) |
+| 6 | Benchmark contamination | No | Tiered: n-gram (stdlib) → MinHash (`datasketch`, already pinned) → embedding (`sentence-transformers`, already pinned) |
 
 ---
 
-## Verified Findings
+## 1. CurationEngine + DataTrove backend
 
-Everything below was executed against the installed `crawl4ai==0.9.1` / `datatrove==0.9.0`, not
-recalled and not guessed.
+### What DataTrove's real API looks like (verified via PyPI + GitHub source, 2026-07-19)
 
-### 1. Crawl4AI content filtering — the exact API surface
+**Version:** `datatrove==0.9.0`, released 2026-03-04 (PyPI — matches the version and date already recorded in this repo's CLAUDE.md). No `0.9.1` or `0.10.0` has shipped since; 0.9.0 is confirmed the current latest release as of today. **Upgrading is not warranted** — there is nothing newer to upgrade to.
 
-**`CrawlerRunConfig` has NO `content_filter` parameter.** Verified by signature introspection
-across all 100 of its parameters. The content filter is passed to the *markdown generator*, which
-is then passed to the run config:
+**Execution layer** (`datatrove.executor`):
+- `LocalPipelineExecutor` — multiprocessing on a single machine; `workers=N` runs N tasks concurrently (one per core). This is the only executor relevant to this repo's single-Dagster-host deployment.
+- `SlurmPipelineExecutor` — HPC cluster via `sbatch` job arrays. Not applicable (no Slurm in this stack).
+- `RayPipelineExecutor` — distributed Ray cluster; requires the `ray` extra (`ray[default]`). **Not warranted for v2.7** — the flagship dataset is dozens-to-low-hundreds of examples and the existing corpus is a few thousand chunks; there is no scale problem Ray would solve here, and it would introduce a second orchestration/scheduling system alongside Dagster. Flag as future-only if corpus scale grows by 2+ orders of magnitude.
+
+**Readers/Writers** (`datatrove.pipeline.readers` / `datatrove.pipeline.writers`):
+- Readers yield `datatrove.data.Document` objects; writers extend a common `DiskWriter` base (`JsonlWriter`, `ParquetWriter`, etc.) with `output_folder`, `output_filename` (supports `${rank}` templating), `compression`, `adapter` (custom Document → output-dict mapping), `max_file_size`.
+- Storage backend is `DataFolder`, which wraps `fsspec` — this is how DataTrove supports local, S3, GCS, Azure, and HF Hub paths transparently. **S3 access requires the `s3` extra** (`pip install datatrove[s3]`, pulls in `s3fs`).
+
+**Accepted/rejected writers — the actual mechanism (this directly answers the "formal CurationEngine" design question):**
+- Every `BaseFilter` subclass (including the 3 already used — `GopherRepetitionFilter`, `GopherQualityFilter`, `C4QualityFilter`) accepts an `exclusion_writer` constructor parameter: "optionally pass in a writer that will save the dropped documents." When a filter's `.run()` (not `.filter()`) drops a document, it writes that document to the exclusion writer with the rejection reason stamped into its metadata, and updates the block's own `PipelineStats` (`stat_update(StatHints.dropped)`).
+- **This is exactly the accepted/rejected writer machinery CurationEngine needs** — but note the important tension below.
+
+**Checkpointing/resume — the actual mechanism:**
+- File-based markers: on successful completion of a task (a shard, one process's slice of work), the executor writes an empty file to `completions/{rank:05d}` and per-task stats to `stats/{rank:05d}.json`.
+- On relaunch, `is_rank_completed(rank)` checks for the marker; if present, that shard's entire pipeline (reader → filters → writer) is skipped entirely — no partial re-processing within a shard, but no re-doing of already-finished shards either. `skip_completed=True` by default.
+- This is genuine resumability, distinct from and complementary to Dagster's own retry semantics: **Dagster's `RetryPolicy` retries a whole asset** (e.g., re-run `curate_all_documents` from scratch); **DataTrove's checkpoint machinery resumes a large multi-shard curation run mid-way**, skipping shards that already finished. Use both — Dagster wraps the asset, DataTrove's executor handles shard-level resumability inside it.
+
+### The critical integration tension with `pipeline/curate.py`
+
+`curate.py`'s own docstring documents an anti-pattern-avoidance decision: **CURATE-01 calls each filter's `.filter(doc)` method directly in a loop, never `.run()`**, specifically so that *every* configured filter is scored regardless of whether an earlier one already failed (today's `score_document()` returns a dict with one entry per filter, all three always attempted).
+
+DataTrove's native `.run()` — the method that actually feeds a `PipelineExecutor` block list — does the opposite by design: in a `[reader, filter1, filter2, filter3, writer]` pipeline, a document dropped by `filter1` never reaches `filter2` or `filter3`. Chaining the three existing filters as three separate pipeline steps would **lose the multi-reason recording** CURATE-01 and the composite-quality-score (CURATE-03) depend on.
+
+**Recommended CurationEngine design for the DataTrove backend:** keep a single custom pipeline block — a thin `PipelineStep` wrapper around today's `score_document()` logic — as the *only* filter step in the DataTrove pipeline list. This block calls all three filters via `.filter()` internally (exactly as today), builds the composite score, and itself decides accept/reject; only this wrapper's accept/reject decision goes through `exclusion_writer`. This preserves CURATE-01/03 behavior exactly while gaining DataTrove's native checkpointing, sharding, and accepted/rejected writer plumbing — the `CurationEngine.execute()` contract (prepare/execute/collect) maps naturally onto "build reader + composite-filter-block + accepted/rejected writers" → `LocalPipelineExecutor(pipeline=[...]).run()` → collect `PipelineStats`.
+
+### S3 and the FOUND-03 single-client invariant
+
+`curate.py`'s docstring already documents a deliberate anti-pattern-avoidance: DataTrove's disk-based reader/writer/executor scaffolding is not used today specifically to preserve "the FOUND-03 single S3 client invariant... never introduces a second S3 client path via fsspec/s3fs." Formalizing `LocalPipelineExecutor` for v2.7 should **preserve this invariant, not abandon it**:
+
+- **Do NOT install `datatrove[s3]`.** Running `DataFolder` directly against the MinIO/S3 bucket would give DataTrove its own `fsspec`+`s3fs` client, a second S3 code path alongside the existing `StorageBackend` (boto3).
+- **Recommended pattern:** stage in/out explicitly. Before running the executor, pull the relevant `cleaned_document` texts from S3 via the existing `StorageBackend` into a local scratch directory (ephemeral, cleaned up after the run — this is working-set data, not a data-lake zone, so it does not implicate the "no local filesystem as production store" constraint any more than `tempfile`-based LLM/embedding batching would). Point `LocalPipelineExecutor`'s reader/writer at that local scratch path. After the run, read the writer's accepted/rejected NDJSON output and re-upload through the existing `StorageBackend` to the silver/gold zone, same as every other pipeline stage does today.
+- This keeps DataTrove's checkpoint/writer machinery genuinely useful (resumability across a long local batch job) without adding a second S3 client.
+
+### Verdict
+
+**Sufficient at 0.9.0** — no version bump needed or available. No new dependency. The work is entirely architectural: wrap the existing filter-scoring logic as a single DataTrove pipeline block, drive it through `LocalPipelineExecutor` for native checkpointing/sharding/exclusion-writer behavior, and keep all I/O staged through the existing `StorageBackend` rather than DataTrove's fsspec/S3 extra.
+
+---
+
+## 2. Croissant metadata (MLCommons dataset format)
+
+**Package:** `mlcroissant`
+**Latest version:** `1.1.0`, released 2026-04-16 (verified via PyPI). Requires Python `>=3.10` — compatible with this repo's `>=3.12` floor.
+**Maturity:** Actively maintained by MLCommons + Google contributors; this is the reference implementation of the Croissant JSON-LD spec (`dct:conformsTo: http://mlcommons.org/croissant/1.0`), used by Hugging Face, Kaggle, and OpenML for auto-generated dataset metadata. Not a fringe tool.
+
+### Dependency footprint — checked against this repo's actual resolved lock file
+
+`mlcroissant`'s declared runtime deps: `absl-py`, `etils[epath]>=1.7.0`, `jinja2`, `jsonpath-rw`, `networkx`, `pandas`, `pandas-stubs`, `python-dateutil`, `rdflib`, `requests`, `scipy`, `tqdm` (fetched from the package's own `pyproject.toml`).
+
+Cross-checked against `uv.lock` in this repo: **`networkx` (3.6.1, via `torch`), `pandas` (3.0.3, via `docling-core`), `scipy` (1.18.0, via `sentence-transformers`→`scikit-learn`), `python-dateutil`, `requests`, and `tqdm` are already transitively resolved today** — they cost nothing new. The genuinely new packages would be `absl-py`, `etils`, `jsonpath-rw`, and `rdflib` (the heaviest of the four, but a mature, stable, pure-Python RDF library — not a GPU/ML dependency).
+
+### Does it support production (emission), not just validation?
+
+Yes — both directions exist: `mlc.nodes.Metadata(...)`, `mlc.nodes.FileObject(...)`, `mlc.nodes.RecordSet(...)`, `mlc.nodes.Field(...)` can be constructed programmatically and serialized with `.to_json()`. The CLI also ships `mlcroissant validate --jsonld <file>` (exit code 0/1, prints warnings) for conformance checking of any manifest, hand-written or library-generated.
+
+### Recommendation: hand-emit, validate via dev-only dependency
+
+Given the footprint (4 new packages, one of them moderately heavy) and this repo's demonstrated convention of using a mature tool's *validation/verification surface* rather than adopting its full object model in production code (the exact same reasoning `curate.py` already documents for DataTrove's own writer scaffolding), the recommended split is:
+
+- **Production code:** hand-emit `croissant.json` as a small set of Pydantic models (`CroissantDataset`, `CroissantFileObject`, `CroissantRecordSet`, `CroissantField`) serialized via the already-pinned `orjson`. The Croissant `@context` block is a fixed, spec-versioned constant (documented in the spec, effectively boilerplate) — this is not free-form JSON-LD authoring, it's filling in a known template, which is exactly what the existing `_RAG_CORPUS_FIELDS` explicit-allow-list discipline (T-05-08) already does for RAG-corpus rows. Zero new runtime dependency.
+- **Dev/test only:** add `mlcroissant==1.1.0` to `[dependency-groups] dev` (never imported by application code) and add a CI test that shells out to `mlcroissant validate --jsonld <generated-manifest-fixture>` to prove every hand-emitted manifest is spec-conformant. This gets the correctness guarantee of the reference implementation without adding `rdflib`/`absl-py`/`etils`/`jsonpath-rw` to what an operator running `pip install knowledge-lake` actually pulls down.
+
+**Alternative considered and rejected for now:** use `mlcroissant` directly in production for emission. This is a legitimate, lower-long-term-maintenance option (if the Croissant spec evolves past 1.0, the library upgrades for you; a hand-rolled emitter has to track spec changes manually) — but it conflicts with this repo's minimal-footprint convention today. Revisit if the hand-rolled emitter proves brittle across a future Croissant spec bump.
+
+---
+
+## 3. Dataset card generation
+
+No new dependency. Follow the exact pattern already proven at two call sites in this repo — `domains/{name}/prompts/enrich.j2` and `domains/{name}/prompts/qa_generation.j2` — using the already-pinned `jinja2>=3.1,<4`.
+
+Recommended content structure (structure to *borrow*, not a library to adopt):
+- **Hugging Face Dataset Card conventions** for the shape of a YAML frontmatter block (`license`, `task_categories`, `language`, `pretty_name`, `size_categories`) followed by prose sections — this is a widely-recognized convention even though this project does not push to the HF Hub.
+- **Datasheets for Datasets** (Gebru et al.) question set for the prose body: motivation, composition, collection process, preprocessing/cleaning/labeling, uses, distribution, maintenance — a good fit for the "release manifest" bundle since it directly answers governance/provenance questions the milestone already requires (source usage-policy, quality contract outcomes, lineage).
+
+A single `templates/dataset_card.md.j2` rendered from the same context dict already assembled for the reproducibility manifest (dataset spec, quality-contract summary, split stats, license/policy decisions, lineage counts) keeps this a pure templating exercise, not a new subsystem.
+
+**Alternative considered and rejected:** `huggingface_hub`'s `DatasetCard` / `DatasetCardData` / `.from_template()`. Its dependency footprint is genuinely light (`requests`, `filelock`, `packaging`, `pyyaml`, `tqdm`, `typing-extensions`, `fsspec` — most already present transitively), so this is not a footprint objection. It's rejected because its primary value-add — YAML-frontmatter tag validation against the Hub's controlled vocabularies and `push_to_hub()` — is irrelevant to a project that does not publish to the HF Hub, and the existing Jinja2 pattern is strictly simpler and already proven twice in this codebase. Revisit only if a future milestone adds an explicit "publish to Hugging Face Hub" export target.
+
+---
+
+## 4. Reproducibility manifest / content-hash determinism
+
+**Pure application logic — no new dependency.** This is squarely in the pattern this codebase already uses everywhere (`_curation_cache_key`, `_dataset_gen_cache_key`, WR-05 chunk hashing): a `reproduce.yaml` manifest is just a deterministic function of already-available inputs, serialized with already-pinned libraries:
+
+| Need | Already-pinned tool |
+|---|---|
+| Content hashing (source snapshots, config versions) | `xxhash` (existing fast-hash use), `hashlib.sha256` (existing synthetic cache-key pattern) |
+| Structured manifest serialization | `pyyaml` (already pinned, `>=6.0,<7`) for `reproduce.yaml`; `orjson` for any JSON sibling |
+| Installed-version snapshot at release time | stdlib `importlib.metadata.version("datatrove")` etc. — zero new dependency, in stdlib since Python 3.8 |
+| Git commit pinning | stdlib `subprocess.run(["git", "rev-parse", "HEAD"])` — avoid adding `GitPython` for one command |
+
+The manifest should capture: dataset-spec hash, per-source content hashes/snapshot timestamps, `filter_config_version`/`prompt_version` (both already exist as cache-invalidation keys in `curate.py`/`datasets.py`), split-seed + split ratios, pinned dependency versions actually resolved at build time (via `importlib.metadata`, not just the `pyproject.toml` declared range — this is what makes the manifest useful for the milestone's "rebuild-equivalence test"), and the git commit SHA. No library does this "for you" in a way that would be worth the dependency — it is inherently project-specific bookkeeping.
+
+---
+
+## 5. Deterministic, group-aware dataset splitting
+
+### The dependency-cost argument is weaker than it first appears
+
+`scikit-learn` (currently `1.9.0` on PyPI, verified) is **already fully resolved in this repo's `uv.lock`** — it comes in transitively via `sentence-transformers → scikit-learn`. Adding a direct pin costs **zero net new install weight**. So this is not primarily a "new dependency" decision.
+
+### But the algorithm-fit argument favors hand-rolling anyway
+
+`GroupShuffleSplit` is built for repeated randomized resampling (its intended use case is cross-validation: many different random re-splits of the *same, fixed* group set). Its actual mechanism shuffles the full array of unique groups and partitions the shuffled array by target size. That means: **the split assignment is a function of the entire group list's shuffled order, not of any single group in isolation.** Add one new source/document group to the corpus for the next dataset release, and the entire downstream split assignment can shift — including for groups that were already released as "train" in a previous, immutable release. That directly conflicts with the milestone's "versioned... group-aware train/validation/test splits" requirement, where a release's split assignments need to stay stable as the corpus grows across releases (unless a full re-split is deliberately intended).
+
+**Recommendation: hand-roll a deterministic hash-bucket splitter.** This is not a novel pattern for this codebase — it is the *exact same technique* already validated and shipped in Phase 21's `chunk_dedup_ledger` (`uuid5(NAMESPACE, sha256(normalize_for_dedup(text)))` — a deterministic hash-bucket used for stable point-ID assignment). Applied to splitting:
 
 ```python
-from crawl4ai import AsyncWebCrawler, CacheMode, CrawlerRunConfig, DefaultMarkdownGenerator, PruningContentFilter
-
-config = CrawlerRunConfig(
-    check_robots_txt=True,
-    cache_mode=CacheMode.BYPASS,
-    remove_consent_popups=True,          # browser-side JS: strips GDPR/IAB TCF/CMP cookie walls
-    markdown_generator=DefaultMarkdownGenerator(
-        content_filter=PruningContentFilter(threshold=0.48, threshold_type="fixed"),
-        content_source="cleaned_html",   # options: cleaned_html | raw_html | fit_html
-    ),
-)
-async with AsyncWebCrawler() as crawler:
-    result = await crawler.arun(url=url, config=config)
-
-filtered = result.markdown.fit_markdown   # ← the filtered output
+bucket = int(hashlib.sha256(f"{group_id}:{split_seed}".encode()).hexdigest(), 16) % 100
+# then range-partition: e.g. bucket < 80 -> train, 80 <= bucket < 90 -> val, else -> test
 ```
 
-> **Trap:** the official Crawl4AI docs *prose* states "In CrawlerRunConfig, you can specify a
-> `content_filter`". That is wrong for 0.9.1 — the parameter does not exist and passing it raises.
-> The docs' *code example* is correct. Trust the code example, not the sentence.
+This is a pure function of `(group_id, split_seed)` — adding new groups never reassigns existing ones, it is trivially reproducible from the manifest (`split_seed` + ratios are all the reproducibility manifest needs to capture, not a stored RNG state or shuffle order), and it needs zero new dependency (stdlib `hashlib`).
 
-**Verified constructor signatures (0.9.1):**
+**If the team prefers the canonical `sklearn` API anyway** (e.g., because the flagship dataset's corpus is intentionally frozen before every split, never grown incrementally) — that's a legitimate, zero-additional-install-cost alternative; just pin `scikit-learn` directly rather than relying on an unpinned transitive dependency, since a future `sentence-transformers` release could drop its own `scikit-learn` dependency and silently break an implicit reliance on it.
 
-```python
-PruningContentFilter(user_query=None, min_word_threshold=None, threshold_type='fixed',
-                     threshold=0.48, preserve_classes=None, preserve_tags=None)
-BM25ContentFilter(user_query=None, bm25_threshold=1.0, language='english', use_stemming=True)
-DefaultMarkdownGenerator(content_filter=None, options=None, content_source='cleaned_html')
+**No new dependency either way.**
+
+---
+
+## 6. Benchmark contamination detection
+
+Given the corpus scale stated in the milestone (dozens to low-hundreds of examples for the flagship dataset), the practical answer is a **tiered approach using only already-pinned libraries** — no new dependency.
+
+### What NOT to reach for at this scale
+
+DataTrove itself ships a `decont` extra (`pip install datatrove[decont]`) that pulls in Hugging Face's `lighteval` — a full LLM-evaluation-harness library — to build a 13-gram Bloom filter from benchmark sets and drop any document with 10+ consecutive matching n-grams (the FineWeb/GPT-3-style methodology, designed for filtering *trillion-token pretraining corpora* against benchmark leakage at scale). This is the same category of mismatch already documented in this repo's own stack rationale for rejecting NeMo Curator (GPU-cluster-first tooling applied to a workload two orders of magnitude below the scale it was built for). **Do not add `datatrove[decont]`/`lighteval`** for a dozens-to-hundreds-example flagship dataset — the Bloom-filter machinery buys nothing a plain Python set-overlap check doesn't already give you at this scale, at a fraction of the dependency cost.
+
+### Recommended tiered MVP (all reuse already-pinned libraries)
+
+1. **Tier 1 — n-gram overlap (mandatory, cheapest).** Word n-gram (e.g. 8–13-gram, matching the same GPT-3/FineWeb methodology DataTrove's `decont` extra encodes, minus the Bloom filter) Jaccard/overlap check between each candidate example and the benchmark/eval set, implemented with stdlib `itertools` + `set` operations. Catches verbatim/near-verbatim copy-paste contamination. Zero dependency, trivially fast at this corpus size (no need for approximate structures like Bloom filters, which only pay off at corpus sizes several orders of magnitude larger).
+2. **Tier 2 — MinHash near-dup (reuse existing pattern).** `datasketch==2.0.0` is already pinned and already used for exactly this kind of fuzzy-duplicate detection in `curate.py`'s `batch_dedup_corpus()` (`MinHashLSH` + `compute_minhash()`). Insert the benchmark/eval set's MinHashes into the same kind of LSH index and query each flagship candidate against it — this is a direct extension of an already-shipped, already-tested pattern, not a new capability.
+3. **Tier 3 — embedding cosine-similarity (optional, cheap at this scale).** `sentence-transformers==5.6.0` is already pinned (local embedder) and already wired behind the `EmbedderPlugin` protocol. Embedding a few hundred examples and computing cosine similarity against a benchmark set to catch paraphrased/semantic-level contamination the first two tiers miss is inexpensive at this scale (a few hundred embedding calls, no LLM cost) — worth including in the MVP rather than deferring, since the marginal cost is near-zero and the existing plugin already does the embedding work for indexing.
+
+This tiered design also composes naturally with `export.py`'s existing `check_train_eval_contamination()` — that function's near-dup-flag-based logic (from `batch_dedup_corpus()`) is effectively Tier 2 already applied to *internal* train/eval overlap; extending it to check against an *external* benchmark set (not just the internal corpus) is the natural v2.7 generalization the milestone calls for, replacing the payload-shape-sniffing heuristic with a real n-gram/MinHash/embedding-backed gate.
+
+---
+
+## Installation
+
+No changes to production dependencies in `pyproject.toml`'s `dependencies = [...]` list — `datatrove==0.9.0`, `datasketch==2.0.0`, `sentence-transformers==5.6.0`, `jinja2>=3.1,<4`, `pyyaml>=6.0,<7`, `orjson==3.11.9`, `xxhash==3.8.1` are all already present and sufficient.
+
+```toml
+# pyproject.toml — the only change: add to the dev-only dependency group,
+# never imported by src/knowledge_lake/** application code.
+[dependency-groups]
+dev = [
+    "mypy>=1.11",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "hypothesis>=6.100",
+    "mlcroissant==1.1.0",  # NEW — dev-only, used solely by a CI conformance test
+                           # that shells out to `mlcroissant validate`. Never
+                           # imported by production code (see Section 2).
+]
 ```
 
-**Is `fit_markdown` a separate field alongside `raw_markdown`? Yes.**
-`MarkdownGenerationResult` fields: `raw_markdown`, `markdown_with_citations`,
-`references_markdown`, `fit_markdown`, `fit_html`.
-
-**What `PruningContentFilter` actually removes:**
-1. Decomposes outright: `nav`, `footer`, `header`, `aside`, `script`, `style`, `form`, `iframe`, `noscript`.
-2. Prunes nodes whose composite score falls below `threshold`. Score weights:
-   `text_density 0.4, link_density 0.2, tag_weight 0.2, class_id_weight 0.1, text_length 0.1`.
-3. Penalises class/id matching `nav|footer|header|sidebar|ads|comment|promo|advert|social|share`.
-
-**Empirically verified on synthetic ACC-style clinical HTML** (nav + cookie banner + prose +
-dosing table + footer):
-
-| Element | Default `PruningContentFilter()` |
-|---------|----------------------------------|
-| Nav ("About Us") | **removed** ✓ |
-| Footer copyright/TOS | **removed** ✓ |
-| Clinical prose | **kept** ✓ |
-| Dosing **table** | **kept** ✓ (the key risk — tables survived) |
-| Cookie banner | **SURVIVED** ✗ |
-
-Tables survived at the default `threshold=0.48`; `preserve_tags=["table"]` changed nothing on this
-input but is a zero-cost safety belt worth setting given eCQI/US Core IG are table-heavy.
-The cookie banner survives because `class="cookie-banner"` does not match the negative-pattern
-regex — this is what `remove_consent_popups=True` and extended regex are for.
-
-### 2. Two adapter-level defects that would silently nullify the whole L1 fix
-
-Both are in `src/knowledge_lake/plugins/builtin/crawl4ai_adapter.py`:
-
-**(a) `str(result.markdown)` returns `raw_markdown` — always.**
-`MarkdownGenerationResult.__str__` is literally `return self.raw_markdown`. Line 160 of the adapter
-reads:
-
-```python
-markdown_text = str(result.markdown) if result.markdown else ""
-```
-
-Configuring a content filter and leaving this line unchanged produces **no behavioural change
-whatsoever** — the filter runs, and its output is discarded. This is the same class of bug as L0:
-the work is done, nobody reads it. Must become an explicit `result.markdown.fit_markdown` read
-with a fallback to `raw_markdown`.
-
-**(b) `fit_markdown` becomes a poison string on filter failure.**
-In `markdown_generation_strategy.py`:
-
-```python
-except Exception as e:
-    fit_markdown = f"Error generating fit markdown: {str(e)}"
-```
-
-The exception is swallowed and the *error message becomes the content*. Under a naive
-`fit_markdown or raw_markdown` fallback this truthy string sails into the WORM raw zone as a
-document. Guard explicitly, do not rely on truthiness.
-
-Also: `fit_markdown` defaults to `""` (empty string), **not** `None`, when no filter is set —
-`generate_markdown` returns `fit_markdown=fit_markdown or ""`. Docs claim `None`. Check
-truthiness, never `is None`.
-
-### 3. DataTrove at section/chunk granularity — usable, with sharp edges
-
-**Is DataTrove's `Document`-in model document-scoped by design? No.**
-`Document` is a 4-field dataclass — `text`, `id`, `media`, `metadata`. It is a plain text wrapper
-with nothing binding it to whole-document scope. Filters expose
-`.filter(doc) -> bool | tuple[bool, str]`. Any string can be wrapped at any granularity.
-`pipeline/curate.py::score_document()` already proves the in-memory pattern (and correctly avoids
-DataTrove's disk I/O scaffolding). The same call works on a chunk.
-
-The *thresholds*, however, are calibrated for whole web documents. That distinction is where the
-danger lives.
-
-**Empirically tested against the audit's five garbage categories + a clinical-prose control:**
-
-| Audit category | Count | `FineWebQualityFilter` | `C4ParagraphFilter` |
-|---|---|---|---|
-| Too short ("Featured") | 762 (16%) | **REJECT** `line_punct_ratio` ✓ | REJECT ✓ |
-| No real sentences (menu labels) | 408 (9%) | **REJECT** `line_punct_ratio` ✓ | REJECT ✓ |
-| Nav bar, 3 links | — | **REJECT** `line_punct_ratio` ✓ | REJECT ✓ |
-| Marketing/pricing CTA | 152 (3%) | PASS ✗ | REJECT ✓ |
-| Cookie banner | 123 (2%) | PASS ✗ | REJECT ✓ |
-| **LEGIT clinical prose (control)** | — | **PASS** ✓ | **REJECT** ✗✗ |
-
-**`FineWebQualityFilter` is the single highest-leverage unused asset in the stack.** It is already
-installed, is absent from `_build_filters()`, and cleanly separates the two largest garbage
-categories (**1,170 chunks = 26% of the corpus**) from legitimate clinical content. Its default
-`short_line_length=30` independently matches the audit's empirically-derived 30-char threshold —
-strong convergent evidence that 30 chars is the right floor (open question 4).
-
-Verified signature:
-```python
-FineWebQualityFilter(line_punct_thr=0.12, line_punct_exclude_zero=False, stop_chars=None,
-                     short_line_thr=0.67, short_line_length=30,
-                     char_duplicates_ratio=0.01, new_line_ratio=0.3, language='eng')
-```
-
-**Two filters that MUST NOT be used at chunk granularity — both verified to destroy good content:**
-
-- **`C4ParagraphFilter` rejects everything**, including the clinical-prose control, with reason
-  `"< 3 paragraphs"`. No 512-token chunk has 3 paragraphs. Using it as a chunk gate would empty the
-  corpus.
-- **`GopherQualityFilter` false-rejects legitimate chunks.** `curate.py`'s current
-  `min_doc_words=50` rejects a 26-word clinical chunk (`gopher_short_doc`). Lowering to
-  `min_doc_words=20` *still* rejects it — via `min_stop_words=2`, because a short clinical sentence
-  legitimately contains fewer than two of `{the, be, to, of, and, that, have, with}`. Gopher's
-  heuristics assume document-length text.
-
-**Therefore: v2.6 needs NEW chunk-scoped threshold settings — do not reuse `CurateSettings`.**
-The document-level thresholds are correct for the pretrain path and must stay untouched there.
-
-**One tuning risk to validate in-phase:** `short_line_thr=0.67` rejected the single sentence
-`"Aspirin reduces risk."` (`short_line_ratio`). Markdown chunks with many short lines — bulleted
-clinical criteria, table rows — may false-reject. Tune `short_line_thr` against a held-out sample
-of *known-good* chunks before enabling as a hard gate; consider annotate-first, gate-second
-(mirrors the CLEAN-02 language-detection precedent).
-
-**Edge cases are safe:** empty and whitespace-only text return `(False, 'empty')` — no
-`ZeroDivisionError` on the `new_line / len(words)` path.
-
-### 4. Index-time dedup — nothing to add
-
-The audit's 653 duplicates are **exact**, not near. `hashlib.sha256` over normalized chunk text is
-deterministic, O(1) per chunk, and requires no dependency. `datasketch==2.0.0` is already present
-and already carries corpus-wide near-dup via `curate.batch_dedup_corpus()` if fuzzy matching is
-ever wanted at index time.
-
-Integration point for D-3: **`src/knowledge_lake/pipeline/embed.py::embed()`** — the single
-chokepoint between chunk artifacts and vectors. Dedup here keeps `chunk()`'s
-`{parsed_artifact_id}:{text}` key (WR-05) fully intact, exactly as D-3 requires. Do not touch
-`chunk.py:318`.
+If, after implementation, the team decides to emit Croissant manifests directly via `mlcroissant`'s node API instead of hand-rolling (see Section 2 alternative), move the pin to `dependencies` and expect `absl-py`, `etils[epath]>=1.7.0`, `jsonpath-rw`, and `rdflib` to appear as genuinely new entries in `uv.lock` (the rest of `mlcroissant`'s declared deps — `pandas`, `scipy`, `networkx`, `python-dateutil`, `requests`, `tqdm` — are already resolved transitively today and would not grow the lock file further).
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Crawl4AI `PruningContentFilter` (installed) | trafilatura 2.1.0 | If Phase-17 validation shows `fit_markdown` leaking boilerplate on gov/clinical HTML. Best-in-class quality (WCXB F1 0.859). Cost: +4 transitive deps (lxml, justext, courlan, htmldate). HTML-only. |
-| `PruningContentFilter` | `BM25ContentFilter(user_query=...)` | Query-scoped extraction. **Not applicable** — ingestion is query-agnostic; there is no query at crawl time. |
-| Extended regex (deterministic) | `LLMContentFilter` | **Never.** Violates the deterministic-first constraint and would route per-page LLM calls outside the cost model. |
-| SHA256 exact dedup | `datasketch` MinHash at index time | Only if near-duplicates (not the audited exact 653) prove to be a material problem later. Already installed — no new dep either way. |
+| Category | Recommended | Alternative | Why Not (for v2.7) |
+|----------|-------------|-------------|---------------------|
+| Curation execution | `LocalPipelineExecutor` | `RayPipelineExecutor` (`datatrove[ray]`) | No scale problem at dozens-hundreds/few-thousand-item corpus; would add a second distributed-execution system alongside Dagster |
+| Curation storage I/O | Existing `StorageBackend` (boto3) + local scratch dir | `datatrove[s3]` (fsspec/s3fs) | Second S3 client path — violates the FOUND-03 invariant `curate.py` already documents as deliberately avoided |
+| Croissant emission | Hand-rolled Pydantic + orjson, `mlcroissant` as dev-only validator | `mlcroissant` in production for emission | 4 new production deps (`absl-py`, `etils`, `jsonpath-rw`, `rdflib`) for a static, well-known JSON-LD template; conflicts with this repo's "use validation surface, not object model" convention |
+| Dataset card | Jinja2 template (existing pattern) | `huggingface_hub` `DatasetCard`/`.from_template()` | Its value-add (Hub tag-vocabulary validation, `push_to_hub()`) is irrelevant — this project doesn't publish to the HF Hub |
+| Group-aware split | Hand-rolled deterministic hash-bucket (stdlib `hashlib`) | `sklearn.model_selection.GroupShuffleSplit` | Split assignment is a function of the whole shuffled group array, not growth-stable across dataset releases as new source groups are added |
+| Benchmark contamination | Tiered n-gram → MinHash (`datasketch`) → embedding (`sentence-transformers`) | `datatrove[decont]` (`lighteval`) | Bloom-filter-scale machinery for a dozens-to-hundreds-example corpus — same GPU/scale mismatch already documented against NeMo Curator |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| **`C4ParagraphFilter` at chunk level** | Verified: rejects 100% of chunks including legitimate clinical prose (`"< 3 paragraphs"`). Would empty the corpus. | `FineWebQualityFilter` |
-| **`GopherQualityFilter` at chunk level** | Verified: false-rejects a legit 26-word clinical chunk at both `min_doc_words=50` and `20` (via `min_stop_words`). Document-calibrated. | `FineWebQualityFilter` + chunk-scoped settings |
-| **`CurateSettings` thresholds reused for chunks** | Same root cause — tuned for whole documents; correct where they are, wrong at chunk scope. | New chunk-scoped threshold fields |
-| **`CrawlerRunConfig(content_filter=...)`** | Parameter does not exist in 0.9.1. Docs prose is wrong. | `CrawlerRunConfig(markdown_generator=DefaultMarkdownGenerator(content_filter=...))` |
-| **`str(result.markdown)`** | Returns `raw_markdown` unconditionally — silently discards the filter's entire output. Repeats the L0 bypass. | `result.markdown.fit_markdown` with guarded fallback |
-| **`LLMContentFilter`** (crawl4ai) | Per-page LLM call violates deterministic-first; bypasses LiteLLM gateway. | `PruningContentFilter` |
-| **boilerpy3 1.0.7** | Dormant — last release 2023-11-01 (~2.7 years). | Nothing needed |
-| **readability-lxml 0.8.4.1** | Minimal maintenance; lower precision than trafilatura in every benchmark surveyed. | trafilatura (contingency) |
-| **resiliparse 1.0.8** | Fast and actively maintained, but admits **22.8% boilerplate** vs trafilatura's 6.6% — optimises recall, which is precisely the wrong trade for a garbage-reduction milestone. Pins `fastwarc==1.0.8`. | trafilatura (contingency) |
-| **jusText 3.0.2** | Subsumed — already a transitive dependency *of* trafilatura. No reason to use directly. | trafilatura (contingency) |
-| **NeMo Curator** | GPU-first; violates the CPU-only DigitalOcean constraint. | DataTrove (installed) |
-
-## Stack Patterns by Variant
-
-**If `fit_markdown` validates clean on gov/clinical HTML (expected):**
-- Add zero dependencies. Wire `PruningContentFilter` + `remove_consent_popups=True` + the
-  `fit_markdown` read in `crawl4ai_adapter.py`.
-
-**If `fit_markdown` leaks boilerplate on ACC/eCQI/US Core IG (the 81%/69%/72% offenders):**
-- Add `trafilatura==2.1.0` behind the existing plugin seam, applied to `result.html`.
-- Because it is HTML-only, it cannot help the PDF path — that garbage must be caught at L3 by
-  `FineWebQualityFilter` regardless.
-
-**If `short_line_thr=0.67` false-rejects legitimate table rows / bulleted criteria:**
-- Ship the gate in annotate-only mode first (record `substance_status` in chunk metadata),
-  measure, then flip to a hard gate. Mirrors the CLEAN-02 language-detection precedent.
+| `datatrove[ray]` / `RayPipelineExecutor` | No scale justification at this corpus size; adds a second distributed-orchestration system next to Dagster | `LocalPipelineExecutor` |
+| `datatrove[s3]` (s3fs) | Second S3 client path, breaks the documented FOUND-03 single-client invariant | Existing `StorageBackend` (boto3) with explicit local-scratch stage-in/stage-out |
+| `datatrove[decont]` (`lighteval`) | Full LLM-eval-harness dependency, Bloom-filter machinery built for trillion-token-scale corpora; same category error as NeMo Curator at this project's scale | Tiered n-gram (stdlib) → MinHash (`datasketch`, already pinned) → embedding (`sentence-transformers`, already pinned) |
+| `mlcroissant` as a production/runtime import | Adds `absl-py`, `etils`, `jsonpath-rw`, `rdflib` to every operator's install for a static JSON-LD template this repo can hand-emit safely | Pydantic + orjson emission; `mlcroissant` as a dev-only CI conformance checker |
+| `sklearn.model_selection.GroupShuffleSplit` for versioned releases | Not growth-stable — reshuffles prior release assignments when the group set grows | Deterministic hash-bucket split (same technique as Phase 21's `chunk_dedup_ledger`) |
+| NeMo Curator, IBM Data Prep Kit | GPU-cluster-first / Spark-and-Ray-first tooling; redundant given DataTrove + Dagster are already the chosen curation/orchestration stack; explicitly out of scope for v2.7 | DataTrove (already pinned), formalized via `CurationEngine` |
+| A second vector database | No v2.7 requirement touches retrieval infrastructure; Qdrant already covers hybrid search | Qdrant (already pinned, unchanged) |
+| `GitPython` for commit-SHA capture | One `subprocess` call away; not worth a dependency | stdlib `subprocess.run(["git", "rev-parse", "HEAD"])` |
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| crawl4ai 0.9.1 | (installed, pinned) | `remove_consent_popups` requires a browser context — Playwright 1.61.0 already present. No new pin. |
-| datatrove 0.9.0 | spacy>=3.8, nltk>=3.10 | Both already pinned. `FineWebQualityFilter` uses the same `split_into_words` path as the already-working `GopherRepetitionFilter` (per commit 9a28f92) — no new download step. |
-| trafilatura 2.1.0 (contingency) | lxml>=6.1.1, justext>=3.0.2, courlan, htmldate | **Check `lxml>=6.1.1` against Docling 2.112.0's lxml constraint before adding** — the Typer/docling pin precedent shows this project has been bitten by exactly this. |
-| datasketch 2.0.0 | (installed) | No change. |
-
-## Answers to the Open Questions
-
-- **Q4 (30 chars vs token-based):** Use **30 chars**. `FineWebQualityFilter.short_line_length`
-  independently defaults to exactly 30 — the audit and FineWeb's production tuning converged. It
-  is also a *line*-level metric, which token counts cannot express. Keep `tiktoken` for
-  `max_tokens`; the floor is a different measurement, not the same one inverted.
-- **Q5 (replace vs extend `BOILERPLATE_PATTERNS`):** **Extend.** Phase-3 tests depend on the 4
-  existing regexes, and the new burden (marketing CTAs, TOS blocks, cookie text) is additive —
-  `FineWebQualityFilter` provably does not catch those two categories, so regex remains load-bearing.
-- **Q3 (`fit_markdown` × SCHED-02 change gate):** Real risk, and it cuts *favourably*. The
-  SCHED-02 gate already normalizes silver text; pruning nav/footers removes the most volatile page
-  regions, which should make re-crawl diffs **more** stable, not less. The genuine hazard is
-  threshold non-determinism across crawls — `threshold_type='fixed'` (the default) is
-  deterministic; **`threshold_type='dynamic'` is not and must not be used** given the WORM raw zone.
+| Package | Version | Status in this repo |
+|---------|---------|----------------------|
+| `datatrove` | `0.9.0` | Already pinned; confirmed current latest (released 2026-03-04, no newer release exists) |
+| `datasketch` | `2.0.0` | Already pinned; reused as-is for Tier 2 contamination check |
+| `sentence-transformers` | `5.6.0` | Already pinned; reused as-is for Tier 3 contamination check |
+| `mlcroissant` | `1.1.0` (latest, released 2026-04-16) | New — dev-only group; requires Python `>=3.10`, compatible with this repo's `>=3.12` |
+| `scikit-learn` | `1.9.0` (latest, released 2026-06-02) | Already resolved transitively via `sentence-transformers`; NOT recommended as a direct pin for splitting (see Section 5) — no action needed |
+| `networkx` / `pandas` / `scipy` | `3.6.1` / `3.0.3` / `1.18.0` | Already resolved transitively (via `torch`, `docling-core`, `sentence-transformers`→`scikit-learn` respectively) — relevant only as context for the `mlcroissant` footprint discussion in Section 2 |
+| `pydantic` / `sqlalchemy` / `datatrove` exact pins | `2.13.4` / `2.0.51` / `0.9.0` | No conflicts found with any recommendation in this document |
 
 ## Sources
 
-- **`crawl4ai==0.9.1` installed package** — `content_filter_strategy.py`, `markdown_generation_strategy.py`, `models.py`, `async_configs.py`: signature introspection + source read + executed on synthetic clinical HTML. Confidence: **HIGH** (executed against the pinned version).
-- **`datatrove==0.9.0` installed package** — `Document` dataclass fields, filter registry, `FineWebQualityFilter.filter` source; executed against all 5 audit garbage categories + prose control. Confidence: **HIGH**.
-- [Crawl4AI Fit Markdown docs](https://docs.crawl4ai.com/core/fit-markdown/) · [Markdown Generation docs](https://docs.crawl4ai.com/core/markdown-generation/) — cross-check of the `fit_markdown` field and generator wiring. Confidence: **MEDIUM** (prose contains a verified error re: `CrawlerRunConfig(content_filter=)`).
-- [PyPI JSON API](https://pypi.org/pypi/trafilatura/json) — trafilatura 2.1.0 / resiliparse 1.0.8 / justext 3.0.2 / readability-lxml 0.8.4.1 / boilerpy3 1.0.7 versions, licenses, upload dates. Confidence: **HIGH** (authoritative registry).
-- [WCXB: A Multi-Type Web Content Extraction Benchmark](https://arxiv.org/html/2605.21097v1) · [WCXB Leaderboard](https://webcontentextraction.org/) — trafilatura F1 0.859 vs resiliparse 0.797, boilerplate-admission rates. Confidence: **MEDIUM**.
-- [An Empirical Comparison of Web Content Extraction Algorithms (Bevendorff et al., SIGIR 2023)](https://dl.acm.org/doi/pdf/10.1145/3539618.3591920) · [Trafilatura evaluation docs](https://trafilatura.readthedocs.io/en/latest/evaluation.html) — corroborating ranking. Confidence: **MEDIUM**.
-- **Repo code grounding** — `pipeline/clean.py`, `pipeline/curate.py`, `pipeline/chunk.py:318`, `pipeline/embed.py`, `plugins/builtin/crawl4ai_adapter.py:160`, `config/settings.py`, `pyproject.toml`. Confidence: **HIGH**.
+- https://pypi.org/project/datatrove/ — version 0.9.0, release date 2026-03-04 (HIGH confidence, official package index, live-fetched)
+- https://github.com/huggingface/datatrove (README, `pyproject.toml`, `pipeline/filters/base_filter.py`, `executor/base.py`) — executor types, extras table, `BaseFilter`/`exclusion_writer`, checkpoint/resume mechanism (MEDIUM-HIGH confidence, live-fetched GitHub source and docs)
+- https://pypi.org/project/mlcroissant/ — version 1.1.0, release date 2026-04-16, Python `>=3.10` requirement (HIGH confidence, live-fetched)
+- https://github.com/mlcommons/croissant (python/mlcroissant `pyproject.toml`, README) — runtime dependency list, production/consumption API split, `mlcroissant validate` CLI (MEDIUM-HIGH confidence, live-fetched)
+- https://docs.mlcommons.org/croissant/docs/croissant-spec.html — required top-level Croissant JSON-LD fields (MEDIUM confidence, live-fetched, single source)
+- https://pypi.org/project/scikit-learn/ — version 1.9.0, release date 2026-06-02 (HIGH confidence, live-fetched)
+- https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GroupShuffleSplit.html — `GroupShuffleSplit` API shape (HIGH confidence, official docs)
+- https://huggingface.co/docs/huggingface_hub/package_reference/cards — `DatasetCard`/`DatasetCardData`/`.from_template()` API (MEDIUM confidence, official docs, summarized)
+- Local repo inspection: `pyproject.toml`, `uv.lock` (grep for `datatrove`, `scikit-learn`, `pandas`, `scipy`, `networkx` package blocks and their `dependencies` arrays) — HIGH confidence, ground truth for "what's already transitively resolved" claims
+- Local repo inspection: `src/knowledge_lake/pipeline/curate.py`, `pipeline/datasets.py`, `pipeline/export.py` — read in full to ground the CurationEngine integration-tension analysis and the T-05-08/FOUND-03 precedents cited throughout
 
 ---
-*Stack research for: v2.6 Data Quality & Enrichment*
-*Researched: 2026-07-15*
+*Stack research for: Knowledge Lake Framework v2.7 (Governed Dataset Production and Release Lifecycle)*
+*Researched: 2026-07-19*
