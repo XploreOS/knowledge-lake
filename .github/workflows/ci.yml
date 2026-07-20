@@ -92,7 +92,7 @@ jobs:
               ;;
           esac
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Write .env for compose build
         # docker compose interpolates the compose file (including the
         # required KLAKE_STORAGE__* vars referenced by other services) before
