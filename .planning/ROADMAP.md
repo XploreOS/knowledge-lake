@@ -148,12 +148,26 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 23-01-PLAN.md — Schema foundation: DatasetProject/DatasetSpec models, migration 0012, ids.py prefixes (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 23-02-PLAN.md — pipeline/project.py core: create_project/get_project/list_projects/transition_project + IllegalProjectTransitionError (Wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 23-03-PLAN.md — Dataset Specification versioning: DatasetSpecFields, content hash, create_spec_version/get_latest_spec/validate_spec (Wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 23-04-PLAN.md — D-02 export identity fix: get_latest_released_dataset_by_name() + export_finetune_dataset() internal swap (Wave 4)
 - [ ] 23-05-PLAN.md — API surface: /projects, /projects/{id}/transition, /projects/{id}/specs, /specs/{id}/validate routes + schemas (Wave 4)
 - [ ] 23-06-PLAN.md — CLI surface: project_app (new/list/show/transition), dataset_app/spec_app (create/validate) (Wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 23-07-PLAN.md — MCP surface: project_list/project_show/spec_validate read tools, TOOLS count bump 11→14 (Wave 5)
 
 ### Phase 24: Flagship Domain Pack Foundation
