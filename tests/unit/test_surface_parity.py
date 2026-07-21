@@ -1,7 +1,7 @@
 """Surface parity gate: stdio == http == openapi == openai (SKILL-03, D-04).
 
 This is the phase's correctness gate. It proves that every agent-facing surface
-exposes byte-identical (normalized) argument schemas for all 11 tools, so an
+exposes byte-identical (normalized) argument schemas for all 14 tools, so an
 agent can never be misled into a malformed/unsafe call by a drifting surface
 (threat T-12-DRIFT).
 
@@ -45,8 +45,16 @@ from knowledge_lake.agent.server import build_server
 
 _OPENAPI_PATH = Path(__file__).parents[2] / "docs" / "openapi.json"
 
-# The 4 read-access tools — the read-only MCP posture (D-11).
-_READ_TOOLS = {"search", "list_sources", "lineage", "stats"}
+# The 7 read-access tools — the read-only MCP posture (D-11).
+_READ_TOOLS = {
+    "search",
+    "list_sources",
+    "lineage",
+    "stats",
+    "project_list",
+    "project_show",
+    "spec_validate",
+}
 
 
 # ── normalize / canonical helpers ─────────────────────────────────────────────
@@ -189,13 +197,13 @@ def test_canonical_nested_normalization() -> None:
     assert "title" not in result["$defs"]["Sub"]
 
 
-# ── parity gate: MCP == OpenAI == model_json_schema (all 11 tools) ────────────
+# ── parity gate: MCP == OpenAI == model_json_schema (all 14 tools) ────────────
 
 
-def test_all_eleven_tools_present() -> None:
-    """The registry must expose exactly the 11 tools the parity gate iterates."""
-    assert len(TOOLS) == 11
-    assert len({t.name for t in TOOLS}) == 11
+def test_all_fourteen_tools_present() -> None:
+    """The registry must expose exactly the 14 tools the parity gate iterates."""
+    assert len(TOOLS) == 14
+    assert len({t.name for t in TOOLS}) == 14
 
 
 def test_mcp_inputschema_equals_openai_parameters() -> None:
@@ -239,7 +247,7 @@ def test_three_way_parity_all_tools() -> None:
     """canonical(MCP) == canonical(OpenAI) == canonical(model) — the D-04 gate.
 
     A single assertion binding all three registry surfaces for every one of the
-    11 tools. Mutating any one tool's input_model turns this red.
+    14 tools. Mutating any one tool's input_model turns this red.
     """
     mcp = _mcp_input_schemas(TOOLS)
     openai = _openai_parameters(TOOLS)
