@@ -35,6 +35,7 @@ Functions:
     create_spec_version_row         — insert a new immutable DatasetSpec version row (SPEC-01/02)
     get_latest_spec_version         — fetch the most recent DatasetSpec version for a project (SPEC-02)
     get_spec_by_id                  — fetch a DatasetSpec version by primary key (SPEC-02)
+    get_latest_released_dataset_by_name — resolve export_finetune_dataset()'s D-02 identity ambiguity (Plan 23-04)
 """
 
 from __future__ import annotations
@@ -1354,6 +1355,47 @@ def get_dataset_by_name(session: Session, name: str) -> Dataset | None:
     No raw SQL — ORM select (T-01-03).
     """
     stmt = select(Dataset).where(Dataset.name == name).limit(1)
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def get_latest_released_dataset_by_name(session: Session, name: str) -> Dataset | None:
+    """Resolve the D-02 identity-ambiguity fix for ``export_finetune_dataset()``.
+
+    Per CONTEXT.md's D-02 resolution rule: "if the name resolves to a Dataset
+    row associated via new FK with a Dataset Project, resolve to the Dataset
+    tied to that project's ... 'released' state ... if the name has no
+    associated Dataset Project ... fall back unchanged."
+
+    Resolution:
+    - If no Dataset row exists for ``name``, or the matching row's
+      ``dataset_project_id`` is NULL (a pre-v2.7 legacy dataset, Pitfall 3's
+      nullability contract), this falls back UNCHANGED to
+      ``get_dataset_by_name()``'s exact behavior — byte-identical return
+      value, same underlying row.
+    - Otherwise, resolves via a join against ``DatasetProject.status``
+      (NEVER any ``DatasetSpec`` field — ``DatasetSpec`` carries no status
+      column at all; ``DatasetProject.status`` is the single source of
+      truth per Plan 23-01's schema decision), filtering to the project's
+      Dataset rows where the project's CURRENT status is ``"released"``,
+      ordered ``created_at DESC, id DESC`` (explicit deterministic
+      tiebreak). Returns ``None`` if the project has not yet reached
+      ``"released"`` — even though a Dataset row physically exists, it does
+      not qualify as the resolved export target.
+    """
+    dataset = get_dataset_by_name(session, name)
+    if dataset is None or dataset.dataset_project_id is None:
+        return dataset
+
+    stmt = (
+        select(Dataset)
+        .join(DatasetProject, DatasetProject.id == Dataset.dataset_project_id)
+        .where(
+            Dataset.dataset_project_id == dataset.dataset_project_id,
+            DatasetProject.status == "released",
+        )
+        .order_by(Dataset.created_at.desc(), Dataset.id.desc())
+        .limit(1)
+    )
     return session.execute(stmt).scalar_one_or_none()
 
 

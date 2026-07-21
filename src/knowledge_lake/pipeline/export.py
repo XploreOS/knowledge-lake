@@ -582,7 +582,9 @@ def export_finetune_dataset(
     storage = _make_storage(s)
 
     with get_session() as session:
-        dataset = registry_repo.get_dataset_by_name(session, dataset_name)
+        # D-02 (Pitfall 2): resolves via the one named, tested rule — see
+        # registry_repo.get_latest_released_dataset_by_name()'s docstring.
+        dataset = registry_repo.get_latest_released_dataset_by_name(session, dataset_name)
         if dataset is None:
             raise ValueError(f"Dataset not found: {dataset_name!r}")
 
