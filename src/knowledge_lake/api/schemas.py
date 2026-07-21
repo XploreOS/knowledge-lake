@@ -923,11 +923,23 @@ class ProjectOut(BaseModel):
 
 
 class ProjectTransitionRequest(BaseModel):
-    """Request body for POST /projects/{id}/transition (PROJ-02, D-04)."""
+    """Request body for POST /projects/{id}/transition (PROJ-02, D-04).
+
+    ``to_state`` is intentionally NOT regex-validated here against a
+    hand-maintained enumeration of the 11 lifecycle state names — that
+    duplicated ``pipeline.project._TRANSITIONS`` as a second source of truth
+    and could silently drift from it (WR-05). Only a length/type bound is
+    enforced at this layer; membership in the actual lifecycle state set is
+    validated in ``transition_project_endpoint`` against
+    ``pipeline.project.LIFECYCLE_STATES`` (derived directly from
+    ``_TRANSITIONS``), and illegal-but-well-known transitions are rejected by
+    ``transition_project()`` itself.
+    """
 
     to_state: str = Field(
         ...,
-        pattern=r"^(draft|configured|sources_pending|ready|processing|validating|review_required|releasable|released|failed|archived)$",
+        min_length=1,
+        max_length=64,
         description="One of the 11 lifecycle states (PROJ-02).",
     )
 

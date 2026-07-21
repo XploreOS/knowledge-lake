@@ -126,6 +126,15 @@ _TRANSITIONS: dict[str, set[str]] = {
     "archived": set(),
 }
 
+LIFECYCLE_STATES: frozenset[str] = frozenset(_TRANSITIONS)
+"""Public, derived-from-_TRANSITIONS set of all 11 lifecycle state names (WR-05).
+
+The single source of truth for callers outside this module that need to
+validate a state name (e.g. api/app.py's transition_project_endpoint) without
+hand-maintaining a second enumeration (e.g. a regex) that can silently drift
+from _TRANSITIONS if a state is ever added/removed/renamed.
+"""
+
 
 # NOT caught by agent/server.py's `_EXPECTED_ERRORS = (ValueError, LookupError)`
 # tuple — if a future MCP mutating tool (e.g. `project_transition`) can raise

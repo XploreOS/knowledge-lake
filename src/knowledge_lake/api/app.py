@@ -1777,6 +1777,7 @@ def get_project_endpoint(project_id: str) -> ProjectOut:
     responses={
         404: {"description": "Dataset Project not found"},
         409: {"description": "Illegal lifecycle transition"},
+        422: {"description": "Unknown lifecycle state name"},
     },
 )
 def transition_project_endpoint(project_id: str, body: ProjectTransitionRequest) -> ProjectOut:
@@ -1788,17 +1789,33 @@ def transition_project_endpoint(project_id: str, body: ProjectTransitionRequest)
     — a deliberate choice (409 = state conflict, distinct from 422's
     "malformed input"), not an oversight or a copy of an existing pattern.
 
+    ``body.to_state`` is validated against ``LIFECYCLE_STATES`` (derived
+    directly from ``_TRANSITIONS``) here rather than via a hand-maintained
+    Pydantic regex, so the state set has exactly one source of truth (WR-05).
+
     D-02 compliance:
         Calls pipeline.project functions directly — no behavior re-implemented
         (SURFACE-02).
     """
     from knowledge_lake.pipeline.project import (
+        LIFECYCLE_STATES,
         IllegalProjectTransitionError,
         get_project,
         transition_project,
     )
 
     logger.info("api.projects.transition", project_id=project_id, to_state=body.to_state)
+
+    if body.to_state not in LIFECYCLE_STATES:
+        logger.warning(
+            "api.projects.transition.unknown_state",
+            project_id=project_id,
+            to_state=body.to_state,
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown lifecycle state: {body.to_state!r}",
+        )
 
     try:
         transition_project(project_id, body.to_state)

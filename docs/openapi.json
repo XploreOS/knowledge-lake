@@ -1395,11 +1395,12 @@
         "type": "object"
       },
       "ProjectTransitionRequest": {
-        "description": "Request body for POST /projects/{id}/transition (PROJ-02, D-04).",
+        "description": "Request body for POST /projects/{id}/transition (PROJ-02, D-04).\n\n``to_state`` is intentionally NOT regex-validated here against a\nhand-maintained enumeration of the 11 lifecycle state names \u2014 that\nduplicated ``pipeline.project._TRANSITIONS`` as a second source of truth\nand could silently drift from it (WR-05). Only a length/type bound is\nenforced at this layer; membership in the actual lifecycle state set is\nvalidated in ``transition_project_endpoint`` against\n``pipeline.project.LIFECYCLE_STATES`` (derived directly from\n``_TRANSITIONS``), and illegal-but-well-known transitions are rejected by\n``transition_project()`` itself.",
         "properties": {
           "to_state": {
             "description": "One of the 11 lifecycle states (PROJ-02).",
-            "pattern": "^(draft|configured|sources_pending|ready|processing|validating|review_required|releasable|released|failed|archived)$",
+            "maxLength": 64,
+            "minLength": 1,
             "title": "To State",
             "type": "string"
           }
@@ -3266,7 +3267,7 @@
     },
     "/projects/{project_id}/transition": {
       "post": {
-        "description": "Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04).\n\nGuarded by the module-level _TRANSITIONS adjacency map \u2014 an illegal edge\nraises IllegalProjectTransitionError, translated to HTTP 409 here. This is\nthe FIRST use of status_code=409 in this codebase (RESEARCH.md Pattern 4)\n\u2014 a deliberate choice (409 = state conflict, distinct from 422's\n\"malformed input\"), not an oversight or a copy of an existing pattern.\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "description": "Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04).\n\nGuarded by the module-level _TRANSITIONS adjacency map \u2014 an illegal edge\nraises IllegalProjectTransitionError, translated to HTTP 409 here. This is\nthe FIRST use of status_code=409 in this codebase (RESEARCH.md Pattern 4)\n\u2014 a deliberate choice (409 = state conflict, distinct from 422's\n\"malformed input\"), not an oversight or a copy of an existing pattern.\n\n``body.to_state`` is validated against ``LIFECYCLE_STATES`` (derived\ndirectly from ``_TRANSITIONS``) here rather than via a hand-maintained\nPydantic regex, so the state set has exactly one source of truth (WR-05).\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
         "operationId": "transition_project_endpoint_projects__project_id__transition_post",
         "parameters": [
           {
@@ -3307,14 +3308,7 @@
             "description": "Illegal lifecycle transition"
           },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "Unknown lifecycle state name"
           }
         },
         "summary": "Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04)",
