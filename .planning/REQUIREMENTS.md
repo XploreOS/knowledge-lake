@@ -12,7 +12,7 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 
 - [x] **PROJ-01**: User can create a Dataset Project (name, description, purpose, intended/prohibited uses, dataset_type, domain pack, owners)
 - [x] **PROJ-02**: Dataset Project enforces its defined lifecycle (draft → configured → sources_pending → ready → processing → validating → review_required → releasable → released → failed → archived) with guarded transitions — illegal transitions rejected with a clear error
-- [ ] **PROJ-03**: User can list/show Dataset Projects and transition their state via CLI (`klake project new/list/show/transition`) and API
+- [x] **PROJ-03**: User can list/show Dataset Projects and transition their state via CLI (`klake project new/list/show/transition`) and API
 
 ### Dataset Specification (SPEC)
 
@@ -90,7 +90,7 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 ### CLI / API / MCP Surfaces (SURFACE)
 
 - [ ] **SURFACE-01**: New CLI command groups (`project`, `policy`, `dataset`) mirror the existing `domain` sub-Typer group pattern; every existing command remains unchanged and backward compatible
-- [ ] **SURFACE-02**: New API routes reuse shared Pydantic schemas and call the same `pipeline/*.py` functions as the CLI — no duplicated business logic in route handlers
+- [x] **SURFACE-02**: New API routes reuse shared Pydantic schemas and call the same `pipeline/*.py` functions as the CLI — no duplicated business logic in route handlers
 - [ ] **SURFACE-03**: New MCP tools are thin shims over `pipeline/*.py` (never proxying REST); read tools are prioritized over mutating ones per governance-action risk; the hardcoded `TOOLS` count assertion is updated in the same change
 
 ### Security & Governance (SEC)
@@ -156,12 +156,12 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 |-------------|-------|--------|
 | PROJ-01 | Phase 23 | Complete |
 | PROJ-02 | Phase 23 | Complete |
-| PROJ-03 | Phase 23 | Pending |
+| PROJ-03 | Phase 23 | Complete |
 | SPEC-01 | Phase 23 | Complete |
 | SPEC-02 | Phase 23 | Complete |
 | SPEC-03 | Phase 23 | Complete |
 | SURFACE-01 | Phase 23 | Pending |
-| SURFACE-02 | Phase 23 | Pending |
+| SURFACE-02 | Phase 23 | Complete |
 | SURFACE-03 | Phase 23 | Pending |
 | POLICY-01 | Phase 25 | Pending |
 | POLICY-02 | Phase 25 | Pending |
