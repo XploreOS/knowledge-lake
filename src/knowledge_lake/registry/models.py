@@ -10,6 +10,8 @@ This module defines the core schema:
 - LlmSpend          — accumulated LLM call cost per scope (ENRICH-05)
 - VectorCollection  — alias-to-physical-collection registry (INDEX-02)
 - ChunkDedupLedger  — corpus-wide exact-dedup ledger (DEDUP-01..03)
+- DatasetProject     — Dataset Project lifecycle record (PROJ-01..03)
+- DatasetSpec        — immutable, versioned Dataset Specification (SPEC-01..03)
 - Dataset           — curated dataset placeholder (created empty in migration #1)
 
 Schema is managed EXCLUSIVELY by Alembic migrations.  This module defines the
@@ -563,6 +565,139 @@ class ChunkDedupLedger(Base):
     """UTC timestamp of the last update (e.g. a contributor append)."""
 
 
+class DatasetProject(Base):
+    """Dataset Project lifecycle record (PROJ-01..03).
+
+    A Dataset Project is the human-facing unit of intent for a governed
+    dataset build — it owns an 11-state lifecycle (``status``) and carries
+    the declarative intended/prohibited-uses metadata a project is built
+    under. New in v2.7 (Phase 23); every later v2.7 phase's project-scoped
+    tables FK to this one.
+    """
+
+    __tablename__ = "dataset_projects"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_dataset_projects_name"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``dpj_<uuidv7>``, via ``new_id('dataset_project')``."""
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    """Human-readable, unique Dataset Project name (PROJ-01) — the identity
+    a human types, distinct from any Dataset row's own ``name``."""
+
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    intended_uses: Mapped[list | None] = mapped_column(_JSON, nullable=True)
+    """List of free-text intended-use strings (PROJ-01). Declarative only in
+    Phase 23 — see the class-level enforcement-scope note below."""
+
+    prohibited_uses: Mapped[list | None] = mapped_column(_JSON, nullable=True)
+    """List of free-text prohibited-use strings (PROJ-01). NOT ENFORCED by
+    any gate in Phase 23 — nothing in this phase blocks an action that
+    violates a project's own stated prohibited_uses; enforcement arrives via
+    Phase 25's Usage Policy Engine. Do not imply protection that does not
+    yet exist."""
+
+    dataset_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    """Kind of dataset this project produces: 'rag_eval',
+    'instruction_tuning', 'pretraining', etc. — mirrors Dataset.dataset_type's
+    existing vocabulary."""
+
+    domain: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    """Domain pack name this project scopes to, e.g. 'healthcare'. Indexed
+    for project-listing filters."""
+
+    owners: Mapped[list | None] = mapped_column(_JSON, nullable=True)
+    """List of free-text owner names/emails. Informational only — Phase 23
+    introduces no authentication/RBAC (REQUIREMENTS.md's explicit
+    'Enterprise RBAC... out of scope'), so ``owners`` establishes no
+    access-control boundary."""
+
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="draft")
+    """11-state lifecycle (PROJ-02): draft, configured, sources_pending,
+    ready, processing, validating, review_required, releasable, released,
+    failed, archived. Guarded transitions enforced in pipeline/project.py's
+    ``_TRANSITIONS`` graph — NOT enforced at the DB layer (contrast with
+    Phase 30's ``dataset_releases`` immutability trigger, a different and
+    harder guarantee this phase does not need)."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class DatasetSpec(Base):
+    """Immutable, versioned Dataset Specification (SPEC-01..03).
+
+    Immutability by table design (SPEC-02): there is no
+    ``update_spec_version()`` function anywhere in this codebase and never
+    will be for this table — insert-only. No independent ``status`` column
+    exists here (RESEARCH.md Open Question 1) — ``DatasetProject.status`` is
+    the single source of truth for "is this project's current spec
+    released".
+    """
+
+    __tablename__ = "dataset_specs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    """Prefixed UUIDv7 — always ``dsp_<uuidv7>``, via ``new_id('dataset_spec')``."""
+
+    dataset_project_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("dataset_projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    parent_spec_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("dataset_specs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """Self-referencing link to the immediately-prior spec version for this
+    project, or None for the first-ever version (SPEC-02). NEVER reassigned
+    once set — the chain is permanent."""
+
+    spec: Mapped[dict] = mapped_column(_JSON, nullable=False)
+    """The full parsed Dataset Specification (SPEC-01's field set), stored
+    as JSON for queryability. Field-by-field allow-list validated via
+    pipeline.project.DatasetSpecFields BEFORE this row is ever constructed —
+    never an unvalidated raw dict (mass-assignment mitigation, RESEARCH.md
+    Security Domain)."""
+
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    """sha256 over the canonical (sorted-key) JSON serialization of ``spec``
+    (D-03, SPEC-02) — NOT over raw YAML bytes, so formatting-only edits
+    never produce a spurious new version."""
+
+    schema_version: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    author: Mapped[str] = mapped_column(String(255), nullable=False)
+    """Self-reported free-text attribution string (SPEC-02) — this codebase
+    has no authentication system; ``author`` carries NO verified-identity
+    guarantee. Sourced from an explicit CLI flag / required API field only,
+    never ``os.getlogin()`` or a header sniff (Pitfall 4)."""
+
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 class Dataset(Base):
     """Curated dataset record — extended in Phase 5 with real columns (DATA-01..03).
 
@@ -586,6 +721,24 @@ class Dataset(Base):
     """Running count of examples in this dataset; updated on export."""
     storage_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     """S3 URI of the exported dataset file (gold zone). None until exported."""
+    dataset_project_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("dataset_projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """NULLABLE (Pitfall 3) — every pre-v2.7 Dataset row has no project and
+    stays NULL permanently. ``get_latest_released_dataset_by_name()``
+    (Plan 23-04, D-02) uses ``is None`` on this column to detect the
+    pre-v2.7 legacy-dataset fallback path."""
+
+    dataset_spec_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("dataset_specs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    """NULLABLE — the spec version this Dataset export was produced under,
+    when project-scoped."""
+
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

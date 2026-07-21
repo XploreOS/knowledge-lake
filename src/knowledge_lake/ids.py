@@ -44,6 +44,8 @@ _PREFIX: dict[str, str] = {
     "dataset": "dst",
     "dataset_example": "dex",
     "tree_index": "idx",
+    "dataset_project": "dpj",
+    "dataset_spec": "dsp",
 }
 
 
