@@ -32,6 +32,9 @@ Functions:
     get_project_by_id               — fetch a Dataset Project by primary key (PROJ-01)
     get_project_by_name             — fetch a Dataset Project by its unique name (PROJ-01)
     list_projects                   — list Dataset Projects, created_at DESC / id DESC (PROJ-01)
+    create_spec_version_row         — insert a new immutable DatasetSpec version row (SPEC-01/02)
+    get_latest_spec_version         — fetch the most recent DatasetSpec version for a project (SPEC-02)
+    get_spec_by_id                  — fetch a DatasetSpec version by primary key (SPEC-02)
 """
 
 from __future__ import annotations
@@ -52,6 +55,7 @@ from knowledge_lake.registry.models import (
     Dataset,
     DatasetExample,
     DatasetProject,
+    DatasetSpec,
     Job,
     LlmSpend,
     Source,
@@ -1688,3 +1692,97 @@ def list_projects(session: Session) -> list[DatasetProject]:
         DatasetProject.created_at.desc(), DatasetProject.id.desc()
     )
     return list(session.execute(stmt).scalars())
+
+
+# ── Dataset Specification (SPEC-01..03) ─────────────────────────────────────
+
+
+def create_spec_version_row(
+    session: Session,
+    *,
+    dataset_project_id: str,
+    spec: dict,
+    content_hash: str,
+    schema_version: str,
+    author: str,
+    parent_spec_id: str | None = None,
+    id: str | None = None,
+) -> DatasetSpec:
+    """Create a new (immutable) DatasetSpec version row and add it to the session.
+
+    The caller is responsible for committing or flushing the session — mirrors
+    create_project()'s exact contract (no flush here). There is no
+    ``update_spec_version()`` counterpart anywhere in this codebase — this
+    table is insert-only (SPEC-02).
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    dataset_project_id:
+        The owning DatasetProject's id.
+    spec:
+        The full, already-validated Dataset Specification dict (SPEC-01) —
+        validated by pipeline.project.DatasetSpecFields BEFORE this function
+        is ever called.
+    content_hash:
+        sha256 over the canonical (sorted-key) JSON serialization of ``spec``
+        (D-03) — computed by the caller via pipeline.project._spec_content_hash.
+    schema_version:
+        The DatasetSpecFields schema version this row was validated against.
+    author:
+        Self-reported free-text attribution string. NOT a verified identity
+        (Pitfall 4) — no authentication system backs this codebase.
+    parent_spec_id:
+        The immediately-prior spec version's id for this project, or None for
+        the first-ever version (SPEC-02). NEVER reassigned once set.
+    id:
+        Row ID to use. Defaults to a freshly minted ``new_id("dataset_spec")``.
+
+    Returns
+    -------
+    DatasetSpec
+        The newly created (unsaved) DatasetSpec instance.
+    """
+    spec_version = DatasetSpec(
+        id=id or new_id("dataset_spec"),
+        dataset_project_id=dataset_project_id,
+        parent_spec_id=parent_spec_id,
+        spec=spec,
+        content_hash=content_hash,
+        schema_version=schema_version,
+        author=author,
+        created_at=datetime.datetime.now(datetime.UTC),
+    )
+    session.add(spec_version)
+    return spec_version
+
+
+def get_latest_spec_version(
+    session: Session, dataset_project_id: str
+) -> DatasetSpec | None:
+    """Return the most recently created DatasetSpec version for a project, or None.
+
+    Ordered by created_at DESC, id DESC — the explicit ``id`` secondary sort
+    is a deterministic tiebreak for rows created within the same DB timestamp
+    resolution; uuidv7 IDs are time-sortable, so ``id DESC`` breaks ties in the
+    same effective order ``created_at`` would if it had more precision.
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = (
+        select(DatasetSpec)
+        .where(DatasetSpec.dataset_project_id == dataset_project_id)
+        .order_by(DatasetSpec.created_at.desc(), DatasetSpec.id.desc())
+        .limit(1)
+    )
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def get_spec_by_id(session: Session, spec_id: str) -> DatasetSpec | None:
+    """Return the DatasetSpec version matching ``spec_id``, or None.
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = select(DatasetSpec).where(DatasetSpec.id == spec_id).limit(1)
+    return session.execute(stmt).scalar_one_or_none()

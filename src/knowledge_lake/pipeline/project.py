@@ -21,7 +21,11 @@ Design decisions this module implements:
 
 from __future__ import annotations
 
+import hashlib
+
+import orjson
 import structlog
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -29,6 +33,82 @@ from knowledge_lake.registry import repo as registry_repo
 from knowledge_lake.registry.db import get_session
 
 log = structlog.get_logger(__name__)
+
+
+_SCHEMA_VERSION = "1.0"
+"""DatasetSpecFields schema version tag (SPEC-01/02).
+
+Bumped only on a genuinely breaking DatasetSpecFields shape change —
+additive fields like the future Phase 25/26 referential tightening (D-01)
+do NOT require a bump.
+"""
+
+
+class DatasetSpecFields(BaseModel):
+    """Allow-list schema for a Dataset Specification's field set (SPEC-01).
+
+    Mirrors domains/models.py's SourceEntry/DomainManifest exact pattern:
+    ``model_config = ConfigDict(extra="forbid")`` — an unrecognized key
+    raises a Pydantic ValidationError (mass-assignment mitigation, T-23-07).
+    A fresh, self-contained model — pipeline modules never import from
+    ``knowledge_lake.api.schemas``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    purpose: str
+    """Free-text statement of the dataset's purpose (SPEC-01)."""
+
+    dataset_type: str
+    """Kind of dataset this spec produces (SPEC-01)."""
+
+    domain: str
+    """Domain pack name this spec scopes to (SPEC-01)."""
+
+    included_sources: list[str] = []
+    """Source IDs (src_<uuidv7>) this spec includes. Existence-checked by
+    validate_spec() (SPEC-03)."""
+
+    excluded_sources: list[str] = []
+    """Source IDs (src_<uuidv7>) this spec excludes. Existence-checked by
+    validate_spec() (SPEC-03)."""
+
+    allowed_license_categories: list[str] = []
+    """License categories permitted for sources included in this spec (SPEC-01)."""
+
+    usage_policy_ref: str | None = None
+    """D-01: forward reference to a Phase 25 Usage Policy — schema-validated
+    (type only) in Phase 23; NOT existence-checked until Phase 25 lands,
+    without a spec schema version bump."""
+
+    quality_contract_ref: str | None = None
+    """D-01: forward reference to a Phase 26 Quality Contract — schema-
+    validated (type only) in Phase 23; NOT existence-checked until Phase 26
+    lands, without a spec schema version bump."""
+
+    curation_engine: str | None = None
+    """Curation engine identifier this spec requests (SPEC-01)."""
+
+    generation_strategy: dict | None = None
+    """Generation strategy configuration (SPEC-01)."""
+
+    validation_requirements: dict | None = None
+    """Validation requirements configuration (SPEC-01)."""
+
+    split_strategy: dict | None = None
+    """Train/eval/test split strategy configuration (SPEC-01)."""
+
+    decontamination_targets: list[str] = []
+    """Decontamination target identifiers (SPEC-01)."""
+
+    export_formats: list[str] = []
+    """Export format identifiers (SPEC-01)."""
+
+    release_requirements: dict | None = None
+    """Release requirements configuration (SPEC-01)."""
+
+    human_approval_requirements: dict | None = None
+    """Human approval requirements configuration (SPEC-01)."""
 
 
 # ── 11-state lifecycle graph (PROJ-02) ──────────────────────────────────────
@@ -230,3 +310,116 @@ def transition_project(
             raise IllegalProjectTransitionError(project.status, to_state, legal_next)
         project.status = to_state
         return {"id": project.id, "status": project.status}
+
+
+# ── Dataset Specification versioning (SPEC-01..03) ──────────────────────────
+
+
+def _spec_content_hash(parsed_spec: dict) -> str:
+    """Derive the canonical content hash for a parsed Dataset Specification dict.
+
+    D-03: sha256 over the canonical (sorted-key) JSON serialization of
+    ``parsed_spec`` — NOT over raw YAML bytes, so formatting-only re-saves
+    (key reordering, whitespace, comments) never produce a spurious new
+    version. Mirrors pipeline.curate._curation_cache_key's exact
+    hashlib.sha256(...).hexdigest() shape, adapted to hash canonical JSON
+    instead of an f-string.
+    """
+    canonical_bytes = orjson.dumps(parsed_spec, option=orjson.OPT_SORT_KEYS)
+    return hashlib.sha256(canonical_bytes).hexdigest()
+
+
+def _spec_version_to_dict(spec_row) -> dict:
+    """Shared dict-shape builder for create_spec_version()/get_latest_spec()."""
+    return {
+        "id": spec_row.id,
+        "dataset_project_id": spec_row.dataset_project_id,
+        "parent_spec_id": spec_row.parent_spec_id,
+        "content_hash": spec_row.content_hash,
+        "schema_version": spec_row.schema_version,
+        "author": spec_row.author,
+        "created_at": spec_row.created_at.isoformat(),
+    }
+
+
+def create_spec_version(
+    project_id: str, spec: dict, *, author: str, settings: Settings | None = None
+) -> dict:
+    """Create a new immutable Dataset Specification version (SPEC-01/02).
+
+    The incoming ``spec`` dict is validated against DatasetSpecFields's
+    allow-list BEFORE any DB touch (T-23-07 mass-assignment mitigation). D-03:
+    the canonical content hash is computed first; if it exactly matches the
+    project's current latest spec version's content_hash, NO new DatasetSpec
+    row is inserted — the existing (unchanged) version is returned instead
+    (re-saving byte-identical-but-reformatted YAML is a merge/no-op, never a
+    spurious new version).
+
+    ``author`` is a self-reported free-text string — no authentication system
+    backs it in this codebase; do not treat it as a verified identity
+    (Pitfall 4).
+
+    Args:
+        project_id: Dataset Project ID (``dpj_...``) this spec version belongs to.
+        spec: Parsed Dataset Specification dict (SPEC-01 field set).
+        author: Self-reported free-text attribution string.
+        settings: Settings override (for testing).
+
+    Returns:
+        dict with keys: id, dataset_project_id, parent_spec_id, content_hash,
+        schema_version, author, created_at.
+
+    Raises:
+        ValueError: If ``spec`` fails DatasetSpecFields validation, or if no
+            project exists with ``project_id``.
+    """
+    _settings = settings or get_settings()
+    try:
+        validated = DatasetSpecFields(**spec)
+    except ValidationError as exc:
+        raise ValueError(f"Invalid Dataset Specification: {exc}") from exc
+    validated_dict = validated.model_dump()
+    content_hash = _spec_content_hash(validated_dict)
+
+    with get_session() as session:
+        project = registry_repo.get_project_by_id(session, project_id)
+        if project is None:
+            raise ValueError(f"Dataset Project not found: {project_id!r}")
+
+        latest = registry_repo.get_latest_spec_version(session, project_id)
+        if latest is not None and latest.content_hash == content_hash:
+            # D-03/E11: formatting-only re-save — merge/no-op, return the
+            # existing (unchanged) version rather than inserting a new row.
+            return _spec_version_to_dict(latest)
+
+        parent_spec_id = latest.id if latest is not None else None
+        new_spec = registry_repo.create_spec_version_row(
+            session,
+            dataset_project_id=project_id,
+            spec=validated_dict,
+            content_hash=content_hash,
+            schema_version=_SCHEMA_VERSION,
+            author=author,
+            parent_spec_id=parent_spec_id,
+        )
+        session.flush()
+        return _spec_version_to_dict(new_spec)
+
+
+def get_latest_spec(project_id: str, *, settings: Settings | None = None) -> dict | None:
+    """Fetch the most recently created Dataset Specification version for a project.
+
+    Args:
+        project_id: Dataset Project ID (``dpj_...``).
+        settings: Settings override (for testing).
+
+    Returns:
+        dict in the same shape create_spec_version() returns, or None if the
+        project has zero spec versions.
+    """
+    _settings = settings or get_settings()
+    with get_session() as session:
+        latest = registry_repo.get_latest_spec_version(session, project_id)
+        if latest is None:
+            return None
+        return _spec_version_to_dict(latest)
