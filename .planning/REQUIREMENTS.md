@@ -16,9 +16,9 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 
 ### Dataset Specification (SPEC)
 
-- [ ] **SPEC-01**: User can define a declarative Dataset Specification (YAML/JSON) capturing purpose, type, domain, included/excluded sources, allowed license categories, usage policy, quality contract, curation engine, generation strategy, validation requirements, split strategy, decontamination targets, export formats, release requirements, human-approval requirements
+- [x] **SPEC-01**: User can define a declarative Dataset Specification (YAML/JSON) capturing purpose, type, domain, included/excluded sources, allowed license categories, usage policy, quality contract, curation engine, generation strategy, validation requirements, split strategy, decontamination targets, export formats, release requirements, human-approval requirements
 - [x] **SPEC-02**: Every Dataset Specification change produces a new immutable spec version with a content hash, schema version, timestamp, author, and parent-version link
-- [ ] **SPEC-03**: `klake dataset spec validate` checks schema validity and referential integrity (referenced sources/quality-contract/policy exist) before a spec can move a project to `ready`
+- [x] **SPEC-03**: `klake dataset spec validate` checks schema validity and referential integrity (referenced sources/quality-contract/policy exist) before a spec can move a project to `ready`
 
 ### Usage Policy (POLICY)
 
@@ -157,9 +157,9 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 | PROJ-01 | Phase 23 | Complete |
 | PROJ-02 | Phase 23 | Pending |
 | PROJ-03 | Phase 23 | Pending |
-| SPEC-01 | Phase 23 | Pending |
+| SPEC-01 | Phase 23 | Complete |
 | SPEC-02 | Phase 23 | Complete |
-| SPEC-03 | Phase 23 | Pending |
+| SPEC-03 | Phase 23 | Complete |
 | SURFACE-01 | Phase 23 | Pending |
 | SURFACE-02 | Phase 23 | Pending |
 | SURFACE-03 | Phase 23 | Pending |

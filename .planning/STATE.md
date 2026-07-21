@@ -5,15 +5,15 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 23
 current_phase_name: Dataset Project + Specification Foundation
 status: executing
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-07-21T10:19:16.361Z"
+stopped_at: Completed 23-03-PLAN.md
+last_updated: "2026-07-21T10:27:55.373Z"
 last_activity: 2026-07-21
 last_activity_desc: Phase 23 execution started
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 7
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 23 (Dataset Project + Specification Foundation) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-07-21 — Phase 23 execution started
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [████░░░░░░] 43%
 
 ## Performance Metrics
 
@@ -111,6 +111,7 @@ Progress: [█░░░░░░░░░] 14%
 | Phase 22 P03 | 73min | 1 tasks | 0 files |
 | Phase quick P260718-6fu | 4min | 2 tasks | 2 files |
 | Phase 23 P01 | 5min | 2 tasks | 3 files |
+| Phase 23 P03 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,8 @@ Progress: [█░░░░░░░░░] 14%
 - [Phase ?]: DatasetSpec has no status column — immutability is structural (insert-only); DatasetProject.status is the single source of truth
 - [Phase ?]: Dataset.dataset_project_id/dataset_spec_id nullable with no backfill — pre-v2.7 rows stay permanently unscoped, satisfying legacy-fallback detection
 - [Phase ?]: prohibited_uses/intended_uses documented as declarative-only in Phase 23 — no enforcement gate exists yet (arrives via Phase 25 Policy Engine)
+- [Phase ?]: 23-03: Task 1 (implementation) committed before Task 2 (validate_spec() + full test authorship), mirroring 23-02's feat-before-test task-boundary precedent
+- [Phase ?]: 23-03: _spec_version_to_dict() extracted as a shared helper so create_spec_version()/get_latest_spec() build the identical return-dict shape from one place
 
 ### Pending Todos
 
@@ -247,8 +250,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-21T05:22:29.225Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-07-21T10:27:55.356Z
+Stopped at: Completed 23-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
