@@ -1,6 +1,6 @@
 """Wave 0 RED scaffold: readonly filter assertions (MCP-01).
 
-Asserts that ``registered_tools(readonly=True)`` returns exactly the 4
+Asserts that ``registered_tools(readonly=True)`` returns exactly the 7
 read-only tools and excludes all write tools.
 
 Also asserts McpSettings defaults and environment-variable resolution
@@ -29,7 +29,15 @@ except ImportError:
     _MCP_SETTINGS_OK = False
 
 
-_EXPECTED_READ_TOOLS = {"search", "list_sources", "lineage", "stats"}
+_EXPECTED_READ_TOOLS = {
+    "search",
+    "list_sources",
+    "lineage",
+    "stats",
+    "project_list",
+    "project_show",
+    "spec_validate",
+}
 _EXPECTED_WRITE_TOOLS = {
     "ingest_url",
     "crawl",
@@ -42,16 +50,17 @@ _EXPECTED_WRITE_TOOLS = {
 
 
 @pytest.mark.xfail(not _IMPORT_OK, reason="Wave 0 scaffold — agent.registry not yet implemented", strict=False)
-def test_readonly_returns_four_tools() -> None:
-    """registered_tools(readonly=True) returns exactly 4 tools."""
+def test_readonly_returns_seven_tools() -> None:
+    """registered_tools(readonly=True) returns exactly 7 tools."""
     assert registered_tools is not None
     tools = registered_tools(readonly=True)
-    assert len(tools) == 4, f"Expected 4 read-only tools, got {len(tools)}: {[t.name for t in tools]}"
+    assert len(tools) == 7, f"Expected 7 read-only tools, got {len(tools)}: {[t.name for t in tools]}"
 
 
 @pytest.mark.xfail(not _IMPORT_OK, reason="Wave 0 scaffold — agent.registry not yet implemented", strict=False)
 def test_readonly_tool_names() -> None:
-    """Read-only tools must be exactly: search, list_sources, lineage, stats."""
+    """Read-only tools must be exactly: search, list_sources, lineage, stats,
+    project_list, project_show, spec_validate."""
     assert registered_tools is not None
     tools = registered_tools(readonly=True)
     names = {t.name for t in tools}
@@ -72,7 +81,7 @@ def test_readonly_excludes_write_tools() -> None:
 
 @pytest.mark.xfail(not _IMPORT_OK, reason="Wave 0 scaffold — agent.registry not yet implemented", strict=False)
 def test_readonly_false_returns_all_tools() -> None:
-    """registered_tools(readonly=False) returns all 11 tools."""
+    """registered_tools(readonly=False) returns all 14 tools."""
     assert registered_tools is not None
     all_tools = registered_tools(readonly=False)
     all_names = {t.name for t in all_tools}
