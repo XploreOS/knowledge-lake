@@ -5,15 +5,15 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 23
 current_phase_name: Dataset Project + Specification Foundation
 status: executing
-stopped_at: Phase 23 context gathered
-last_updated: "2026-07-21T05:15:58.314Z"
+stopped_at: Completed 23-01-PLAN.md
+last_updated: "2026-07-21T05:22:29.243Z"
 last_activity: 2026-07-21
-last_activity_desc: Roadmap created for v2.7 (10 phases, 46 requirements mapped, 100% coverage)
+last_activity_desc: Phase 23 execution started
 progress:
   total_phases: 10
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 7
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-18)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** v2.7 (Governed Dataset Production and Release Lifecycle) roadmap created — 10 phases (23-32), 46/46 v1 requirements mapped. Awaiting `/gsd-plan-phase 23` to begin.
+**Current focus:** Phase 23 — Dataset Project + Specification Foundation
 
 ## Current Position
 
-Phase: 23 of 32 (Dataset Project + Specification Foundation)
-Plan: —
+Phase: 23 (Dataset Project + Specification Foundation) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-21 — Roadmap created for v2.7 (10 phases, 46 requirements mapped, 100% coverage)
+Last activity: 2026-07-21 — Phase 23 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 14%
 
 ## Performance Metrics
 
@@ -110,6 +110,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 22 P02 | 6min | 1 tasks | 2 files |
 | Phase 22 P03 | 73min | 1 tasks | 0 files |
 | Phase quick P260718-6fu | 4min | 2 tasks | 2 files |
+| Phase 23 P01 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase ?]: Phase 22 P02: run_full_pipeline_audit()'s actual committed return shape matched the plan's <interfaces> contract exactly (no drift from Plan 22-01) — CLI wiring needed no adjustment
 - [Phase ?]: Phase 22 P03: chunk_garbage_rate (45.64%) measures gate-rejection-rate of candidates, not garbage remaining in corpus -- export_junk_rate (0.0%, down from 33% baseline) is the direct successor metric to the milestone's original criteria and met its <2% target decisively
 - [Phase ?]: CI-LINT-01: CI's Lint (ruff) job only scopes src/, not tests/ — 299 pre-existing tests/ lint findings are out of scope for this and future lint-only quick tasks unless CI's job scope changes
+- [Phase ?]: DatasetSpec has no status column — immutability is structural (insert-only); DatasetProject.status is the single source of truth
+- [Phase ?]: Dataset.dataset_project_id/dataset_spec_id nullable with no backfill — pre-v2.7 rows stay permanently unscoped, satisfying legacy-fallback detection
+- [Phase ?]: prohibited_uses/intended_uses documented as declarative-only in Phase 23 — no enforcement gate exists yet (arrives via Phase 25 Policy Engine)
 
 ### Pending Todos
 
@@ -243,9 +247,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-21T04:30:10.899Z
-Stopped at: Phase 23 context gathered
-Resume file: .planning/phases/23-dataset-project-specification-foundation/23-CONTEXT.md
+Last session: 2026-07-21T05:22:29.225Z
+Stopped at: Completed 23-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

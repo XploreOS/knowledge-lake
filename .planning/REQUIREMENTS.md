@@ -10,14 +10,14 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 
 ### Dataset Project (PROJ)
 
-- [ ] **PROJ-01**: User can create a Dataset Project (name, description, purpose, intended/prohibited uses, dataset_type, domain pack, owners)
+- [x] **PROJ-01**: User can create a Dataset Project (name, description, purpose, intended/prohibited uses, dataset_type, domain pack, owners)
 - [ ] **PROJ-02**: Dataset Project enforces its defined lifecycle (draft → configured → sources_pending → ready → processing → validating → review_required → releasable → released → failed → archived) with guarded transitions — illegal transitions rejected with a clear error
 - [ ] **PROJ-03**: User can list/show Dataset Projects and transition their state via CLI (`klake project new/list/show/transition`) and API
 
 ### Dataset Specification (SPEC)
 
 - [ ] **SPEC-01**: User can define a declarative Dataset Specification (YAML/JSON) capturing purpose, type, domain, included/excluded sources, allowed license categories, usage policy, quality contract, curation engine, generation strategy, validation requirements, split strategy, decontamination targets, export formats, release requirements, human-approval requirements
-- [ ] **SPEC-02**: Every Dataset Specification change produces a new immutable spec version with a content hash, schema version, timestamp, author, and parent-version link
+- [x] **SPEC-02**: Every Dataset Specification change produces a new immutable spec version with a content hash, schema version, timestamp, author, and parent-version link
 - [ ] **SPEC-03**: `klake dataset spec validate` checks schema validity and referential integrity (referenced sources/quality-contract/policy exist) before a spec can move a project to `ready`
 
 ### Usage Policy (POLICY)
@@ -154,11 +154,11 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROJ-01 | Phase 23 | Pending |
+| PROJ-01 | Phase 23 | Complete |
 | PROJ-02 | Phase 23 | Pending |
 | PROJ-03 | Phase 23 | Pending |
 | SPEC-01 | Phase 23 | Pending |
-| SPEC-02 | Phase 23 | Pending |
+| SPEC-02 | Phase 23 | Complete |
 | SPEC-03 | Phase 23 | Pending |
 | SURFACE-01 | Phase 23 | Pending |
 | SURFACE-02 | Phase 23 | Pending |
@@ -204,6 +204,7 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 **Enabling phase (no directly-owned requirement):** Phase 24 (Flagship Domain Pack Foundation) scaffolds the real non-healthcare corpus that FLAGSHIP-01/02 (Phase 32) build on — see ROADMAP.md Phase 24 for rationale.
 
 **Coverage:**
+
 - v1 requirements: 46 total (corrected from a stale "43 total" — a direct count of `**CATEGORY-NN**` markers under `## v1 Requirements` found 46 distinct IDs)
 - Mapped to phases: 46/46 (100%)
 - Unmapped: 0
