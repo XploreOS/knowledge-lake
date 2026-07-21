@@ -145,7 +145,16 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   5. `export_finetune_dataset("name")` (no version argument), called from CLI, API, MCP, and the existing Dagster asset, resolves via one named, tested "latest released" rule instead of an ambiguous row — verified against a Dataset Project carrying two spec versions.
   6. New CLI sub-Typer groups mirror the existing `domain_app` pattern, new API routes call `pipeline/*.py` directly with shared Pydantic schemas, and any new MCP tool is a thin shim with the `TOOLS` count assertion bumped in the same change — proven by the full existing CLI/API/MCP test suite still passing unchanged.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 23-01-PLAN.md — Schema foundation: DatasetProject/DatasetSpec models, migration 0012, ids.py prefixes (Wave 1)
+- [ ] 23-02-PLAN.md — pipeline/project.py core: create_project/get_project/list_projects/transition_project + IllegalProjectTransitionError (Wave 2)
+- [ ] 23-03-PLAN.md — Dataset Specification versioning: DatasetSpecFields, content hash, create_spec_version/get_latest_spec/validate_spec (Wave 3)
+- [ ] 23-04-PLAN.md — D-02 export identity fix: get_latest_released_dataset_by_name() + export_finetune_dataset() internal swap (Wave 4)
+- [ ] 23-05-PLAN.md — API surface: /projects, /projects/{id}/transition, /projects/{id}/specs, /specs/{id}/validate routes + schemas (Wave 4)
+- [ ] 23-06-PLAN.md — CLI surface: project_app (new/list/show/transition), dataset_app/spec_app (create/validate) (Wave 4)
+- [ ] 23-07-PLAN.md — MCP surface: project_list/project_show/spec_validate read tools, TOOLS count bump 11→14 (Wave 5)
 
 ### Phase 24: Flagship Domain Pack Foundation
 
@@ -287,7 +296,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
-| 23. Dataset Project + Specification Foundation | v2.7 | 0/TBD | Not started | - |
+| 23. Dataset Project + Specification Foundation | v2.7 | 0/7 | Planned | - |
 | 24. Flagship Domain Pack Foundation | v2.7 | 0/TBD | Not started | - |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |
