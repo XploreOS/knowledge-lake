@@ -25,7 +25,7 @@ import hashlib
 
 import orjson
 import structlog
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from knowledge_lake.config.settings import Settings, get_settings
@@ -56,13 +56,13 @@ class DatasetSpecFields(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    purpose: str
+    purpose: str = Field(max_length=4000)
     """Free-text statement of the dataset's purpose (SPEC-01)."""
 
-    dataset_type: str
+    dataset_type: str = Field(max_length=64)
     """Kind of dataset this spec produces (SPEC-01)."""
 
-    domain: str
+    domain: str = Field(max_length=100)
     """Domain pack name this spec scopes to (SPEC-01)."""
 
     included_sources: list[str] = []
@@ -76,17 +76,17 @@ class DatasetSpecFields(BaseModel):
     allowed_license_categories: list[str] = []
     """License categories permitted for sources included in this spec (SPEC-01)."""
 
-    usage_policy_ref: str | None = None
+    usage_policy_ref: str | None = Field(default=None, max_length=255)
     """D-01: forward reference to a Phase 25 Usage Policy — schema-validated
     (type only) in Phase 23; NOT existence-checked until Phase 25 lands,
     without a spec schema version bump."""
 
-    quality_contract_ref: str | None = None
+    quality_contract_ref: str | None = Field(default=None, max_length=255)
     """D-01: forward reference to a Phase 26 Quality Contract — schema-
     validated (type only) in Phase 23; NOT existence-checked until Phase 26
     lands, without a spec schema version bump."""
 
-    curation_engine: str | None = None
+    curation_engine: str | None = Field(default=None, max_length=255)
     """Curation engine identifier this spec requests (SPEC-01)."""
 
     generation_strategy: dict | None = None

@@ -23,7 +23,9 @@ Plan 12-03: SearchParams extended with all search() filter kwargs so the
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 # ── Request schemas ────────────────────────────────────────────────────────────
 
@@ -944,6 +946,14 @@ class ProjectTransitionRequest(BaseModel):
     )
 
 
+_MAX_SPEC_BYTES = 1_000_000
+"""WR-06: upper bound on SpecVersionCreate.spec's serialized size. Individual
+DatasetSpecFields string fields carry their own max_length bounds, but the
+untyped ``spec: dict`` body itself is otherwise unconstrained before it
+reaches that allow-list validation in pipeline.project.create_spec_version()
+— this cap rejects an oversized payload at the API boundary instead."""
+
+
 class SpecVersionCreate(BaseModel):
     """Request body for POST /projects/{id}/specs — create a new spec version (SPEC-01/02)."""
 
@@ -960,6 +970,18 @@ class SpecVersionCreate(BaseModel):
         max_length=255,
         description="Self-reported attribution string — NOT a verified/authenticated identity (Pitfall 4).",
     )
+
+    @field_validator("spec")
+    @classmethod
+    def _bound_spec_size(cls, value: dict) -> dict:
+        """WR-06: reject an oversized spec payload before it reaches storage."""
+        serialized_len = len(json.dumps(value))
+        if serialized_len > _MAX_SPEC_BYTES:
+            raise ValueError(
+                f"spec payload too large: {serialized_len} bytes exceeds the "
+                f"{_MAX_SPEC_BYTES}-byte limit"
+            )
+        return value
 
 
 class SpecVersionOut(BaseModel):
