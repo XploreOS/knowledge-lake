@@ -28,6 +28,10 @@ Functions:
     claim_dedup_ledger_entry        — atomically claim (collection, text_sha256) or return existing (DEDUP-01/02)
     get_dedup_ledger_entry          — pure lookup of a dedup ledger row (DEDUP-01)
     append_dedup_contributor        — append a contributor to a ledger row's contributors list (DEDUP-03)
+    create_project                  — register a new Dataset Project row (PROJ-01)
+    get_project_by_id               — fetch a Dataset Project by primary key (PROJ-01)
+    get_project_by_name             — fetch a Dataset Project by its unique name (PROJ-01)
+    list_projects                   — list Dataset Projects, created_at DESC / id DESC (PROJ-01)
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ from knowledge_lake.registry.models import (
     CrawlState,
     Dataset,
     DatasetExample,
+    DatasetProject,
     Job,
     LlmSpend,
     Source,
@@ -1577,3 +1582,109 @@ def list_dataset_examples_by_cache_key(
     # by list_curated_documents_by_dedup_status (line 1148).
     all_examples = list(session.execute(select(DatasetExample)).scalars())
     return [e for e in all_examples if (e.payload or {}).get("_cache_key") == cache_key][:1]
+
+
+# ── Dataset Project (PROJ-01..03) ───────────────────────────────────────────
+
+
+def create_project(
+    session: Session,
+    *,
+    name: str,
+    dataset_type: str,
+    description: str | None = None,
+    purpose: str | None = None,
+    intended_uses: list | None = None,
+    prohibited_uses: list | None = None,
+    domain: str | None = None,
+    owners: list | None = None,
+    id: str | None = None,
+) -> DatasetProject:
+    """Create a new DatasetProject row and add it to the session.
+
+    The caller is responsible for committing or flushing the session — mirrors
+    create_dataset()'s exact contract (no flush here).
+
+    Parameters
+    ----------
+    session:
+        Active SQLAlchemy session.
+    name:
+        Human-readable, unique Dataset Project name (uq_dataset_projects_name).
+    dataset_type:
+        Kind of dataset this project produces: 'rag_eval', 'instruction_tuning',
+        'pretraining', etc.
+    description:
+        Free-text description. None if omitted.
+    purpose:
+        Free-text statement of the project's purpose. None if omitted.
+    intended_uses:
+        List of free-text intended-use strings. Stored declaratively only —
+        nothing in this function enforces them against actual usage.
+    prohibited_uses:
+        List of free-text prohibited-use strings. Stored declaratively only —
+        nothing in this function (or anywhere in Phase 23) blocks an action
+        that violates a project's own stated prohibited_uses; enforcement
+        arrives via Phase 25's Usage Policy Engine.
+    domain:
+        Domain pack name this project scopes to, e.g. 'healthcare'.
+    owners:
+        List of free-text owner names/emails. Informational only.
+    id:
+        Row ID to use. Defaults to a freshly minted ``new_id("dataset_project")``.
+
+    Returns
+    -------
+    DatasetProject
+        The newly created (unsaved) DatasetProject instance, status='draft'.
+    """
+    project = DatasetProject(
+        id=id or new_id("dataset_project"),
+        name=name,
+        dataset_type=dataset_type,
+        description=description,
+        purpose=purpose,
+        intended_uses=intended_uses,
+        prohibited_uses=prohibited_uses,
+        domain=domain,
+        owners=owners,
+        status="draft",
+        created_at=datetime.datetime.now(datetime.UTC),
+    )
+    session.add(project)
+    return project
+
+
+def get_project_by_id(session: Session, project_id: str) -> DatasetProject | None:
+    """Return the DatasetProject matching ``project_id``, or None.
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = select(DatasetProject).where(DatasetProject.id == project_id).limit(1)
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def get_project_by_name(session: Session, name: str) -> DatasetProject | None:
+    """Return the DatasetProject matching ``name``, or None.
+
+    Uses the uq_dataset_projects_name unique index. No raw SQL — ORM select
+    (T-01-03).
+    """
+    stmt = select(DatasetProject).where(DatasetProject.name == name).limit(1)
+    return session.execute(stmt).scalar_one_or_none()
+
+
+def list_projects(session: Session) -> list[DatasetProject]:
+    """Return all DatasetProject rows, ordered by created_at DESC, id DESC.
+
+    The explicit ``id`` secondary sort is a deterministic tiebreak for rows
+    created within the same DB timestamp resolution — uuidv7 IDs are
+    time-sortable, so ``id DESC`` breaks ties in the same effective order
+    ``created_at`` would if it had more precision.
+
+    No raw SQL — ORM select (T-01-03).
+    """
+    stmt = select(DatasetProject).order_by(
+        DatasetProject.created_at.desc(), DatasetProject.id.desc()
+    )
+    return list(session.execute(stmt).scalars())
