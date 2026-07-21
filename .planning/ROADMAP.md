@@ -145,7 +145,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   5. `export_finetune_dataset("name")` (no version argument), called from CLI, API, MCP, and the existing Dagster asset, resolves via one named, tested "latest released" rule instead of an ambiguous row — verified against a Dataset Project carrying two spec versions.
   6. New CLI sub-Typer groups mirror the existing `domain_app` pattern, new API routes call `pipeline/*.py` directly with shared Pydantic schemas, and any new MCP tool is a thin shim with the `TOOLS` count assertion bumped in the same change — proven by the full existing CLI/API/MCP test suite still passing unchanged.
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
@@ -168,7 +168,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 23-07-PLAN.md — MCP surface: project_list/project_show/spec_validate read tools, TOOLS count bump 11→14 (Wave 5)
+- [x] 23-07-PLAN.md — MCP surface: project_list/project_show/spec_validate read tools, TOOLS count bump 11→14 (Wave 5)
 
 ### Phase 24: Flagship Domain Pack Foundation
 
@@ -310,7 +310,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
-| 23. Dataset Project + Specification Foundation | v2.7 | 6/7 | In Progress|  |
+| 23. Dataset Project + Specification Foundation | v2.7 | 7/7 | In Progress|  |
 | 24. Flagship Domain Pack Foundation | v2.7 | 0/TBD | Not started | - |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |
