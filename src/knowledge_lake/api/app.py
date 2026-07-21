@@ -61,11 +61,17 @@ from knowledge_lake.api.schemas import (
     LineageNode,
     ParseRequest,
     ParseResponse,
+    ProjectCreate,
+    ProjectOut,
+    ProjectTransitionRequest,
     ReindexResponse,
     SearchHit,
     SourceCreate,
     SourceListItem,
     SourceOut,
+    SpecValidateResponse,
+    SpecVersionCreate,
+    SpecVersionOut,
     UploadOut,
     WikiExportRequest,
     WikiExportResponse,
@@ -1669,3 +1675,214 @@ def list_domain_sources_endpoint(name: str) -> list[DomainSourceEntry]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return [s.model_dump() for s in loader.sources]
+
+
+# ── Dataset Project / Specification routes (PROJ-03, SPEC-03, SURFACE-02) ──────
+
+
+@app.post(
+    "/projects",
+    response_model=ProjectOut,
+    tags=["project"],
+    summary="Create a new Dataset Project (PROJ-01)",
+    status_code=200,
+)
+def create_project_endpoint(body: ProjectCreate) -> ProjectOut:
+    """Create a new Dataset Project in status='draft' (PROJ-01).
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import create_project
+
+    logger.info("api.projects.create", name=body.name, dataset_type=body.dataset_type)
+
+    try:
+        result = create_project(
+            name=body.name,
+            dataset_type=body.dataset_type,
+            description=body.description,
+            purpose=body.purpose,
+            intended_uses=body.intended_uses,
+            prohibited_uses=body.prohibited_uses,
+            domain=body.domain,
+            owners=body.owners,
+        )
+    except ValueError as exc:
+        logger.warning("api.projects.create.error", error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.projects.create.complete", project_id=result["id"])
+    return ProjectOut(**result)
+
+
+@app.get(
+    "/projects",
+    response_model=list[ProjectOut],
+    tags=["project"],
+    summary="List all Dataset Projects (PROJ-01)",
+    status_code=200,
+)
+def list_projects_endpoint() -> list[ProjectOut]:
+    """List all Dataset Projects, ordered created_at DESC, id DESC (PROJ-01).
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import list_projects
+
+    logger.info("api.projects.list")
+    result = list_projects()
+    logger.info("api.projects.list.complete", count=len(result))
+    return [ProjectOut(**p) for p in result]
+
+
+@app.get(
+    "/projects/{project_id}",
+    response_model=ProjectOut,
+    tags=["project"],
+    summary="Fetch a single Dataset Project by ID (PROJ-01)",
+    status_code=200,
+    responses={404: {"description": "Dataset Project not found"}},
+)
+def get_project_endpoint(project_id: str) -> ProjectOut:
+    """Fetch a single Dataset Project by ID (PROJ-01).
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import get_project
+
+    logger.info("api.projects.get", project_id=project_id)
+
+    try:
+        result = get_project(project_id)
+    except ValueError as exc:
+        logger.warning("api.projects.get.not_found", project_id=project_id, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    logger.info("api.projects.get.complete", project_id=project_id)
+    return ProjectOut(**result)
+
+
+@app.post(
+    "/projects/{project_id}/transition",
+    response_model=ProjectOut,
+    tags=["project"],
+    summary="Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04)",
+    status_code=200,
+    responses={
+        404: {"description": "Dataset Project not found"},
+        409: {"description": "Illegal lifecycle transition"},
+    },
+)
+def transition_project_endpoint(project_id: str, body: ProjectTransitionRequest) -> ProjectOut:
+    """Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04).
+
+    Guarded by the module-level _TRANSITIONS adjacency map — an illegal edge
+    raises IllegalProjectTransitionError, translated to HTTP 409 here. This is
+    the FIRST use of status_code=409 in this codebase (RESEARCH.md Pattern 4)
+    — a deliberate choice (409 = state conflict, distinct from 422's
+    "malformed input"), not an oversight or a copy of an existing pattern.
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import (
+        IllegalProjectTransitionError,
+        get_project,
+        transition_project,
+    )
+
+    logger.info("api.projects.transition", project_id=project_id, to_state=body.to_state)
+
+    try:
+        transition_project(project_id, body.to_state)
+    except IllegalProjectTransitionError as exc:
+        logger.warning(
+            "api.projects.transition.illegal",
+            project_id=project_id,
+            from_state=exc.from_state,
+            to_state=exc.to_state,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "illegal_transition",
+                "from_state": exc.from_state,
+                "to_state": exc.to_state,
+                "legal_next_states": exc.legal_next_states,
+            },
+        ) from exc
+    except ValueError as exc:
+        logger.warning("api.projects.transition.not_found", project_id=project_id, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    result = get_project(project_id)
+    logger.info("api.projects.transition.complete", project_id=project_id, status=result["status"])
+    return ProjectOut(**result)
+
+
+@app.post(
+    "/projects/{project_id}/specs",
+    response_model=SpecVersionOut,
+    tags=["project"],
+    summary="Create a new Dataset Specification version (SPEC-01/02)",
+    status_code=200,
+)
+def create_spec_version_endpoint(project_id: str, body: SpecVersionCreate) -> SpecVersionOut:
+    """Create a new immutable Dataset Specification version (SPEC-01/02).
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import create_spec_version
+
+    logger.info("api.specs.create", project_id=project_id, author=body.author)
+
+    try:
+        result = create_spec_version(project_id, body.spec, author=body.author)
+    except ValueError as exc:
+        logger.warning("api.specs.create.error", project_id=project_id, error=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    logger.info("api.specs.create.complete", project_id=project_id, spec_id=result["id"])
+    return SpecVersionOut(**result)
+
+
+@app.post(
+    "/specs/{spec_id}/validate",
+    response_model=SpecValidateResponse,
+    tags=["project"],
+    summary="Validate a Dataset Specification version's referential integrity (SPEC-03)",
+    status_code=200,
+    responses={404: {"description": "Dataset Specification version not found"}},
+)
+def validate_spec_endpoint(spec_id: str) -> SpecValidateResponse:
+    """Validate a Dataset Specification version's referential integrity (SPEC-03).
+
+    A validation failure (``valid: false``) is a normal 200 report, never
+    itself an HTTP error status (mirrors this milestone's structured-outcome
+    philosophy, QCON-02). Only an unknown ``spec_id`` raises, mapped to 404.
+
+    D-02 compliance:
+        Calls pipeline.project functions directly — no behavior re-implemented
+        (SURFACE-02).
+    """
+    from knowledge_lake.pipeline.project import validate_spec
+
+    logger.info("api.specs.validate", spec_id=spec_id)
+
+    try:
+        result = validate_spec(spec_id)
+    except ValueError as exc:
+        logger.warning("api.specs.validate.not_found", spec_id=spec_id, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    logger.info("api.specs.validate.complete", spec_id=spec_id, valid=result["valid"])
+    return SpecValidateResponse(**result)

@@ -1208,6 +1208,186 @@
         "title": "ParseResponse",
         "type": "object"
       },
+      "ProjectCreate": {
+        "description": "Request body for POST /projects \u2014 create a new Dataset Project (PROJ-01).",
+        "properties": {
+          "dataset_type": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Dataset Type",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "intended_uses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Intended Uses",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "owners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Owners",
+            "type": "array"
+          },
+          "prohibited_uses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Uses",
+            "type": "array"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          }
+        },
+        "required": [
+          "name",
+          "dataset_type"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "description": "Response body for Dataset Project routes (PROJ-01/02).",
+        "properties": {
+          "dataset_type": {
+            "title": "Dataset Type",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "intended_uses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Intended Uses",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owners": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Owners",
+            "type": "array"
+          },
+          "prohibited_uses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prohibited Uses",
+            "type": "array"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "dataset_type",
+          "status"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectTransitionRequest": {
+        "description": "Request body for POST /projects/{id}/transition (PROJ-02, D-04).",
+        "properties": {
+          "to_state": {
+            "description": "One of the 11 lifecycle states (PROJ-02).",
+            "pattern": "^(draft|configured|sources_pending|ready|processing|validating|review_required|releasable|released|failed|archived)$",
+            "title": "To State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_state"
+        ],
+        "title": "ProjectTransitionRequest",
+        "type": "object"
+      },
       "ReindexResponse": {
         "description": "Response body for POST /reindex \u2014 zero-downtime alias reindex result (INDEX-02).",
         "properties": {
@@ -1588,6 +1768,111 @@
           "is_new"
         ],
         "title": "SourceOut",
+        "type": "object"
+      },
+      "SpecValidateResponse": {
+        "description": "Response body for POST /specs/{id}/validate (SPEC-03).\n\nA validation failure is a normal 200 report (``valid: false``), never\nitself an HTTP error status (QCON-02 structured-outcome philosophy).",
+        "properties": {
+          "dataset_project_id": {
+            "title": "Dataset Project Id",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "spec_id": {
+            "title": "Spec Id",
+            "type": "string"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "spec_id",
+          "dataset_project_id",
+          "valid"
+        ],
+        "title": "SpecValidateResponse",
+        "type": "object"
+      },
+      "SpecVersionCreate": {
+        "description": "Request body for POST /projects/{id}/specs \u2014 create a new spec version (SPEC-01/02).",
+        "properties": {
+          "author": {
+            "description": "Self-reported attribution string \u2014 NOT a verified/authenticated identity (Pitfall 4).",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Author",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "description": "Parsed Dataset Specification fields (SPEC-01) \u2014 validated server-side against DatasetSpecFields' allow-list before storage.",
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "spec",
+          "author"
+        ],
+        "title": "SpecVersionCreate",
+        "type": "object"
+      },
+      "SpecVersionOut": {
+        "description": "Response body for Dataset Specification version routes (SPEC-01/02).",
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "dataset_project_id": {
+            "title": "Dataset Project Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "parent_spec_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Spec Id"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dataset_project_id",
+          "content_hash",
+          "schema_version",
+          "author",
+          "created_at"
+        ],
+        "title": "SpecVersionOut",
         "type": "object"
       },
       "UploadOut": {
@@ -2789,6 +3074,230 @@
         ]
       }
     },
+    "/projects": {
+      "get": {
+        "description": "List all Dataset Projects, ordered created_at DESC, id DESC (PROJ-01).\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "list_projects_endpoint_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectOut"
+                  },
+                  "title": "Response List Projects Endpoint Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List all Dataset Projects (PROJ-01)",
+        "tags": [
+          "project"
+        ]
+      },
+      "post": {
+        "description": "Create a new Dataset Project in status='draft' (PROJ-01).\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "create_project_endpoint_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a new Dataset Project (PROJ-01)",
+        "tags": [
+          "project"
+        ]
+      }
+    },
+    "/projects/{project_id}": {
+      "get": {
+        "description": "Fetch a single Dataset Project by ID (PROJ-01).\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "get_project_endpoint_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Dataset Project not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch a single Dataset Project by ID (PROJ-01)",
+        "tags": [
+          "project"
+        ]
+      }
+    },
+    "/projects/{project_id}/specs": {
+      "post": {
+        "description": "Create a new immutable Dataset Specification version (SPEC-01/02).\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "create_spec_version_endpoint_projects__project_id__specs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecVersionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecVersionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create a new Dataset Specification version (SPEC-01/02)",
+        "tags": [
+          "project"
+        ]
+      }
+    },
+    "/projects/{project_id}/transition": {
+      "post": {
+        "description": "Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04).\n\nGuarded by the module-level _TRANSITIONS adjacency map \u2014 an illegal edge\nraises IllegalProjectTransitionError, translated to HTTP 409 here. This is\nthe FIRST use of status_code=409 in this codebase (RESEARCH.md Pattern 4)\n\u2014 a deliberate choice (409 = state conflict, distinct from 422's\n\"malformed input\"), not an oversight or a copy of an existing pattern.\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "transition_project_endpoint_projects__project_id__transition_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Dataset Project not found"
+          },
+          "409": {
+            "description": "Illegal lifecycle transition"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transition a Dataset Project to a new lifecycle state (PROJ-02, D-04)",
+        "tags": [
+          "project"
+        ]
+      }
+    },
     "/reindex": {
       "post": {
         "description": "Reindex a Qdrant alias with zero search downtime (INDEX-02).\n\nCreates the next versioned physical collection, copies all existing points\ninto it via ``copy_all_points()``, then atomically repoints the alias.\nCalls ``pipeline.index.reindex_collection()`` \u2014 the same function the CLI\nuses (D-02). The prior physical collection is retained, never auto-dropped.\n\nWith ``refresh_payload=true``: re-derives payload fields (quality_score\nprecedence, domain, document_type, keywords, source metadata) from the\nregistry per point instead of copying verbatim (KL-06). Opt-in; default off.\n\nSecurity (ASVS V5):\n    - collection is validated against the same format guard as /search (WR-04).",
@@ -3278,6 +3787,52 @@
         "summary": "Get a single source by ID",
         "tags": [
           "registry"
+        ]
+      }
+    },
+    "/specs/{spec_id}/validate": {
+      "post": {
+        "description": "Validate a Dataset Specification version's referential integrity (SPEC-03).\n\nA validation failure (``valid: false``) is a normal 200 report, never\nitself an HTTP error status (mirrors this milestone's structured-outcome\nphilosophy, QCON-02). Only an unknown ``spec_id`` raises, mapped to 404.\n\nD-02 compliance:\n    Calls pipeline.project functions directly \u2014 no behavior re-implemented\n    (SURFACE-02).",
+        "operationId": "validate_spec_endpoint_specs__spec_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "spec_id",
+            "required": true,
+            "schema": {
+              "title": "Spec Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecValidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Dataset Specification version not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate a Dataset Specification version's referential integrity (SPEC-03)",
+        "tags": [
+          "project"
         ]
       }
     },

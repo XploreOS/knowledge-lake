@@ -889,6 +889,90 @@ class DomainLoadResponse(BaseModel):
     )
 
 
+# ── Dataset Project / Specification schemas (PROJ-03, SPEC-03, SURFACE-02) ──
+
+
+class ProjectCreate(BaseModel):
+    """Request body for POST /projects — create a new Dataset Project (PROJ-01)."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    dataset_type: str = Field(..., min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=4000)
+    purpose: str | None = Field(default=None, max_length=4000)
+    intended_uses: list[str] = Field(default_factory=list)
+    prohibited_uses: list[str] = Field(default_factory=list)
+    domain: str | None = Field(default=None, min_length=1, max_length=100)
+    owners: list[str] = Field(default_factory=list)
+
+
+class ProjectOut(BaseModel):
+    """Response body for Dataset Project routes (PROJ-01/02)."""
+
+    id: str
+    name: str
+    dataset_type: str
+    status: str
+    domain: str | None = None
+    description: str | None = None
+    purpose: str | None = None
+    intended_uses: list[str] = Field(default_factory=list)
+    prohibited_uses: list[str] = Field(default_factory=list)
+    owners: list[str] = Field(default_factory=list)
+
+
+class ProjectTransitionRequest(BaseModel):
+    """Request body for POST /projects/{id}/transition (PROJ-02, D-04)."""
+
+    to_state: str = Field(
+        ...,
+        pattern=r"^(draft|configured|sources_pending|ready|processing|validating|review_required|releasable|released|failed|archived)$",
+        description="One of the 11 lifecycle states (PROJ-02).",
+    )
+
+
+class SpecVersionCreate(BaseModel):
+    """Request body for POST /projects/{id}/specs — create a new spec version (SPEC-01/02)."""
+
+    spec: dict = Field(
+        ...,
+        description=(
+            "Parsed Dataset Specification fields (SPEC-01) — validated server-side "
+            "against DatasetSpecFields' allow-list before storage."
+        ),
+    )
+    author: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Self-reported attribution string — NOT a verified/authenticated identity (Pitfall 4).",
+    )
+
+
+class SpecVersionOut(BaseModel):
+    """Response body for Dataset Specification version routes (SPEC-01/02)."""
+
+    id: str
+    dataset_project_id: str
+    parent_spec_id: str | None = None
+    content_hash: str
+    schema_version: str
+    author: str
+    created_at: str
+
+
+class SpecValidateResponse(BaseModel):
+    """Response body for POST /specs/{id}/validate (SPEC-03).
+
+    A validation failure is a normal 200 report (``valid: false``), never
+    itself an HTTP error status (QCON-02 structured-outcome philosophy).
+    """
+
+    spec_id: str
+    dataset_project_id: str
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+
+
 # ── MCP tool input models (Plan 12-03, D-02 / SKILL-03 no-drift) ─────────────
 #
 # Each model is the single source of truth for one MCP tool's argument shape.
@@ -980,6 +1064,40 @@ class LineageInput(BaseModel):
         ...,
         description="Artifact ID to trace lineage for (type-prefixed UUIDv7, e.g. 'chk_...').",
         min_length=1,
+    )
+
+
+class ProjectListInput(BaseModel):
+    """MCP ``project_list`` tool input — maps to ``pipeline.project.list_projects()``.
+
+    ``list_projects()`` signature: list_projects(*, settings=None) — no
+    caller-supplied parameters, so this model has no fields.
+    """
+
+
+class ProjectShowInput(BaseModel):
+    """MCP ``project_show`` tool input — maps to ``pipeline.project.get_project()``.
+
+    ``get_project()`` signature: get_project(project_id, *, settings=None)
+    """
+
+    project_id: str = Field(
+        ...,
+        min_length=1,
+        description="Dataset Project ID to fetch (dpj_<uuidv7>).",
+    )
+
+
+class SpecValidateInput(BaseModel):
+    """MCP ``spec_validate`` tool input — maps to ``pipeline.project.validate_spec()``.
+
+    ``validate_spec()`` signature: validate_spec(spec_id, *, settings=None)
+    """
+
+    spec_id: str = Field(
+        ...,
+        min_length=1,
+        description="Dataset Specification version ID to validate (dsp_<uuidv7>).",
     )
 
 
