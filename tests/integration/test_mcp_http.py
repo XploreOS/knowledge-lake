@@ -10,8 +10,9 @@ localhost agent server:
       missing/wrong bearer returns 401 and one with the correct bearer does not;
       when ``token`` is unset no auth is required (D-10, T-12-04).
   (c) **Read-only posture over HTTP** — a server built from
-      ``registered_tools(readonly=True)`` lists only the 4 read tools over the
-      wire (search, list_sources, lineage, stats) — same tool set as stdio (D-11).
+      ``registered_tools(readonly=True)`` lists only the 7 read tools over the
+      wire (search, list_sources, lineage, stats, project_list, project_show,
+      spec_validate) — same tool set as stdio (D-11).
 
 Uses the import-guard pattern from test_api_new_endpoints.py:12-19 and the
 module-scoped ``TestClient`` fixture from :22-28.  Streamable HTTP (stateless)
@@ -51,8 +52,16 @@ _ACCEPT = {
 }
 _LIST_TOOLS_REQ = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 
-# The 4 read tools the read-only posture must expose (D-11).
-_READ_TOOLS = {"search", "list_sources", "lineage", "stats"}
+# The 7 read tools the read-only posture must expose (D-11).
+_READ_TOOLS = {
+    "search",
+    "list_sources",
+    "lineage",
+    "stats",
+    "project_list",
+    "project_show",
+    "spec_validate",
+}
 
 
 def _extract_result(resp) -> dict:  # noqa: ANN001
@@ -188,7 +197,7 @@ def test_bearer_middleware_uses_constant_time_compare() -> None:
 
 @pytest.mark.integration
 def test_readonly_lists_only_read_tools_over_http(mcp_http_client) -> None:
-    """A server built from registered_tools(readonly=True) exposes only 4 read tools."""
+    """A server built from registered_tools(readonly=True) exposes only 7 read tools."""
     resp = mcp_http_client.post(
         "/mcp", json=_LIST_TOOLS_REQ, headers={**_ACCEPT, "Host": _GOOD_HOST}
     )
