@@ -151,6 +151,23 @@ class IllegalProjectTransitionError(RuntimeError):
         )
 
 
+class ProjectNotFoundError(ValueError):
+    """Raised when a Dataset Project ID does not resolve to any row (PROJ-01).
+
+    A ``ValueError`` subclass (unlike ``IllegalProjectTransitionError``, which
+    is deliberately a ``RuntimeError``) so every existing ``except ValueError``
+    catcher in this codebase (CLI commands, agent/server.py's
+    ``_EXPECTED_ERRORS``) keeps working unchanged (WR-01 review fix). Callers
+    that need to distinguish "not found" (404) from "bad input" (422) — e.g.
+    ``create_spec_version_endpoint`` — should catch ``ProjectNotFoundError``
+    before the broader ``ValueError``.
+    """
+
+    def __init__(self, project_id: str) -> None:
+        self.project_id = project_id
+        super().__init__(f"Dataset Project not found: {project_id!r}")
+
+
 def create_project(
     *,
     name: str,
@@ -370,8 +387,11 @@ def create_spec_version(
         schema_version, author, created_at.
 
     Raises:
-        ValueError: If ``spec`` fails DatasetSpecFields validation, or if no
-            project exists with ``project_id``.
+        ValueError: If ``spec`` fails DatasetSpecFields validation.
+        ProjectNotFoundError: If no project exists with ``project_id`` (a
+            ``ValueError`` subclass — callers that need to distinguish
+            "not found" from "bad input" should catch
+            ``ProjectNotFoundError`` first).
     """
     _settings = settings or get_settings()
     try:
@@ -384,7 +404,7 @@ def create_spec_version(
     with get_session() as session:
         project = registry_repo.get_project_by_id(session, project_id)
         if project is None:
-            raise ValueError(f"Dataset Project not found: {project_id!r}")
+            raise ProjectNotFoundError(project_id)
 
         latest = registry_repo.get_latest_spec_version(session, project_id)
         if latest is not None and latest.content_hash == content_hash:

@@ -1833,6 +1833,7 @@ def transition_project_endpoint(project_id: str, body: ProjectTransitionRequest)
     tags=["project"],
     summary="Create a new Dataset Specification version (SPEC-01/02)",
     status_code=200,
+    responses={404: {"description": "Dataset Project not found"}},
 )
 def create_spec_version_endpoint(project_id: str, body: SpecVersionCreate) -> SpecVersionOut:
     """Create a new immutable Dataset Specification version (SPEC-01/02).
@@ -1841,12 +1842,15 @@ def create_spec_version_endpoint(project_id: str, body: SpecVersionCreate) -> Sp
         Calls pipeline.project functions directly — no behavior re-implemented
         (SURFACE-02).
     """
-    from knowledge_lake.pipeline.project import create_spec_version
+    from knowledge_lake.pipeline.project import ProjectNotFoundError, create_spec_version
 
     logger.info("api.specs.create", project_id=project_id, author=body.author)
 
     try:
         result = create_spec_version(project_id, body.spec, author=body.author)
+    except ProjectNotFoundError as exc:
+        logger.warning("api.specs.create.not_found", project_id=project_id, error=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         logger.warning("api.specs.create.error", project_id=project_id, error=str(exc))
         raise HTTPException(status_code=422, detail=str(exc)) from exc
