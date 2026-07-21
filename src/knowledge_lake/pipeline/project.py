@@ -423,3 +423,47 @@ def get_latest_spec(project_id: str, *, settings: Settings | None = None) -> dic
         if latest is None:
             return None
         return _spec_version_to_dict(latest)
+
+
+def validate_spec(spec_id: str, *, settings: Settings | None = None) -> dict:
+    """Validate a Dataset Specification version's referential integrity (SPEC-03).
+
+    Only ``included_sources``/``excluded_sources`` are existence-checked
+    against the live ``sources`` table this phase. ``quality_contract_ref``/
+    ``usage_policy_ref`` are validated structurally only (already enforced by
+    DatasetSpecFields's Pydantic type) — Phases 25/26 add referential
+    enforcement for those two WITHOUT a spec schema version bump (D-01).
+
+    Args:
+        spec_id: Dataset Specification version ID (``dsp_...``).
+        settings: Settings override (for testing).
+
+    Returns:
+        dict with keys: spec_id, dataset_project_id, valid (bool), errors
+        (list[str], one itemized "Source not found: <id>" entry per
+        unresolved reference — empty list when valid).
+
+    Raises:
+        ValueError: If no spec version exists with this ID.
+    """
+    _settings = settings or get_settings()
+    with get_session() as session:
+        spec_row = registry_repo.get_spec_by_id(session, spec_id)
+        if spec_row is None:
+            raise ValueError(f"Dataset Specification version not found: {spec_id!r}")
+
+        errors: list[str] = []
+        spec_dict = spec_row.spec
+        referenced_source_ids = spec_dict.get("included_sources", []) + spec_dict.get(
+            "excluded_sources", []
+        )
+        for source_id in referenced_source_ids:
+            if registry_repo.get_source(session, source_id) is None:
+                errors.append(f"Source not found: {source_id!r}")
+
+        return {
+            "spec_id": spec_row.id,
+            "dataset_project_id": spec_row.dataset_project_id,
+            "valid": len(errors) == 0,
+            "errors": errors,
+        }
