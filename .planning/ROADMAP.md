@@ -118,7 +118,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
 
 **Critical path:** 23 → 25/26 → 27 → 28 → 29 → 30 → 31 → 32. Phase 24 runs parallel to 25-28 once scaffolded.
 
-- [ ] **Phase 23: Dataset Project + Specification Foundation** - Dataset Project lifecycle state machine, versioned/hashed Dataset Specification, and the CLI/API/MCP surface convention established
+- [x] **Phase 23: Dataset Project + Specification Foundation** - Dataset Project lifecycle state machine, versioned/hashed Dataset Specification, and the CLI/API/MCP surface convention established (completed 2026-07-21)
 - [ ] **Phase 24: Flagship Domain Pack Foundation** - Real non-healthcare source corpus scaffolded and ingested so every later phase has genuine flagship data to build against
 - [ ] **Phase 25: Usage Policy Engine** - Deterministic 9-dimension per-source policy decisions, with the existing 34-source corpus grandfathered in report-only mode first
 - [ ] **Phase 26: Quality Contract** - Multi-level (source/document/chunk/example/split/release) rule evaluation with structured, auditable outcomes
@@ -310,7 +310,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
-| 23. Dataset Project + Specification Foundation | v2.7 | 7/7 | In Progress|  |
+| 23. Dataset Project + Specification Foundation | v2.7 | 7/7 | Complete    | 2026-07-21 |
 | 24. Flagship Domain Pack Foundation | v2.7 | 0/TBD | Not started | - |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |
