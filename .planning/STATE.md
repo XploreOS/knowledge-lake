@@ -5,15 +5,15 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 23
 current_phase_name: Dataset Project + Specification Foundation
 status: executing
-stopped_at: Completed 23-05-PLAN.md
-last_updated: "2026-07-21T10:44:48.203Z"
+stopped_at: Completed 23-06-PLAN.md
+last_updated: "2026-07-21T10:51:49.258Z"
 last_activity: 2026-07-21
 last_activity_desc: Phase 23 execution started
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 23 (Dataset Project + Specification Foundation) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-07-21 — Phase 23 execution started
 
-Progress: [███████░░░] 71%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -114,6 +114,7 @@ Progress: [███████░░░] 71%
 | Phase 23 P03 | 10min | 2 tasks | 3 files |
 | Phase 23 P04 | 10min | 2 tasks | 3 files |
 | Phase 23 P05 | 2min | 2 tasks | 4 files |
+| Phase 23 P06 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,8 @@ Progress: [███████░░░] 71%
 - [Phase ?]: 23-04: Integration test's two Dataset rows use distinct names (not identical, per plan's literal text) because datasets.name carries a real uq_datasets_name UNIQUE constraint — the resolution query itself filters on dataset_project_id only after the initial by-name lookup, so this still proves the exact latest-wins rule specified
 - [Phase ?]: Established SURFACE-02: new API routes call pipeline.project.* functions directly with zero duplicated business logic; introduced this codebase's first HTTP 409 for illegal lifecycle transitions (RESEARCH.md Pattern 4)
 - [Phase ?]: Proved validation-failure-as-200-report pattern (QCON-02): POST /specs/{id}/validate returns 200 with valid=false for a genuine validation failure, never an HTTP error status
+- [Phase ?]: 23-06: All six CLI commands (project new/list/show/transition, dataset spec create/validate) are thin shims calling pipeline.project.* directly with zero duplicated business logic — same functions Plan 23-05's API routes call
+- [Phase ?]: 23-06: dataset_app scaffolded now as an otherwise-empty group except for nested spec_app, per RESEARCH.md Open Question 2, so future phases add release/diff/curate-run subcommands without retrofitting a new top-level group
 
 ### Pending Todos
 
@@ -256,8 +259,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-21T10:44:48.191Z
-Stopped at: Completed 23-05-PLAN.md
+Last session: 2026-07-21T10:51:49.246Z
+Stopped at: Completed 23-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

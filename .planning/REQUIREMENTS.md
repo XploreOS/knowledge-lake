@@ -89,7 +89,7 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 
 ### CLI / API / MCP Surfaces (SURFACE)
 
-- [ ] **SURFACE-01**: New CLI command groups (`project`, `policy`, `dataset`) mirror the existing `domain` sub-Typer group pattern; every existing command remains unchanged and backward compatible
+- [x] **SURFACE-01**: New CLI command groups (`project`, `policy`, `dataset`) mirror the existing `domain` sub-Typer group pattern; every existing command remains unchanged and backward compatible
 - [x] **SURFACE-02**: New API routes reuse shared Pydantic schemas and call the same `pipeline/*.py` functions as the CLI — no duplicated business logic in route handlers
 - [ ] **SURFACE-03**: New MCP tools are thin shims over `pipeline/*.py` (never proxying REST); read tools are prioritized over mutating ones per governance-action risk; the hardcoded `TOOLS` count assertion is updated in the same change
 
@@ -160,7 +160,7 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 | SPEC-01 | Phase 23 | Complete |
 | SPEC-02 | Phase 23 | Complete |
 | SPEC-03 | Phase 23 | Complete |
-| SURFACE-01 | Phase 23 | Pending |
+| SURFACE-01 | Phase 23 | Complete |
 | SURFACE-02 | Phase 23 | Complete |
 | SURFACE-03 | Phase 23 | Pending |
 | POLICY-01 | Phase 25 | Pending |
