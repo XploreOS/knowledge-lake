@@ -410,6 +410,31 @@ class TestFinetune:
             f"Expected ≥1 skipped_dangling_lineage, got {result['skipped_dangling_lineage']}"
         )
 
+    def test_export_finetune_legacy_dataset_resolution_unchanged(self, session, source, engine):
+        """D-02 (Plan 23-04): get_latest_released_dataset_by_name() falls back
+        byte-identically to get_dataset_by_name() for a pre-v2.7 legacy
+        Dataset (dataset_project_id IS NULL) — proving the fallback branch is
+        genuinely exercised, not merely coincidentally correct."""
+        from knowledge_lake.registry import repo as registry_repo
+
+        self._seed_dataset_with_examples(session, source)
+
+        by_name = registry_repo.get_dataset_by_name(session, "test_finetune_ds")
+        latest_released = registry_repo.get_latest_released_dataset_by_name(
+            session, "test_finetune_ds"
+        )
+
+        assert by_name is not None
+        assert latest_released is not None
+        assert latest_released.id == by_name.id, (
+            f"Expected legacy-fallback resolution to match get_dataset_by_name() "
+            f"({by_name.id!r}), got {latest_released.id!r}"
+        )
+        assert latest_released.dataset_project_id is None, (
+            "Expected dataset_project_id is None, proving the legacy-fallback "
+            "branch (not the project-scoped branch) resolved this row"
+        )
+
 
 class TestRagCorpus:
     """EXPORT-01: RAG corpus → Parquet with column allow-list."""
