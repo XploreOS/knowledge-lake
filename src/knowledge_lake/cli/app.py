@@ -1788,6 +1788,14 @@ def cmd_spec_create(
         typer.echo(f"Error reading spec file: {exc}", err=True)
         raise typer.Exit(code=1) from exc
 
+    if not isinstance(spec_dict, dict):
+        typer.echo(
+            f"Error: {spec_path} did not parse to a mapping "
+            f"(got {type(spec_dict).__name__})",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
     from knowledge_lake.pipeline.project import create_spec_version
 
     try:
