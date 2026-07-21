@@ -1631,5 +1631,204 @@ def cmd_domain_new(
         )
 
 
+# ── Dataset Project + Specification management (PROJ-03, SPEC-01/03, SURFACE-01) ──
+
+project_app = typer.Typer(
+    name="project",
+    help="Create and manage Dataset Projects (PROJ-01..03).",
+    add_completion=False,
+)
+app.add_typer(project_app, name="project")
+
+
+@project_app.command(name="new")
+def cmd_project_new(
+    name: str = typer.Argument(..., help="Dataset Project name."),
+    dataset_type: str = typer.Option(
+        ..., "--dataset-type", "-t", help="Kind of dataset this project produces."
+    ),
+    description: str | None = typer.Option(
+        None, "--description", help="Free-text description."
+    ),
+    purpose: str | None = typer.Option(
+        None, "--purpose", help="Free-text statement of the project's purpose."
+    ),
+    domain: str | None = typer.Option(
+        None, "--domain", "-D", help="Domain pack name this project scopes to."
+    ),
+    intended_use: list[str] = typer.Option(
+        [], "--intended-use", help="Intended-use statement (repeatable)."
+    ),
+    prohibited_use: list[str] = typer.Option(
+        [], "--prohibited-use", help="Prohibited-use statement (repeatable)."
+    ),
+    owner: list[str] = typer.Option(
+        [], "--owner", help="Owner name/email (repeatable)."
+    ),
+) -> None:
+    """Create a new Dataset Project in status='draft'."""
+    from knowledge_lake.pipeline.project import create_project
+
+    try:
+        result = create_project(
+            name=name,
+            dataset_type=dataset_type,
+            description=description,
+            purpose=purpose,
+            domain=domain,
+            intended_uses=intended_use,
+            prohibited_uses=prohibited_use,
+            owners=owner,
+        )
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Created project {result['id']!r} in state {result['status']!r}")
+
+
+@project_app.command(name="list")
+def cmd_project_list(
+    as_json: bool = typer.Option(False, "--json", help="Print results as JSON."),
+) -> None:
+    """List all Dataset Projects."""
+    from knowledge_lake.pipeline.project import list_projects
+
+    results = list_projects()
+    if not results:
+        typer.echo("No projects found.")
+        return
+
+    if as_json:
+        typer.echo(json.dumps(results, default=str))
+        return
+
+    for p in results:
+        typer.echo(f"{p['id']}  {p['name']}  {p['status']}")
+
+
+@project_app.command(name="show")
+def cmd_project_show(
+    project_id: str = typer.Argument(..., help="Dataset Project ID."),
+    as_json: bool = typer.Option(False, "--json", help="Print result as JSON."),
+) -> None:
+    """Show full detail for a single Dataset Project."""
+    from knowledge_lake.pipeline.project import get_project
+
+    try:
+        result = get_project(project_id)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if as_json:
+        typer.echo(json.dumps(result, default=str))
+        return
+
+    for key, value in result.items():
+        typer.echo(f"{key}: {value}")
+
+
+@project_app.command(name="transition")
+def cmd_project_transition(
+    project_id: str = typer.Argument(..., help="Dataset Project ID."),
+    to_state: str = typer.Argument(..., help="Target lifecycle state."),
+) -> None:
+    """Transition a Dataset Project to a new lifecycle state."""
+    from knowledge_lake.pipeline.project import (
+        IllegalProjectTransitionError,
+        transition_project,
+    )
+
+    try:
+        result = transition_project(project_id, to_state)
+    except IllegalProjectTransitionError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Project {project_id} -> {result['status']}")
+
+
+dataset_app = typer.Typer(
+    name="dataset",
+    help="Manage Dataset Specifications and future dataset-lifecycle commands.",
+    add_completion=False,
+)
+app.add_typer(dataset_app, name="dataset")
+
+spec_app = typer.Typer(
+    name="spec",
+    help="Author and validate Dataset Specifications (SPEC-01..03).",
+    add_completion=False,
+)
+dataset_app.add_typer(spec_app, name="spec")
+
+
+@spec_app.command(name="create")
+def cmd_spec_create(
+    project_id: str = typer.Argument(..., help="Dataset Project ID."),
+    spec_path: Path = typer.Argument(
+        ..., help="Path to a YAML Dataset Specification file."
+    ),
+    author: str = typer.Option(
+        ...,
+        "--author",
+        help="Self-reported attribution string — not a verified identity.",
+    ),
+) -> None:
+    """Author a new Dataset Specification version from a YAML file."""
+    import yaml
+
+    try:
+        spec_dict = yaml.safe_load(spec_path.read_text())
+    except (yaml.YAMLError, OSError) as exc:
+        typer.echo(f"Error reading spec file: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    from knowledge_lake.pipeline.project import create_spec_version
+
+    try:
+        result = create_spec_version(project_id, spec_dict, author=author)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(
+        f"Spec version {result['id']!r} "
+        f"(content_hash={result['content_hash'][:12]}...) for project {project_id}"
+    )
+
+
+@spec_app.command(name="validate")
+def cmd_spec_validate(
+    project_id: str = typer.Argument(..., help="Dataset Project ID."),
+) -> None:
+    """Validate the latest Dataset Specification version for a project."""
+    from knowledge_lake.pipeline.project import get_latest_spec, validate_spec
+
+    try:
+        latest = get_latest_spec(project_id)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    if latest is None:
+        typer.echo(f"Error: no spec version exists for project {project_id!r}", err=True)
+        raise typer.Exit(code=1)
+
+    result = validate_spec(latest["id"])
+    if result["valid"]:
+        typer.echo(f"Spec {latest['id']!r} is valid.")
+        return
+
+    typer.echo(f"Spec {latest['id']!r} is INVALID:")
+    for e in result["errors"]:
+        typer.echo(f"  - {e}")
+    raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()
