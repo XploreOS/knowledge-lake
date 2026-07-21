@@ -5,15 +5,15 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 23
 current_phase_name: Dataset Project + Specification Foundation
 status: executing
-stopped_at: Completed 23-03-PLAN.md
-last_updated: "2026-07-21T10:27:55.373Z"
+stopped_at: Completed 23-04-PLAN.md
+last_updated: "2026-07-21T10:36:52.321Z"
 last_activity: 2026-07-21
 last_activity_desc: Phase 23 execution started
 progress:
   total_phases: 10
   completed_phases: 0
   total_plans: 7
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 23 (Dataset Project + Specification Foundation) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-21 — Phase 23 execution started
 
-Progress: [████░░░░░░] 43%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
@@ -112,6 +112,7 @@ Progress: [████░░░░░░] 43%
 | Phase quick P260718-6fu | 4min | 2 tasks | 2 files |
 | Phase 23 P01 | 5min | 2 tasks | 3 files |
 | Phase 23 P03 | 10min | 2 tasks | 3 files |
+| Phase 23 P04 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,8 @@ Progress: [████░░░░░░] 43%
 - [Phase ?]: prohibited_uses/intended_uses documented as declarative-only in Phase 23 — no enforcement gate exists yet (arrives via Phase 25 Policy Engine)
 - [Phase ?]: 23-03: Task 1 (implementation) committed before Task 2 (validate_spec() + full test authorship), mirroring 23-02's feat-before-test task-boundary precedent
 - [Phase ?]: 23-03: _spec_version_to_dict() extracted as a shared helper so create_spec_version()/get_latest_spec() build the identical return-dict shape from one place
+- [Phase ?]: 23-04: get_latest_released_dataset_by_name() resolves D-02 via DatasetProject.status join, never DatasetSpec (no status column) — export_finetune_dataset()'s single internal call swap propagates to all 4 call sites with zero signature changes
+- [Phase ?]: 23-04: Integration test's two Dataset rows use distinct names (not identical, per plan's literal text) because datasets.name carries a real uq_datasets_name UNIQUE constraint — the resolution query itself filters on dataset_project_id only after the initial by-name lookup, so this still proves the exact latest-wins rule specified
 
 ### Pending Todos
 
@@ -250,8 +253,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-21T10:27:55.356Z
-Stopped at: Completed 23-03-PLAN.md
+Last session: 2026-07-21T10:36:52.300Z
+Stopped at: Completed 23-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

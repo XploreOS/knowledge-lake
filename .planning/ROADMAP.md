@@ -145,7 +145,7 @@ Full archive: [.planning/milestones/v1.0-ROADMAP.md](.planning/milestones/v1.0-R
   5. `export_finetune_dataset("name")` (no version argument), called from CLI, API, MCP, and the existing Dagster asset, resolves via one named, tested "latest released" rule instead of an ambiguous row — verified against a Dataset Project carrying two spec versions.
   6. New CLI sub-Typer groups mirror the existing `domain_app` pattern, new API routes call `pipeline/*.py` directly with shared Pydantic schemas, and any new MCP tool is a thin shim with the `TOOLS` count assertion bumped in the same change — proven by the full existing CLI/API/MCP test suite still passing unchanged.
 
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -162,7 +162,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 23-04-PLAN.md — D-02 export identity fix: get_latest_released_dataset_by_name() + export_finetune_dataset() internal swap (Wave 4)
+- [x] 23-04-PLAN.md — D-02 export identity fix: get_latest_released_dataset_by_name() + export_finetune_dataset() internal swap (Wave 4)
 - [ ] 23-05-PLAN.md — API surface: /projects, /projects/{id}/transition, /projects/{id}/specs, /specs/{id}/validate routes + schemas (Wave 4)
 - [ ] 23-06-PLAN.md — CLI surface: project_app (new/list/show/transition), dataset_app/spec_app (create/validate) (Wave 4)
 
@@ -310,7 +310,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 7-12 | v2.0 Agent-Ready Lake | 38/38 | ✅ Shipped | 2026-07-12 |
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
-| 23. Dataset Project + Specification Foundation | v2.7 | 3/7 | In Progress|  |
+| 23. Dataset Project + Specification Foundation | v2.7 | 4/7 | In Progress|  |
 | 24. Flagship Domain Pack Foundation | v2.7 | 0/TBD | Not started | - |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |

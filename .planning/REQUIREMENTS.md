@@ -11,7 +11,7 @@ Requirements for milestone v2.7. Each maps to roadmap phases (Phase 23+).
 ### Dataset Project (PROJ)
 
 - [x] **PROJ-01**: User can create a Dataset Project (name, description, purpose, intended/prohibited uses, dataset_type, domain pack, owners)
-- [ ] **PROJ-02**: Dataset Project enforces its defined lifecycle (draft → configured → sources_pending → ready → processing → validating → review_required → releasable → released → failed → archived) with guarded transitions — illegal transitions rejected with a clear error
+- [x] **PROJ-02**: Dataset Project enforces its defined lifecycle (draft → configured → sources_pending → ready → processing → validating → review_required → releasable → released → failed → archived) with guarded transitions — illegal transitions rejected with a clear error
 - [ ] **PROJ-03**: User can list/show Dataset Projects and transition their state via CLI (`klake project new/list/show/transition`) and API
 
 ### Dataset Specification (SPEC)
@@ -155,7 +155,7 @@ Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROJ-01 | Phase 23 | Complete |
-| PROJ-02 | Phase 23 | Pending |
+| PROJ-02 | Phase 23 | Complete |
 | PROJ-03 | Phase 23 | Pending |
 | SPEC-01 | Phase 23 | Complete |
 | SPEC-02 | Phase 23 | Complete |
