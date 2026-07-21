@@ -150,33 +150,64 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated during roadmap creation (`/gsd-roadmapper`, 2026-07-21).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROJ-01..03 | TBD | Pending |
-| SPEC-01..03 | TBD | Pending |
-| POLICY-01..05 | TBD | Pending |
-| QCON-01..03 | TBD | Pending |
-| PART-01..03 | TBD | Pending |
-| CENGINE-01..02 | TBD | Pending |
-| DTROVE-01..02 | TBD | Pending |
-| CAND-01..03 | TBD | Pending |
-| SPLIT-01..02 | TBD | Pending |
-| REL-01..05 | TBD | Pending |
-| REPRO-01..02 | TBD | Pending |
-| DIFF-01 | TBD | Pending |
-| LINEAGE-01 | TBD | Pending |
-| EVALRUN-01..02 | TBD | Pending |
-| SURFACE-01..03 | TBD | Pending |
-| SEC-01..04 | TBD | Pending |
-| FLAGSHIP-01..02 | TBD | Pending |
+| PROJ-01 | Phase 23 | Pending |
+| PROJ-02 | Phase 23 | Pending |
+| PROJ-03 | Phase 23 | Pending |
+| SPEC-01 | Phase 23 | Pending |
+| SPEC-02 | Phase 23 | Pending |
+| SPEC-03 | Phase 23 | Pending |
+| SURFACE-01 | Phase 23 | Pending |
+| SURFACE-02 | Phase 23 | Pending |
+| SURFACE-03 | Phase 23 | Pending |
+| POLICY-01 | Phase 25 | Pending |
+| POLICY-02 | Phase 25 | Pending |
+| POLICY-03 | Phase 25 | Pending |
+| POLICY-04 | Phase 25 | Pending |
+| POLICY-05 | Phase 25 | Pending |
+| QCON-01 | Phase 26 | Pending |
+| QCON-02 | Phase 26 | Pending |
+| QCON-03 | Phase 26 | Pending |
+| CENGINE-01 | Phase 27 | Pending |
+| CENGINE-02 | Phase 27 | Pending |
+| DTROVE-01 | Phase 27 | Pending |
+| DTROVE-02 | Phase 27 | Pending |
+| PART-01 | Phase 27 | Pending |
+| PART-02 | Phase 27 | Pending |
+| PART-03 | Phase 27 | Pending |
+| SEC-04 | Phase 27 | Pending |
+| CAND-01 | Phase 28 | Pending |
+| CAND-02 | Phase 28 | Pending |
+| CAND-03 | Phase 28 | Pending |
+| SEC-03 | Phase 28 | Pending |
+| SPLIT-01 | Phase 29 | Pending |
+| SPLIT-02 | Phase 29 | Pending |
+| REL-01 | Phase 30 | Pending |
+| REL-02 | Phase 30 | Pending |
+| REL-03 | Phase 30 | Pending |
+| REL-04 | Phase 30 | Pending |
+| REL-05 | Phase 30 | Pending |
+| REPRO-01 | Phase 30 | Pending |
+| REPRO-02 | Phase 30 | Pending |
+| SEC-01 | Phase 30 | Pending |
+| SEC-02 | Phase 30 | Pending |
+| EVALRUN-01 | Phase 31 | Pending |
+| EVALRUN-02 | Phase 31 | Pending |
+| DIFF-01 | Phase 31 | Pending |
+| LINEAGE-01 | Phase 31 | Pending |
+| FLAGSHIP-01 | Phase 32 | Pending |
+| FLAGSHIP-02 | Phase 32 | Pending |
+
+**Enabling phase (no directly-owned requirement):** Phase 24 (Flagship Domain Pack Foundation) scaffolds the real non-healthcare corpus that FLAGSHIP-01/02 (Phase 32) build on — see ROADMAP.md Phase 24 for rationale.
 
 **Coverage:**
-- v1 requirements: 43 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 43 ⚠️ (resolved by `/gsd-roadmapper` next)
+- v1 requirements: 46 total (corrected from a stale "43 total" — a direct count of `**CATEGORY-NN**` markers under `## v1 Requirements` found 46 distinct IDs)
+- Mapped to phases: 46/46 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-21*
-*Last updated: 2026-07-21 after v2.7 milestone research (STACK/FEATURES/ARCHITECTURE/PITFALLS/SUMMARY)*
+*Last updated: 2026-07-21 after v2.7 roadmap creation — 46/46 v1 requirements mapped to Phases 23-32, coverage corrected from stale "43 total"*

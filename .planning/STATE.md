@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.7
 milestone_name: Governed Dataset Production and Release Lifecycle
 status: planning
-last_updated: "2026-07-19T11:02:42.091Z"
-last_activity: 2026-07-19
+last_updated: "2026-07-21T12:00:00.000Z"
+last_activity: 2026-07-21
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-18)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** v2.6 (Data Quality & Enrichment) shipped and archived 2026-07-18. Awaiting `/gsd-new-milestone` to begin the next cycle.
+**Current focus:** v2.7 (Governed Dataset Production and Release Lifecycle) roadmap created — 10 phases (23-32), 46/46 v1 requirements mapped. Awaiting `/gsd-plan-phase 23` to begin.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 23 of 32 (Dataset Project + Specification Foundation)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-19 — Milestone v2.7 started
+Status: Ready to plan
+Last activity: 2026-07-21 — Roadmap created for v2.7 (10 phases, 46 requirements mapped, 100% coverage)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -116,6 +118,11 @@ Last activity: 2026-07-19 — Milestone v2.7 started
 | D-3 | Dedup at index time (after L3) | Dedup before substance gate makes BM25 worse (IDF inversion); most duplicates are boilerplate removed by L3 anyway | 2026-07-15 |
 | D-4 | No FilterPlugin seam | DataTrove called directly (precedent: `curate.py:119`); variability is by domain not tool — use domain-pack rail | 2026-07-15 |
 | D-5 | 30-char floor rejected | Wrong unit (token-based system), wrong target (kills ICD codes, dosage instructions); use composite predicate with domain allowlist | 2026-07-15 |
+| D-6 | v2.7 roadmap: 46 not 43 requirements | REQUIREMENTS.md footer said "43 total" but a direct count of `**CATEGORY-NN**` markers under `## v1 Requirements` found 46 distinct IDs; footer was stale. All 46 mapped, traceability corrected. | 2026-07-21 |
+| D-7 | v2.7 roadmap: 10 phases (23-32), not the research's 11 | Merged research's separate "Validation Run/Result" phase into Phase 28 (no dedicated REQ category — QCON-02 already defines the structured outcome shape); merged reproducibility manifest into the Release phase (REL-03 already lists `reproduce.yaml` as a bundle file, so splitting REPRO into a later phase would leave Phase 30 unable to satisfy its own manifest-bundle criterion) | 2026-07-21 |
+| D-8 | Flagship domain pack split into two roadmap touches | Phase 24 (early, no owned requirement) scaffolds real non-healthcare data for every later phase to build against; Phase 32 (last) formally owns FLAGSHIP-01/02 once Release + Lineage Explorer exist — matches PITFALLS.md Pitfall 9's "surface the healthcare-only tuning gap early" guidance without violating single-requirement-per-phase ownership | 2026-07-21 |
+| D-9 | SURFACE-01/02/03 mapped to Phase 23 only | These are structural CLI/API/MCP conventions (mirror domain sub-Typer pattern, schema reuse, thin MCP shims), proven once with the first new surface and then followed by every later phase as part of THAT phase's own feature requirement (e.g. POLICY-05, DIFF-01 already specify their own CLI/API delivery) — not re-claimed per phase | 2026-07-21 |
+| D-10 | SEC-01..04 distributed, not centralized | SEC-04 (dependency pinning) → Phase 27 (DataTrove backend); SEC-03 (secrets redaction + prompt-injection boundary) → Phase 28 (first LLM-as-judge validator); SEC-01/02 (release immutability trigger, public/private mode) → Phase 30 (where release cutting happens) | 2026-07-21 |
 
 - [Phase ?]: Split plan's two tightly-coupled tasks (WR-05 hash + parsed_doc forwarding vs conservation invariant) into 4 TDD commits instead of 1 combined commit, while still shipping CLEAN-01/CLEAN-03 together in Task 1 per RESEARCH.md Pitfall 1
 - [Phase ?]: Task 2 (tdd=true) proves behavior Task 1 already implemented — test passed on first run by plan design, not a stale/no-op test (see 17-02-SUMMARY.md TDD Gate Compliance)
@@ -166,13 +173,13 @@ None yet.
 
 ### Blockers/Concerns
 
-**Open — carried forward into next milestone:**
+**Open — carried forward into v2.7:**
 
 - [Tech debt, CR-01]: MCP `_search_handler` uses `hasattr(h, "_asdict")`, always False for dataclasses — crashes on non-empty results. Needs `dataclasses.asdict(h)`. **MCP search is unusable in production until fixed.**
 - [Tech debt, CR-02]: `mode` param dual-semantics — `?mode=hybrid&route=tree` passes API validation but reaches `tree_search()` with an invalid value; needs a split into `mode`/`tree_mode`.
 - [Tech debt]: Domain path-traversal regex has 3 independent copies (`domains/loader.py`, `api/app.py`, `pipeline/domains.py`) — if one drifts, the guards diverge.
 - [Tech debt]: `sources.config["domain"]` is still dual-written alongside the new column — remove the dual-write.
-- [Tech debt, KL-16]: Domain packs cannot contribute Dagster jobs without editing framework source. Only the misleading `healthcare_e2e_job` name was fixed.
+- [Tech debt, KL-16]: Domain packs cannot contribute Dagster jobs without editing framework source. v2.7's PITFALLS.md research confirms this stays deferred unless the flagship pack (Phase 24/32) needs a genuinely distinct Dagster schedule/sensor, not just parameterized asset behavior.
 - [Tech debt]: `st_embedder.py` uses a module constant `_LITELLM_ALIAS` rather than settings — an alias not a provider ID, so the LLM-gateway constraint holds, but it is the one alias that isn't configurable.
 - [Phase 13]: PageIndex pinned to pre-release `0.3.0.dev3` — API may change; vendoring fallback plan exists but is untested.
 - [Phase 14]: Tree traversal prompt quality unvalidated — no ground-truth benchmarks for the healthcare domain.
@@ -187,6 +194,8 @@ None yet.
 - Keep the Docker base pinned to `.python-version`. A `python:3.14-slim` base that could not build left a 13-day-old image silently serving, which is why the 500s stayed invisible. `/health` now reports the running version.
 - Dagster code-location reload is required after `definitions.py` changes for new assets/sensors to appear in the live daemon.
 - `docs/openapi.json` must be regenerated after adding any API endpoint (determinism gate: `test_openapi_export.py`).
+- `Dataset.name` is `UNIQUE` and mutated in place by `update_dataset_export()`; `export_finetune_dataset(dataset_name)` is called unversioned from CLI, REST, MCP, and a Dagster asset today — Phase 23 must update all four call sites in the same commit that introduces spec versioning (PITFALLS.md Pitfall 2).
+- `license_type="unknown"` is the unenforced default at every existing source-creation call site — Phase 25's policy gate must ship its grandfather/backfill report before enforcing anything, or it fails closed on nearly the entire existing 34-source corpus (PITFALLS.md Pitfall 3).
 
 **Resolved in v2.5 (2026-07-15):** E2E gap analysis CLOSED — all 19 findings resolved (see `.planning/milestones/v2.5-E2E-GAP-ANALYSIS.md`). Includes KL-18 (three endpoints returning 500 via `DetachedInstanceError`), the Dockerfile landmine, and parse section persistence (the section-less path was collapsing 38 sections into 1 chunk; now 51 per-section chunks, ~30x faster). Suite: 971 passed, 0 failed.
 
@@ -207,6 +216,7 @@ None yet.
 ### Roadmap Evolution
 
 - Phase 22 added: Address tech debt: measure garbage/junk rates end-to-end, reconcile Nyquist validation
+- v2.7 roadmap created (2026-07-21): 10 phases (23-32) derived from 46 v1 requirements (46/46 mapped, 100% coverage — REQUIREMENTS.md's stale "43 total" footer corrected). Phase 24 (Flagship Domain Pack Foundation) intentionally carries zero directly-owned requirements — it is infrastructure scaffolded early per PITFALLS.md Pitfall 9, formally completed by Phase 32.
 
 ## Deferred Items
 
@@ -221,13 +231,19 @@ Items acknowledged and carried forward:
 | Enhanced Routing | ROUTE-05/06 (LLM routing, telemetry) | Deferred | v2.5 planning |
 | OpenKB Advanced | KB-06/07/08 (watch mode, lint, chat) | Deferred | v2.5 planning |
 | Tree Enhancements | TREE-06/07 (schema versioning, meta-tree) | Deferred | v2.5 planning |
+| Curation Engines | CENGINE-03 (second CurationEngine backend) | Deferred | v2.7 planning |
+| Evaluation Depth | EVALRUN-03 (full RAGAS/RAG-FiT integration) | Deferred | v2.7 planning |
+| Contamination Depth | SPLIT-03 (embedding + LLM-judge decontamination) | Deferred | v2.7 planning |
+| Interop | DIFF-02 (Croissant JSON-LD export) | Deferred | v2.7 planning |
+| Domain Expansion | DOMAIN-07 (domain-pack-owned Dagster jobs, KL-16) | Deferred | v2.7 planning |
 
 ## Session Continuity
 
-Last session: 2026-07-18T04:42:56.078Z
-Stopped at: Completed 260718-6fu quick task: fix CI lint failure ruff I001
+Last session: 2026-07-21T12:00:00.000Z
+Stopped at: v2.7 ROADMAP.md and STATE.md created by /gsd-roadmapper (10 phases, 23-32)
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review the v2.7 roadmap draft (.planning/ROADMAP.md) and approve or request revisions
+- Once approved, run `/gsd-plan-phase 23` to begin Phase 23 (Dataset Project + Specification Foundation)
