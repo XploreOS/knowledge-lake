@@ -214,9 +214,14 @@ def create_project(
         dict with keys: id, name, dataset_type, status, domain.
 
     Raises:
-        ValueError: If a project with this name already exists
-            (uq_dataset_projects_name).
+        ValueError: If ``name`` is empty/whitespace-only (WR-07 review fix —
+            mirrors ``ProjectCreate.name``'s ``min_length=1`` API-boundary
+            guarantee so the CLI surface cannot bypass it), or if a project
+            with this name already exists (uq_dataset_projects_name).
     """
+    if not name or not name.strip():
+        raise ValueError("Dataset Project name must not be empty")
+
     # Settings-driven convention (Pattern 1) — no sub-config to read yet, kept
     # for parity with the rest of pipeline/*.py and future extension.
     _settings = settings or get_settings()
