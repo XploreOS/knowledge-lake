@@ -918,6 +918,8 @@ class ProjectOut(BaseModel):
     intended_uses: list[str] = Field(default_factory=list)
     prohibited_uses: list[str] = Field(default_factory=list)
     owners: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class ProjectTransitionRequest(BaseModel):

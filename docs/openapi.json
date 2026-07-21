@@ -1292,6 +1292,17 @@
       "ProjectOut": {
         "description": "Response body for Dataset Project routes (PROJ-01/02).",
         "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
           "dataset_type": {
             "title": "Dataset Type",
             "type": "string"
@@ -1361,6 +1372,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
@@ -3221,6 +3243,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "404": {
+            "description": "Dataset Project not found"
           },
           "422": {
             "content": {

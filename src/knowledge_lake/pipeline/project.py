@@ -245,7 +245,10 @@ def get_project(project_id: str, *, settings: Settings | None = None) -> dict:
 
     Returns:
         Full detail dict: id, name, dataset_type, status, domain, description,
-        purpose, intended_uses, prohibited_uses, owners, created_at, updated_at.
+        purpose, intended_uses, prohibited_uses, owners, created_at, updated_at
+        (the latter two as ISO-8601 strings, mirroring
+        ``_spec_version_to_dict``'s convention, so ``ProjectOut`` can declare
+        them as plain ``str`` fields — WR-04 review fix).
 
     Raises:
         ValueError: If no project exists with this ID.
@@ -265,8 +268,8 @@ def get_project(project_id: str, *, settings: Settings | None = None) -> dict:
             "intended_uses": project.intended_uses,
             "prohibited_uses": project.prohibited_uses,
             "owners": project.owners,
-            "created_at": project.created_at,
-            "updated_at": project.updated_at,
+            "created_at": project.created_at.isoformat(),
+            "updated_at": project.updated_at.isoformat(),
         }
 
 
