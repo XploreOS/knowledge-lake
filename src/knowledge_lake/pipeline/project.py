@@ -435,10 +435,18 @@ def get_latest_spec(project_id: str, *, settings: Settings | None = None) -> dic
 
     Returns:
         dict in the same shape create_spec_version() returns, or None if the
-        project has zero spec versions.
+        project exists but has zero spec versions.
+
+    Raises:
+        ProjectNotFoundError: If no project exists with this ID (a
+            ``ValueError`` subclass, consistent with get_project()/
+            transition_project()/create_spec_version() — WR-02 review fix).
     """
     _settings = settings or get_settings()
     with get_session() as session:
+        project = registry_repo.get_project_by_id(session, project_id)
+        if project is None:
+            raise ProjectNotFoundError(project_id)
         latest = registry_repo.get_latest_spec_version(session, project_id)
         if latest is None:
             return None
