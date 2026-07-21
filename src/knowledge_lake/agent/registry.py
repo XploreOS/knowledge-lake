@@ -1,19 +1,20 @@
 """MCP tool registry: ToolDef + TOOLS + registered_tools (D-01, D-11, MCP-01).
 
-This module is the **single source of truth** for all 11 Knowledge Lake MCP
+This module is the **single source of truth** for all 14 Knowledge Lake MCP
 tools.  Every surface (stdio, HTTP, OpenAI defs) reads from ``TOOLS`` so that
 ``stdio == http`` by construction.
 
 Design contract (from PLAN 12-05 must_haves):
 
-D-01: ``TOOLS`` is a module-level list of 11 ``ToolDef`` entries.  No other
+D-01: ``TOOLS`` is a module-level list of 14 ``ToolDef`` entries.  No other
       file builds tool schemas — everyone reads from here.
 
 D-03: Each ``ToolDef.handler`` is a callable imported from ``pipeline/*.py``
       (or ``lineage.resolve_ancestry``), **never** from ``api.app``.  REST
       and MCP are siblings over the same pipeline functions.
 
-D-11: Read tools = {search, list_sources, lineage, stats}.
+D-11: Read tools = {search, list_sources, lineage, stats, project_list,
+      project_show, spec_validate}.
       Write tools = all other seven.
 
 The ``registered_tools(readonly)`` helper returns the pre-filtered list so
@@ -82,10 +83,14 @@ from knowledge_lake.api.schemas import (  # noqa: E402
     ListSourcesInput,
     # Process
     ProcessCrawledInput,
+    # Project
+    ProjectListInput,
+    ProjectShowInput,
     # Search & lineage
     SearchParams,
     # Source management
     SourceCreate,
+    SpecValidateInput,
     # Query (MCP-only models, no prior request schema)
     StatsInput,
 )
@@ -101,6 +106,11 @@ from knowledge_lake.pipeline.export import (  # noqa: E402
 # Write handlers
 from knowledge_lake.pipeline.ingest import ingest_url, register_source  # noqa: E402
 from knowledge_lake.pipeline.process import process_crawled  # noqa: E402
+from knowledge_lake.pipeline.project import (  # noqa: E402
+    get_project,
+    list_projects,
+    validate_spec,
+)
 from knowledge_lake.pipeline.query import list_sources, stats  # noqa: E402
 from knowledge_lake.pipeline.route import routed_search  # noqa: E402
 
@@ -238,9 +248,24 @@ def _export_handler(kind: str, dataset_name: str | None = None) -> dict:
     return _export_dispatch(kind=kind, dataset_name=dataset_name)
 
 
+def _project_list_handler() -> list:
+    """Thin shim: maps ProjectListInput (no fields) to list_projects()."""
+    return list_projects()
+
+
+def _project_show_handler(project_id: str) -> dict:
+    """Thin shim: maps ProjectShowInput.project_id to get_project()."""
+    return get_project(project_id)
+
+
+def _spec_validate_handler(spec_id: str) -> dict:
+    """Thin shim: maps SpecValidateInput.spec_id to validate_spec()."""
+    return validate_spec(spec_id)
+
+
 # ---------------------------------------------------------------------------
-# TOOLS — the 11-entry single source of truth (D-11).
-# Order: 4 read tools first, then 7 write tools.
+# TOOLS — the 14-entry single source of truth (D-11).
+# Order: 7 read tools first, then 7 write tools.
 # ---------------------------------------------------------------------------
 
 TOOLS: list[ToolDef] = [
@@ -292,6 +317,42 @@ TOOLS: list[ToolDef] = [
         ),
         input_model=StatsInput,
         handler=stats,
+        access="read",
+    ),
+    # All 3 read-only — propagate only ValueError/LookupError, already covered
+    # by agent/server.py's _EXPECTED_ERRORS. IllegalProjectTransitionError does
+    # NOT cross this MCP boundary this phase (D-05; Pitfall 2) — a future
+    # project_transition MCP tool needs its own except clause there.
+    ToolDef(
+        name="project_list",
+        description=(
+            "List all Dataset Projects in the knowledge lake registry, with "
+            "their current lifecycle state (PROJ-03)."
+        ),
+        input_model=ProjectListInput,
+        handler=_project_list_handler,
+        access="read",
+    ),
+    ToolDef(
+        name="project_show",
+        description=(
+            "Show full detail for one Dataset Project by ID, including its "
+            "current lifecycle state (PROJ-03)."
+        ),
+        input_model=ProjectShowInput,
+        handler=_project_show_handler,
+        access="read",
+    ),
+    ToolDef(
+        name="spec_validate",
+        description=(
+            "Validate a Dataset Specification version's referential integrity — "
+            "checks that every referenced source exists (SPEC-03). Returns a "
+            "structured valid/errors report, never an error status for an "
+            "invalid spec."
+        ),
+        input_model=SpecValidateInput,
+        handler=_spec_validate_handler,
         access="read",
     ),
     # ── Write tools (access='write') ──────────────────────────────────────
@@ -372,18 +433,19 @@ TOOLS: list[ToolDef] = [
     ),
 ]
 
-assert len(TOOLS) == 11, f"TOOLS must have exactly 11 entries, got {len(TOOLS)}"
-assert len({t.name for t in TOOLS}) == 11, "TOOLS has duplicate tool names"
+assert len(TOOLS) == 14, f"TOOLS must have exactly 14 entries, got {len(TOOLS)}"
+assert len({t.name for t in TOOLS}) == 14, "TOOLS has duplicate tool names"
 
 
 def registered_tools(readonly: bool = False) -> list[ToolDef]:
     """Return the filtered tool list based on the readonly posture.
 
-    When ``readonly=True``, only the 4 read-access tools (search, list_sources,
-    lineage, stats) are returned — suitable for the read-only MCP transport
-    posture controlled by ``settings.mcp.readonly`` (D-11).
+    When ``readonly=True``, only the 7 read-access tools (search, list_sources,
+    lineage, stats, project_list, project_show, spec_validate) are returned —
+    suitable for the read-only MCP transport posture controlled by
+    ``settings.mcp.readonly`` (D-11).
 
-    When ``readonly=False`` (default), all 11 tools are returned.
+    When ``readonly=False`` (default), all 14 tools are returned.
 
     Args:
         readonly: If True, return only tools with ``access='read'``.
