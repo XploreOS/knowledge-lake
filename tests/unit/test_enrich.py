@@ -137,6 +137,18 @@ def _mock_llm_response(payload: dict, prompt_tokens: int = 100, completion_token
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 
+def test_overlength_document_type_is_pydantic_truncated() -> None:
+    """Regression for 24-VERIFICATION.md gap #8: a >100-char document_type
+    must be truncated to exactly 100 chars by a mode="before" field_validator
+    rather than raising a ValidationError against Field(max_length=100).
+    """
+    result = enrich_module.EnrichmentResult(
+        summary="s", document_type="x" * 150, quality_score=0.5
+    )
+    assert len(result.document_type) == 100
+    assert result.document_type == ("x" * 150)[:100]
+
+
 def test_no_hardcoded_provider_model_ids() -> None:
     """pipeline/enrich.py must never contain a hardcoded provider model ID literal."""
     source = inspect.getsource(enrich_module)
@@ -187,6 +199,38 @@ def test_enrich_produces_valid_result(
         assert artifact is not None
         assert artifact.parent_artifact_id == seeded["cleaned_artifact_id"]
         assert artifact.metadata_["title"] == expected_title
+
+
+def test_overlength_document_type_is_truncated_not_rejected(
+    engine, seeded, fake_storage, parsed_doc, test_settings
+) -> None:
+    """Regression for 24-VERIFICATION.md gap #8: an LLM response whose
+    document_type exceeds 100 characters must still produce a real
+    enriched_document artifact (status="enriched"), not
+    "skipped_enrichment_failed" with no artifact created.
+    """
+    from knowledge_lake.registry import repo as registry_repo
+
+    payload = dict(VALID_PAYLOAD)
+    payload["document_type"] = "x" * 150
+
+    mock_completion = MagicMock(return_value=_mock_llm_response(payload))
+    with patch("litellm.completion", mock_completion):
+        result = enrich_module.enrich_document(
+            seeded["cleaned_artifact_id"],
+            seeded["source_id"],
+            parsed_doc=parsed_doc,
+            settings=test_settings,
+        )
+
+    assert result["status"] == "enriched"
+    assert result["artifact_id"] is not None
+
+    with Session(engine) as check_session:
+        artifact = registry_repo.get_artifact(check_session, result["artifact_id"])
+        assert artifact is not None
+        assert len(artifact.metadata_["document_type"]) == 100
+        assert artifact.metadata_["document_type"] == ("x" * 150)[:100]
 
 
 def test_enrich_cache_hit_is_noop(engine, seeded, fake_storage, parsed_doc, test_settings) -> None:
