@@ -184,7 +184,7 @@ Plans:
 
 **Note**: This phase enables (but does not itself formally satisfy) the flagship requirements owned by Phase 32 — those requirements complete only once Release and the Lineage Explorer exist. Scaffolding it now, per PITFALLS.md Pitfall 9, surfaces the healthcare-only quality-gate tuning gap early instead of at milestone end.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -197,7 +197,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 24-03-PLAN.md — Gate review findings document: report-only rejection measurement + human-reviewed judgment + Phase 26 handoff (Wave 3)
+- [x] 24-03-PLAN.md — Gate review findings document: report-only rejection measurement + human-reviewed judgment + Phase 26 handoff (Wave 3)
 - [ ] 24-04-PLAN.md — Dataset Project lifecycle: spec authoring/validation + transition to `ready` (Wave 3)
 
 ### Phase 25: Usage Policy Engine
@@ -325,7 +325,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
 | 23. Dataset Project + Specification Foundation | v2.7 | 7/7 | Complete    | 2026-07-21 |
-| 24. Flagship Domain Pack Foundation | v2.7 | 2/4 | In Progress|  |
+| 24. Flagship Domain Pack Foundation | v2.7 | 3/4 | In Progress|  |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |
 | 27. CurationEngine Protocol + DataTrove Backend + Result Partitions | v2.7 | 0/TBD | Not started | - |
