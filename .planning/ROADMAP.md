@@ -184,7 +184,7 @@ Plans:
 
 **Note**: This phase enables (but does not itself formally satisfy) the flagship requirements owned by Phase 32 — those requirements complete only once Release and the Lineage Explorer exist. Scaffolding it now, per PITFALLS.md Pitfall 9, surfaces the healthcare-only quality-gate tuning gap early instead of at milestone end.
 
-**Plans**: 4/4 plans executed + 2 gap-closure plans (24-VERIFICATION.md gap #8: 90/200 agent-security enriched_document artifacts missing — see below)
+**Plans**: 5/6 plans executed
 
 Plans:
 **Wave 1**
@@ -202,7 +202,7 @@ Plans:
 
 **Gap Closure** *(24-VERIFICATION.md gap #8 — 90/200 agent-security cleaned_document artifacts had no enriched_document sibling; root cause: EnrichmentResult.document_type Field(max_length=100) rejecting legitimately-longer LLM output, silently reported as success by cmd_enrich's pre-fix exit code)*
 
-- [ ] 24-05-PLAN.md — Root cause fixes: EnrichmentResult document_type truncation (pipeline/enrich.py) + cmd_enrich non-zero exit on skipped_* status (cli/app.py), both regression-tested (Gap Closure Wave 1)
+- [x] 24-05-PLAN.md — Root cause fixes: EnrichmentResult document_type truncation (pipeline/enrich.py) + cmd_enrich non-zero exit on skipped_* status (cli/app.py), both regression-tested (Gap Closure Wave 1)
 - [ ] 24-06-PLAN.md — Re-run enrichment for every real, currently-missing cleaned_document until enriched_document count == cleaned_document count for agent-security Source IDs; correct 24-02-SUMMARY.md's factually-wrong content-hash-dedup explanation (Gap Closure Wave 2, depends on 24-05)
 
 ### Phase 25: Usage Policy Engine
@@ -330,7 +330,7 @@ Not yet defined. Phase numbering will continue at **Phase 33** for the milestone
 | 13-16 | v2.5 PageIndex Plugin Integration | 14/14 | ✅ Shipped | 2026-07-15 |
 | 17-22 | v2.6 Data Quality & Enrichment | 24/24 | ✅ Shipped | 2026-07-18 |
 | 23. Dataset Project + Specification Foundation | v2.7 | 7/7 | Complete    | 2026-07-21 |
-| 24. Flagship Domain Pack Foundation | v2.7 | 4/4 | In Progress|  |
+| 24. Flagship Domain Pack Foundation | v2.7 | 5/6 | In Progress|  |
 | 25. Usage Policy Engine | v2.7 | 0/TBD | Not started | - |
 | 26. Quality Contract | v2.7 | 0/TBD | Not started | - |
 | 27. CurationEngine Protocol + DataTrove Backend + Result Partitions | v2.7 | 0/TBD | Not started | - |

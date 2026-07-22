@@ -5,16 +5,16 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 24
 current_phase_name: flagship-domain-pack-foundation
 status: executing
-stopped_at: Completed 24-04-PLAN.md
-last_updated: "2026-07-22T15:14:10.279Z"
+stopped_at: Completed 24-05-PLAN.md
+last_updated: "2026-07-22T15:19:53.790Z"
 last_activity: 2026-07-22
 last_activity_desc: Phase 24 execution started
 progress:
   total_phases: 10
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
-  percent: 20
+  completed_phases: 1
+  total_plans: 13
+  completed_plans: 12
+  percent: 10
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 24 (flagship-domain-pack-foundation) — EXECUTING
-Plan: 4 of 4
+Plan: 2 of 6
 Status: Ready to execute
 Last activity: 2026-07-22 — Phase 24 execution started
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -121,6 +121,7 @@ Progress: [██████████] 100%
 | Phase 24 P02 | multi-session | 3 tasks | 0 files |
 | Phase 24 P03 | 25min | 2 tasks | 1 files |
 | Phase 24 P04 | 8min | 2 tasks | 1 files |
+| Phase 24 P05 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,8 @@ Progress: [██████████] 100%
 - [Phase ?]: Gate review judgment: healthcare-tuned heuristics correctly reject bulk boilerplate but wrongly drop real domain taxonomy/framework content (OWASP LLM05 IDs, NIST GOVERN/MAP/MEASURE/MANAGE nodes) — handed off to Phase 26 by name
 - [Phase ?]: 24-04: included_sources authored as the full real 7-Source-ID list (never empty), satisfying Pitfall 6's non-trivial validation requirement
 - [Phase ?]: 24-04: Task 2 (project transition draft->configured->sources_pending->ready) produced zero repository file changes, matching the plan's own empty <files> declaration — no per-task commit for Task 2
+- [Phase ?]: 24-05: EnrichmentResult truncates over-length document_type via mode="before" field_validator (not raising the bound, not retrying) — matches document_type's downstream use as a short categorical filter/label
+- [Phase ?]: 24-05: cmd_enrich's skipped-status exit-code check placed after the existing status echoes, inside the try block, so typer.Exit(1) is never swallowed by the except (ValueError, LookupError) clause
 
 ### Pending Todos
 
@@ -276,8 +279,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-22T14:42:23.112Z
-Stopped at: Completed 24-04-PLAN.md
+Last session: 2026-07-22T15:19:53.778Z
+Stopped at: Completed 24-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
