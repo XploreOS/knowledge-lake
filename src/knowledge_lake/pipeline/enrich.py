@@ -100,6 +100,30 @@ class EnrichmentResult(BaseModel):
         """Bound any single smuggled oversized string (AI-SPEC Section 4b)."""
         return [item[:200] for item in v]
 
+    @field_validator("document_type", mode="before")
+    @classmethod
+    def _truncate_document_type(cls, v: object) -> object:
+        """Truncate an over-length document_type instead of rejecting it.
+
+        Closes 24-VERIFICATION.md gap #8: this domain's LLM-generated
+        document types are legitimately longer than the 100-char bound for a
+        real subset of documents (45% of the agent-security corpus hit this),
+        and enrich_document() deliberately does not retry a ValidationError
+        here (to avoid 3x budget burn on "truly unrecoverable truncation").
+        mode="before" is required — Pydantic v2 runs "before" validators
+        prior to evaluating Field(max_length=100), so truncation happens
+        instead of that constraint ever raising. Truncating (rather than
+        raising the bound, or retrying) preserves the most information with
+        no schema change, and matches how document_type is actually consumed
+        downstream: a short categorical label used for exact-match filtering
+        (pipeline/search.py's Qdrant FieldCondition, pipeline/index.py,
+        plugins/builtin/qdrant_store.py, pipeline/export.py's Parquet
+        column) rather than free-form prose that needs to stay long.
+        """
+        if isinstance(v, str) and len(v) > 100:
+            return v[:100]
+        return v
+
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
