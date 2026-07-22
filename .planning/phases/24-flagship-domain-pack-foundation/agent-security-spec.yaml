@@ -1,0 +1,21 @@
+purpose: >-
+  Proof dataset demonstrating governed, policy-evaluated, quality-validated
+  dataset production for AI agent tool-use security and permission-scope
+  corpora — the v2.7 milestone's flagship, non-healthcare proof (enables
+  FLAGSHIP-01/02, formally satisfied at Phase 32).
+dataset_type: rag_corpus
+domain: agent-security
+included_sources:
+  - src_019f87d4-114b-7f20-8a77-14a60f0b67a1  # OWASP Top 10 for LLM Applications
+  - src_019f87d4-1153-7563-877f-0acd718b7a45  # OWASP Agentic AI - Threats and Mitigations
+  - src_019f87d4-1157-7272-a168-1774a4cfd588  # Model Context Protocol Specification
+  - src_019f87d4-115a-7dd3-8ca8-89017cf884ee  # MITRE ATLAS
+  - src_019f87d4-115f-7a43-94db-c8184394422f  # IETF RFC 6749 - OAuth 2.0 Authorization Framework
+  - src_019f87d4-3b4b-74e1-82ac-d975d9388a7d  # NIST AI Risk Management Framework (AI RMF 1.0)
+  - src_019f87d4-40de-7280-8d3f-d76666db8ded  # NIST AI 600-1 Generative AI Profile
+allowed_license_categories:
+  - public-domain
+  - CC-BY-SA-4.0
+  - MIT
+  - open
+  - IETF-Trust
