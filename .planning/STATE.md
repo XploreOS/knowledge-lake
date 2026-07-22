@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2.7
 milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 24
-current_phase_name: Flagship Domain Pack Foundation
+current_phase_name: flagship-domain-pack-foundation
 status: executing
-stopped_at: Phase 24 context gathered
-last_updated: "2026-07-22T03:02:33.418Z"
-last_activity: 2026-07-21
-last_activity_desc: Phase 23 complete, transitioned to Phase 24
+stopped_at: Completed 24-01-PLAN.md
+last_updated: "2026-07-22T03:15:29.017Z"
+last_activity: 2026-07-22
+last_activity_desc: Phase 24 execution started
 progress:
   total_phases: 10
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 8
   percent: 10
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-18)
 
 **Core value:** Every domain resource ingested must be traceable from raw source through every transformation to its final AI-ready output — and the framework must remain tool-agnostic so any processor can be swapped without breaking lineage.
-**Current focus:** Phase 23 — Dataset Project + Specification Foundation
+**Current focus:** Phase 24 — flagship-domain-pack-foundation
 
 ## Current Position
 
-Phase: 24 — Flagship Domain Pack Foundation
-Plan: Not started
+Phase: 24 (flagship-domain-pack-foundation) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-21 — Phase 23 complete, transitioned to Phase 24
+Last activity: 2026-07-22 — Phase 24 execution started
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -117,6 +117,7 @@ Progress: [██████████] 100%
 | Phase 23 P05 | 2min | 2 tasks | 4 files |
 | Phase 23 P06 | 10min | 2 tasks | 2 files |
 | Phase 23 P07 | 12min | 2 tasks | 5 files |
+| Phase 24 P01 | 20min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,9 @@ Progress: [██████████] 100%
 - [Phase ?]: 23-06: All six CLI commands (project new/list/show/transition, dataset spec create/validate) are thin shims calling pipeline.project.* directly with zero duplicated business logic — same functions Plan 23-05's API routes call
 - [Phase ?]: 23-06: dataset_app scaffolded now as an otherwise-empty group except for nested spec_app, per RESEARCH.md Open Question 2, so future phases add release/diff/curate-run subcommands without retrofitting a new top-level group
 - [Phase ?]: Fixed 3 stale Wave-0/Phase-12 test files hardcoding old 11/4 MCP tool counts, broken by this plan's TOOLS bump to 14/7 (Rule 1 auto-fix)
+- [Phase ?]: 24-01: NIST AI RMF 1.0 registered as ingest_type: upload (PDF), not the HTML landing page — the landing page is thin/non-representative (~7KB after nav boilerplate)
+- [Phase ?]: 24-01: CISA Guidelines dropped from agent-security sources.yaml — live re-check reproduced the documented 403 Akamai edge block; no replacement substituted
+- [Phase ?]: 24-01: cmd_upload gained --source-url, threaded to ingest_file(source_url=...), closing RESEARCH.md Pitfall 1 with zero pipeline-layer change
 
 ### Pending Todos
 
@@ -262,9 +266,9 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-21T11:52:04.000Z
-Stopped at: Phase 24 context gathered
-Resume file: .planning/phases/24-flagship-domain-pack-foundation/24-CONTEXT.md
+Last session: 2026-07-22T03:15:29.003Z
+Stopped at: Completed 24-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
