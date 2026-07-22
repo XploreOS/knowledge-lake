@@ -184,7 +184,7 @@ Plans:
 
 **Note**: This phase enables (but does not itself formally satisfy) the flagship requirements owned by Phase 32 — those requirements complete only once Release and the Lineage Explorer exist. Scaffolding it now, per PITFALLS.md Pitfall 9, surfaces the healthcare-only quality-gate tuning gap early instead of at milestone end.
 
-**Plans**: 4/4 plans executed
+**Plans**: 4/4 plans executed + 2 gap-closure plans (24-VERIFICATION.md gap #8: 90/200 agent-security enriched_document artifacts missing — see below)
 
 Plans:
 **Wave 1**
@@ -199,6 +199,11 @@ Plans:
 
 - [x] 24-03-PLAN.md — Gate review findings document: report-only rejection measurement + human-reviewed judgment + Phase 26 handoff (Wave 3)
 - [x] 24-04-PLAN.md — Dataset Project lifecycle: spec authoring/validation + transition to `ready` (Wave 3)
+
+**Gap Closure** *(24-VERIFICATION.md gap #8 — 90/200 agent-security cleaned_document artifacts had no enriched_document sibling; root cause: EnrichmentResult.document_type Field(max_length=100) rejecting legitimately-longer LLM output, silently reported as success by cmd_enrich's pre-fix exit code)*
+
+- [ ] 24-05-PLAN.md — Root cause fixes: EnrichmentResult document_type truncation (pipeline/enrich.py) + cmd_enrich non-zero exit on skipped_* status (cli/app.py), both regression-tested (Gap Closure Wave 1)
+- [ ] 24-06-PLAN.md — Re-run enrichment for every real, currently-missing cleaned_document until enriched_document count == cleaned_document count for agent-security Source IDs; correct 24-02-SUMMARY.md's factually-wrong content-hash-dedup explanation (Gap Closure Wave 2, depends on 24-05)
 
 ### Phase 25: Usage Policy Engine
 
