@@ -1,0 +1,21 @@
+# Sources for the agent-security domain pack.
+# Registered by:  klake init --domain agent-security
+#
+# Schema (see knowledge_lake.domains.models.SourceEntry):
+#   - name: str            # human-readable source name
+#     url: str             # canonical URL
+#     source_type: str     # html | pdf | csv | json | ...
+#     license: str         # public-domain | CC | open | unknown
+#     tags: [str, ...]     # optional taxonomy tags
+#     ingest_type: crawl   # crawl (auto) | upload (manual bulk file)
+#     crawl_config: {}     # optional crawler overrides
+#     crawl_schedule: null # optional 5-field UTC cron string
+#
+# Example (uncomment and edit, then re-run `klake init --domain agent-security`):
+# - name: Example Source
+#   url: https://example.com/
+#   source_type: html
+#   license: unknown
+#   tags: ["agent-security"]
+#   ingest_type: crawl
+[]

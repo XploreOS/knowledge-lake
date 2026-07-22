@@ -1,0 +1,3 @@
+name: agent-security
+version: 0.1.0
+description: AI Agent Security and Permission domain pack — OWASP/NIST/MITRE/IETF sources on agent tool-use security, permission scopes, and threat taxonomies.
