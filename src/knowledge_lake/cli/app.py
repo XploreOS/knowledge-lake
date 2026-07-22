@@ -406,6 +406,14 @@ def cmd_enrich(
         typer.echo(f"  artifact_id:   {result.get('artifact_id')}")
         typer.echo(f"  quality_score: {result.get('quality_score')}")
         typer.echo(f"  cached:        {result.get('cached', False)}")
+        # Closes 24-VERIFICATION.md gap #8: enrich_document() never raises on
+        # a budget/LLM failure — it returns a status dict (D-05). Any status
+        # starting with "skipped" is a real internal failure that must not be
+        # silently reported as success (exit 0) to exit-code-based automation.
+        # typer.Exit is not a ValueError/LookupError subclass, so it is never
+        # swallowed by the except clause below.
+        if result["status"].startswith("skipped"):
+            raise typer.Exit(code=1)
     except (ValueError, LookupError) as exc:
         typer.echo(f"Error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
