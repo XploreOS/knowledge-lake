@@ -5,15 +5,15 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 24
 current_phase_name: flagship-domain-pack-foundation
 status: executing
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-07-22T03:15:29.017Z"
+stopped_at: Completed 24-02-PLAN.md
+last_updated: "2026-07-22T14:32:29.812Z"
 last_activity: 2026-07-22
 last_activity_desc: Phase 24 execution started
 progress:
   total_phases: 10
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 10
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 24 (flagship-domain-pack-foundation) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-22 — Phase 24 execution started
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -118,6 +118,7 @@ Progress: [███████░░░] 73%
 | Phase 23 P06 | 10min | 2 tasks | 2 files |
 | Phase 23 P07 | 12min | 2 tasks | 5 files |
 | Phase 24 P01 | 20min | 3 tasks | 9 files |
+| Phase 24 P02 | multi-session | 3 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,9 @@ Progress: [███████░░░] 73%
 - [Phase ?]: 24-01: NIST AI RMF 1.0 registered as ingest_type: upload (PDF), not the HTML landing page — the landing page is thin/non-representative (~7KB after nav boilerplate)
 - [Phase ?]: 24-01: CISA Guidelines dropped from agent-security sources.yaml — live re-check reproduced the documented 403 Akamai edge block; no replacement substituted
 - [Phase ?]: 24-01: cmd_upload gained --source-url, threaded to ingest_file(source_url=...), closing RESEARCH.md Pitfall 1 with zero pipeline-layer change
+- [Phase ?]: 24-02: Corpus-scope creep accepted, not remediated — rogue crawl added ~69 extra OWASP pages (raw_document=242 vs expected ~173); documented for human awareness, not pruned
+- [Phase ?]: 24-02: klake quality-audit --json substituted with direct registry queries — the CLI re-derives (parse+clean) rather than reads state, making a redundant run 1-2+ hours; equivalent evidence gathered directly instead
+- [Phase ?]: 24-02: enriched_document count (110) != cleaned_document count (200) by design — enrich_document() content-hash dedups near-duplicate cleaned docs onto a shared enriched row; all 200 got a real enrich attempt, 0 failures
 
 ### Pending Todos
 
@@ -266,8 +270,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-22T03:15:29.003Z
-Stopped at: Completed 24-01-PLAN.md
+Last session: 2026-07-22T14:32:29.800Z
+Stopped at: Completed 24-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
