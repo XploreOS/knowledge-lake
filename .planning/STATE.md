@@ -5,16 +5,16 @@ milestone_name: Governed Dataset Production and Release Lifecycle
 current_phase: 24
 current_phase_name: flagship-domain-pack-foundation
 status: executing
-stopped_at: Completed 24-05-PLAN.md
-last_updated: "2026-07-22T15:19:53.790Z"
+stopped_at: "Completed 24-06-PLAN.md (gap-closure: 89/90 enrichment re-run + 24-02-SUMMARY.md correction; 1 residual keywords-length defect surfaced, tracked as follow-up)"
+last_updated: "2026-07-22T15:38:54.808Z"
 last_activity: 2026-07-22
 last_activity_desc: Phase 24 execution started
 progress:
   total_phases: 10
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
-  completed_plans: 12
-  percent: 10
+  completed_plans: 13
+  percent: 20
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-18)
 ## Current Position
 
 Phase: 24 (flagship-domain-pack-foundation) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-22 — Phase 24 execution started
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -122,6 +122,7 @@ Progress: [█████████░] 92%
 | Phase 24 P03 | 25min | 2 tasks | 1 files |
 | Phase 24 P04 | 8min | 2 tasks | 1 files |
 | Phase 24 P05 | 10min | 2 tasks | 3 files |
+| Phase 24 P06 | 16min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -206,6 +207,7 @@ Progress: [█████████░] 92%
 - [Phase ?]: 24-04: Task 2 (project transition draft->configured->sources_pending->ready) produced zero repository file changes, matching the plan's own empty <files> declaration — no per-task commit for Task 2
 - [Phase ?]: 24-05: EnrichmentResult truncates over-length document_type via mode="before" field_validator (not raising the bound, not retrying) — matches document_type's downstream use as a short categorical filter/label
 - [Phase ?]: 24-05: cmd_enrich's skipped-status exit-code check placed after the existing status echoes, inside the try block, so typer.Exit(1) is never swallowed by the except (ValueError, LookupError) clause
+- [Phase ?]: 24-06: Task 1 gets no per-task commit (registry state only, matching 24-02 Task 2/3 and 24-04 Task 2 precedent); re-run resolved 89/90 previously-missing enrichments via Plan 24-05's fix but surfaced 1 new, different, out-of-scope EnrichmentResult.keywords max_length=20 defect, left unfixed and honestly surfaced per plan's own prohibition
 
 ### Pending Todos
 
@@ -240,6 +242,8 @@ None yet.
 **Resolved in v2.5 (2026-07-15):** E2E gap analysis CLOSED — all 19 findings resolved (see `.planning/milestones/v2.5-E2E-GAP-ANALYSIS.md`). Includes KL-18 (three endpoints returning 500 via `DetachedInstanceError`), the Dockerfile landmine, and parse section persistence (the section-less path was collapsing 38 sections into 1 chunk; now 51 per-section chunks, ~30x faster). Suite: 971 passed, 0 failed.
 
 **Resolved in v2.6 (2026-07-18):** Milestone audit's two open tech-debt items CLOSED (see `.planning/milestones/v2.6-MILESTONE-AUDIT.md`, Phase 22). Real measurement now exists: export_junk_rate fell 33%→0.0% (decisively meets <2% target — resolved via UAT as the criterion-#1 metric); chunk_garbage_rate came out at 45.64% (a different, expected-high metric — the gate's own live rejection rate, not delivered-corpus quality). Nyquist reconciliation for all 6 phases (17-22) also CLOSED this milestone — `/gsd-validate-phase` re-run for each, all now `status: validated`, `nyquist_compliant: true`, zero coverage gaps found. Milestone audit re-run post-reconciliation: PASSED (20/20 requirements, 19/19 integration links wired, 6/6 Nyquist-compliant). Suite: 1181 passed, 0 failed.
+
+- [Phase 24, gap-closure follow-up]: EnrichmentResult.keywords Field(max_length=20) rejects a real 21-item keyword list for 1 agent-security document (doc_019f87ec-bcf0-7ce0-a426-e2242f090204) — sibling defect to the document_type bound Plan 24-05 fixed. agent-security enrichment coverage is 199/200 (99.5%), not full 200/200. Recommend a small follow-up gap-closure round (truncate/bound keywords analogous to Plan 24-05's document_type fix) or explicit acceptance of the 1-document gap.
 
 ### Quick Tasks Completed
 
@@ -279,8 +283,8 @@ Items acknowledged and carried forward:
 
 ## Session Continuity
 
-Last session: 2026-07-22T15:19:53.778Z
-Stopped at: Completed 24-05-PLAN.md
+Last session: 2026-07-22T15:38:48.239Z
+Stopped at: Completed 24-06-PLAN.md (gap-closure: 89/90 enrichment re-run + 24-02-SUMMARY.md correction; 1 residual keywords-length defect surfaced, tracked as follow-up)
 Resume file: None
 
 ## Operator Next Steps
