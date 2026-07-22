@@ -11,11 +11,78 @@
 #     crawl_config: {}     # optional crawler overrides
 #     crawl_schedule: null # optional 5-field UTC cron string
 #
-# Example (uncomment and edit, then re-run `klake init --domain agent-security`):
-# - name: Example Source
-#   url: https://example.com/
-#   source_type: html
-#   license: unknown
-#   tags: ["agent-security"]
-#   ingest_type: crawl
-[]
+# --- Live re-verification notes (24-01 Task 3, re-checked at execution time,
+#     not trusted from RESEARCH.md's 2026-07-21 baseline alone) ---
+#
+# CISA Guidelines for Secure AI System Development: DROPPED. Live re-check at
+# execution time reproduced the documented HTTP 403 on both the resource page
+# and /robots.txt (Akamai edge "Access Denied" block, independent of
+# User-Agent) — durable bot-mitigation posture, not a transient sandbox
+# condition. No replacement source substituted per D-02's own instruction not
+# to add a replacement without a fresh, explicit decision.
+#
+# NIST AI RMF 1.0: the HTML landing page (nist.gov/itl/ai-risk-management-framework)
+# is live (HTTP 200) but, after live inspection, is a short overview/portal page
+# (~7KB of visible text after nav-menu boilerplate is stripped) that links to
+# the actual framework rather than reproducing its content — judged NOT
+# substantively representative of the full AI RMF document. Registered as an
+# upload-type entry against the canonical PDF instead (matches NIST AI 600-1's
+# treatment) — a second, independently-discovered/documented PDF-only source.
+#
+# MCP specification: modelcontextprotocol.io/specification/ 302-redirects (live,
+# at execution time) to a dated version path; source_url below is the
+# redirect target so the registered Source and the crawled page match exactly.
+#
+# IETF RFC 6749: using the direct .html rendering (not the bare /rfc/rfc6749
+# path, which redirects to an /info/ page) so no redirect hop is needed and
+# the full RFC text is the crawled content (verified: contains the RFC's own
+# table of contents and section text, not just a metadata summary).
+
+- name: OWASP Top 10 for LLM Applications
+  url: https://owasp.org/www-project-top-10-for-large-language-model-applications/
+  source_type: html
+  license: CC-BY-SA-4.0
+  tags: ["agent-security", "owasp", "prompt-injection", "excessive-agency", "supply-chain"]
+  ingest_type: crawl
+
+- name: OWASP Agentic AI - Threats and Mitigations
+  url: https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/
+  source_type: html
+  license: CC-BY-SA-4.0
+  tags: ["agent-security", "owasp", "agentic-ai", "threat-taxonomy"]
+  ingest_type: crawl
+
+- name: Model Context Protocol Specification
+  url: https://modelcontextprotocol.io/specification/2025-11-25
+  source_type: html
+  license: MIT
+  tags: ["agent-security", "mcp", "protocol", "permission-model"]
+  ingest_type: crawl
+
+- name: NIST AI Risk Management Framework (AI RMF 1.0)
+  url: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf
+  source_type: pdf
+  license: public-domain
+  tags: ["agent-security", "nist", "risk-management", "standards-framework"]
+  ingest_type: upload
+
+- name: NIST AI 600-1 Generative AI Profile
+  url: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf
+  source_type: pdf
+  license: public-domain
+  tags: ["agent-security", "nist", "generative-ai", "standards-framework"]
+  ingest_type: upload
+
+- name: MITRE ATLAS
+  url: https://atlas.mitre.org/
+  source_type: html
+  license: open
+  tags: ["agent-security", "mitre", "threat-taxonomy", "adversarial-ml"]
+  ingest_type: crawl
+
+- name: IETF RFC 6749 - OAuth 2.0 Authorization Framework
+  url: https://www.rfc-editor.org/rfc/rfc6749.html
+  source_type: html
+  license: IETF-Trust
+  tags: ["agent-security", "oauth", "permission-model", "protocol"]
+  ingest_type: crawl
