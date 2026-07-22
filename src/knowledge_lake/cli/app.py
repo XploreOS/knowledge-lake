@@ -109,11 +109,22 @@ def cmd_upload(
     license_type: str = typer.Option(
         "unknown", "--license", "-l", help="SPDX license identifier."
     ),
+    source_url: str | None = typer.Option(
+        None,
+        "--source-url",
+        help=(
+            "Canonical URL of a source already registered via `klake add-source` — "
+            "reuses that Source row by normalized-URL match instead of creating a "
+            "second, domain-disconnected one (RESEARCH.md Pitfall 1)."
+        ),
+    ),
 ) -> None:
     """Upload a local file into the raw zone with provenance metadata.
 
     Hash-second dedup: re-uploading identical content is a silent no-op
-    returning the existing artifact_id.
+    returning the existing artifact_id. Pass --source-url to associate the
+    upload with a pre-registered Source (e.g. a domain-tagged PDF source)
+    instead of creating a new, undomain-tagged Source row.
     """
     from knowledge_lake.pipeline.ingest import ingest_file
 
@@ -123,6 +134,7 @@ def cmd_upload(
             path=file_path,
             source_name=effective_name,
             license_type=license_type,
+            source_url=source_url,
         )
         typer.echo("Uploaded:")
         typer.echo(f"  source_id:    {result['source_id']}")
