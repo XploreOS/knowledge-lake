@@ -1,7 +1,7 @@
 # Knowledge Lake API Dockerfile
 # Builds the FastAPI service container
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 # Pinned to 3.12 to match .python-version / pyproject.toml (requires-python
 # ">=3.12"). A prior drift bump to 3.14-slim (88116e7) left the image
 # unbuildable: greenlet 3.1.1 (transitive via SQLAlchemy) uses CPython
